@@ -1,0 +1,116 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+apply plugin: "com.chaquo.python"
+
+android {
+    namespace = "com.daozhang.py"
+    compileSdk = 36
+    ndkVersion = "27.0.12077973"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        applicationId = "com.daozhang.py"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
+
+        python {
+            version "3.8"
+            pip {
+                install "pip"
+                install "setuptools"
+                install "wheel"
+                // 网络
+                install "aiohttp"
+                install "requests"
+                install "httpx"
+                install "beautifulsoup4"
+                install "pyjwt"
+                install "certifi"
+                install "urllib3"
+                install "chardet"
+                // 数据处理
+                install "ujson"
+                install "marshmallow"
+                install "python-dateutil"
+                install "pytz"
+                // 加密与底层
+                install "pycryptodome"
+                install "cffi"
+                install "six"
+                install "cryptography"
+                // 数据库
+                install "tinydb"
+                install "peewee"
+                install "pymysql"
+                install "redis"
+                // 官方预编译
+                install "numpy"
+                install "pandas"
+                install "pillow"
+                install "lxml"
+                install "sqlalchemy"
+                // 移动端与自动化
+                install "plyer"
+                install "schedule"
+                // 实用工具
+                install "loguru"
+                install "tqdm"
+                install "openpyxl"
+                install "python-docx"
+                // 科学计算（较大）
+                install "scipy"
+                install "matplotlib"
+                install "scikit-learn"
+                install "opencv-python"
+            }
+        }
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("$rootDir/../daozhang.jks")
+            storePassword "daozhang"
+            keyAlias "daozhang"
+            keyPassword "daozhang"
+            v1SigningEnabled true
+            v2SigningEnabled true
+            enableV3Signing true
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            shrinkResources = false
+            minifyEnabled = false
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    implementation "androidx.lifecycle:lifecycle-service:2.8.4"
+}
+
+flutter {
+    source = "../.."
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft rounded square background -->
+    <path
+        android:fillColor="#3F51B5"
+        android:pathData="M24,24h60a10,10 0,0 1,10 10v40a10,10 0,0 1,-10 10h-60a10,10 0,0 1,-10 -10v-40a10,10 0,0 1,10 -10z" />
+
+    <!-- Chevron bracket: > -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M36,40l12,14l-12,14"
+        android:strokeWidth="4"
+        android:strokeColor="#E8EAF6" />
+
+    <!-- Underscore cursor -->
+    <path
+        android:fillColor="#9FA8DA"
+        android:pathData="M54,65h18v3h-18z" />
+
+</vector>
