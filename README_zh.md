@@ -1,62 +1,62 @@
+[English](./README.md) | [中文](#readme)
+
 # Python Runner
 
-[中文文档](./README_zh.md) | [English](#readme)
+一个基于 Flutter 的 Python 脚本运行器，具备实时控制台、包管理器和网络调试功能。
 
-A Flutter-based Python script runner with real-time console, package management, and network debugging capabilities.
+## 主要功能
 
-## Features
+- **代码编辑器**：语法高亮、搜索、自动缩进
+- **本地与云端运行**：本地执行 + WebSocket 云端执行
+- **交互式输入**：完整支持 `input()` 函数
+- **图形引擎**：`scene` 模块，支持游戏和动画（CustomPaint）
+- **包管理器**：pip 包安装/卸载
+- **50+ 内置 Python 库**：覆盖常用标准库
+- **运行历史**：日志持久化与导出
+- **脚本管理**：导入/导出/批量操作
 
-- **Code Editor**: Syntax highlighting, search, indentation support
-- **Run Locally & Remotely**: Local execution + cloud execution via WebSocket
-- **Interactive Input**: Full `input()` support
-- **Graphics Engine**: `scene` module for games and animations (CustomPaint)
-- **Package Manager**: Install/uninstall pip packages
-- **50+ Built-in Python Libraries**: Comprehensive standard library coverage
-- **Execution History**: Log persistence and export
-- **Script Management**: Import/export/batch operations
+## 网络调试体系（v1.3.0）
 
-## Network Debugging System (v1.3.0)
+三层网络调试能力：
 
-Three-layer network debugging:
+### 1. 代理 / SSL 调试（外部调试底座）
+- 配置代理 host/port，将请求导出到 Charles/Fiddler/Proxyman/Mitmproxy
+- 允许不安全证书，配合抓包工具的 MITM 证书
+- 设置页 → 网络调试模式
 
-### 1. Proxy / SSL Debugging (External)
-- Configure proxy host/port to export requests to Charles/Fiddler/Proxyman/Mitmproxy
-- Allow insecure certificates for MITM tools
-- Settings → Network Debug Mode
+### 2. 网络请求查看器（内部可视化）
+- 底部「网络」Tab 实时查看所有 Python HTTP 请求
+- 显示：请求方法、URL、请求头、请求体、状态码、响应头、响应体预览、耗时、错误类型
+- 支持按域名/方法/状态码筛选
+- 支持复制/导出请求记录
+- 自动 Hook 的库：requests、httpx、urllib3
 
-### 2. Network Request Viewer (Internal)
-- Bottom "Network" tab for real-time HTTP request monitoring
-- Shows: method, URL, headers, body, status, response headers/preview, latency, errors
-- Filter by domain/method/status code
-- Copy/export request records
-- Auto-hooked libraries: `requests`, `httpx`, `urllib3`
+### 3. 全局请求覆盖（内部控制）
+- 全局 User-Agent 覆盖（解决 python-requests/2.x.x 被拦截）
+- 全局额外请求头注入（JSON 格式）
+- 全局 Cookie 注入
+- 默认 HTTP 超时控制
+- 跟随重定向开关
+- 强制代理开关
+- 设置页 → 启用请求覆盖
 
-### 3. Global Request Override (Internal Control)
-- Global User-Agent override (bypass python-requests/2.x.x blocking)
-- Global extra headers injection (JSON)
-- Global Cookie injection
-- Default HTTP timeout
-- Follow redirects toggle
-- Force proxy toggle
-- Settings → Enable Request Override
+## 技术栈
 
-## Tech Stack
+- Flutter + Material 3
+- Chaquopy（Python 运行时）
+- WebSocket（云端运行）
+- CustomPaint（图形渲染）
+- Python Monkey Patch（HTTP Hook）
 
-- **Flutter** + Material 3
-- **Chaquopy** (Python runtime for Android)
-- **WebSocket** (cloud execution)
-- **CustomPaint** (graphics rendering)
-- **Python Monkey Patch** (HTTP hooking)
+## 快速开始
 
-## Getting Started
-
-### Prerequisites
+### 环境要求
 
 - Flutter SDK (>=3.0)
 - Android Studio / VS Code with Flutter extension
-- Android device or emulator (API 21+)
+- Android 设备或模拟器 (API 21+)
 
-### Installation
+### 安装运行
 
 ```bash
 git clone https://github.com/daozhang66/python_runner.git
@@ -65,50 +65,48 @@ flutter pub get
 flutter run
 ```
 
-### Build APK
+### 构建 APK
 
 ```bash
 flutter build apk --release
 ```
 
-## Project Structure
+## 项目结构
 
 ```
 lib/
-├── main.dart                    # App entry point
-├── models/                      # Data models (execution_state, log_entry, etc.)
-├── pages/                       # UI pages (console, editor, settings, etc.)
-├── providers/                   # State management (Provider pattern)
-├── services/                    # Core services (logger, database, bridge, etc.)
-├── utils/                       # Utilities (ANSI parser, etc.)
-└── widgets/                     # Reusable widgets
-android/                         # Android native configuration
-assets/                          # Static assets
-test/                            # Unit tests
+├── main.dart                    # App 入口
+├── models/                      # 数据模型（execution_state、log_entry 等）
+├── pages/                       # UI 页面（控制台、编辑器、设置等）
+├── providers/                   # 状态管理（Provider 模式）
+├── services/                    # 核心服务（日志、数据库、桥接等）
+├── utils/                       # 工具类（ANSI 解析器等）
+└── widgets/                     # 可复用组件
+android/                         # Android 原生配置
+assets/                          # 静态资源
+test/                            # 单元测试
 ```
 
-## Configuration
+## 配置说明
 
-- **Python Environment**: Chaquopy automatically bundles Python 3.8+ with 50+ packages
-- **Custom Libraries**: Place `.py` files in `assets/python/` or install via built-in pip
-- **Network Debug**: Enable in Settings → Network Debug Mode
+- **Python 环境**：Chaquopy 自动捆绑 Python 3.8+ 及 50+ 常用库
+- **自定义库**：将 `.py` 文件放入 `assets/python/` 或使用内置 pip 安装
+- **网络调试**：设置页 → 启用「网络调试模式」
 
-## Contributing
+## 贡献指南
 
-Contributions are welcome! Please:
+欢迎贡献代码！请遵循：
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
 
-## License
+## 许可证
 
-Distributed under the MIT License. See `LICENSE` for more information.
+采用 MIT 许可证。详见 `LICENSE` 文件。
 
-## Contact
+## 项目链接
 
-Your Name - [@your_twitter](https://twitter.com/your_twitter)
-
-Project Link: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
+- GitHub: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
