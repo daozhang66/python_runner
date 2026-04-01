@@ -11,7 +11,7 @@ A Flutter-based Python script runner with real-time console, package management,
 ## Features
 
 - **Code Editor**: Syntax highlighting, search, indentation support
-- **Run Locally & Remotely**: Local execution + cloud execution via WebSocket
+- **Run Locally**: On-device Python execution via Chaquopy
 - **Interactive Input**: Full `input()` support
 - **Graphics Engine**: `scene` module for games and animations (CustomPaint)
 - **Package Manager**: Install/uninstall pip packages
@@ -48,7 +48,6 @@ Three-layer network debugging:
 
 - **Flutter** + Material 3
 - **Chaquopy** (Python runtime for Android)
-- **WebSocket** (cloud execution)
 - **CustomPaint** (graphics rendering)
 - **Python Monkey Patch** (HTTP hooking)
 

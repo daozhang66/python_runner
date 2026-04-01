@@ -11,7 +11,7 @@
 ## 主要功能
 
 - **代码编辑器**：语法高亮、搜索、自动缩进
-- **本地与云端运行**：本地执行 + WebSocket 云端执行
+- **本地运行**：基于 Chaquopy 的本地执行
 - **交互式输入**：完整支持 `input()` 函数
 - **图形引擎**：`scene` 模块，支持游戏和动画（CustomPaint）
 - **包管理器**：pip 包安装/卸载
@@ -48,7 +48,6 @@
 
 - Flutter + Material 3
 - Chaquopy（Python 运行时）
-- WebSocket（云端运行）
 - CustomPaint（图形渲染）
 - Python Monkey Patch（HTTP Hook）
 
