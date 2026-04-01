@@ -109,6 +109,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-Your Name - [@your_twitter](https://twitter.com/your_twitter)
-
 Project Link: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
