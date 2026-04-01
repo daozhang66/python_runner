@@ -1,47 +1,112 @@
-# Python 运行器
+# Python Runner
 
-Android 端 Python 脚本运行环境，基于 Flutter + Chaquopy。
+A Flutter-based Python script runner with real-time console, package management, and network debugging capabilities.
 
-## 主要功能
+## Features
 
-- 代码编辑器（语法高亮、搜索、缩进）
-- 本地运行 & 云端运行
-- 交互式输入（input）支持
-- 图形引擎（scene 模块，游戏/动画）
-- pip 包管理（安装/卸载）
-- 50+ 内置 Python 库
-- 运行日志历史与导出
-- 脚本导入/导出/批量管理
+- **Code Editor**: Syntax highlighting, search, indentation support
+- **Run Locally & Remotely**: Local execution + cloud execution via WebSocket
+- **Interactive Input**: Full `input()` support
+- **Graphics Engine**: `scene` module for games and animations (CustomPaint)
+- **Package Manager**: Install/uninstall pip packages
+- **50+ Built-in Python Libraries**: Comprehensive standard library coverage
+- **Execution History**: Log persistence and export
+- **Script Management**: Import/export/batch operations
 
-## 网络调试体系（v1.3.0）
+## Network Debugging System (v1.3.0)
 
-三层网络调试能力：
+Three-layer network debugging:
 
-### 1. 代理 / SSL 调试（外部调试底座）
-- 配置代理 host/port，将请求导出到 Charles/Fiddler/Proxyman/Mitmproxy
-- 允许不安全证书，配合抓包工具的 MITM 证书
-- 设置页 → 网络调试模式
+### 1. Proxy / SSL Debugging (External)
+- Configure proxy host/port to export requests to Charles/Fiddler/Proxyman/Mitmproxy
+- Allow insecure certificates for MITM tools
+- Settings → Network Debug Mode
 
-### 2. 网络请求查看器（内部可视化）
-- 底部「网络」Tab 实时查看所有 Python HTTP 请求
-- 显示：请求方法、URL、请求头、请求体、状态码、响应头、响应体预览、耗时、错误类型
-- 支持按域名/方法/状态码筛选
-- 支持复制/导出请求记录
-- 自动 Hook 的库：requests、httpx、urllib3
+### 2. Network Request Viewer (Internal)
+- Bottom "Network" tab for real-time HTTP request monitoring
+- Shows: method, URL, headers, body, status, response headers/preview, latency, errors
+- Filter by domain/method/status code
+- Copy/export request records
+- Auto-hooked libraries: `requests`, `httpx`, `urllib3`
 
-### 3. 全局请求覆盖（内部控制）
-- 全局 User-Agent 覆盖（解决 python-requests/2.x.x 被拦截）
-- 全局额外请求头注入（JSON 格式）
-- 全局 Cookie 注入
-- 默认 HTTP 超时控制
-- 跟随重定向开关
-- 强制代理开关
-- 设置页 → 启用请求覆盖
+### 3. Global Request Override (Internal Control)
+- Global User-Agent override (bypass python-requests/2.x.x blocking)
+- Global extra headers injection (JSON)
+- Global Cookie injection
+- Default HTTP timeout
+- Follow redirects toggle
+- Force proxy toggle
+- Settings → Enable Request Override
 
-## 技术栈
+## Tech Stack
 
-- Flutter + Material 3
-- Chaquopy（Python 运行时）
-- WebSocket（云端运行）
-- CustomPaint（图形渲染）
-- Python Monkey Patch（HTTP Hook）
+- **Flutter** + Material 3
+- **Chaquopy** (Python runtime for Android)
+- **WebSocket** (cloud execution)
+- **CustomPaint** (graphics rendering)
+- **Python Monkey Patch** (HTTP hooking)
+
+## Getting Started
+
+### Prerequisites
+
+- Flutter SDK (>=3.0)
+- Android Studio / VS Code with Flutter extension
+- Android device or emulator (API 21+)
+
+### Installation
+
+```bash
+git clone https://github.com/daozhang66/python_runner.git
+cd python_runner
+flutter pub get
+flutter run
+```
+
+### Build APK
+
+```bash
+flutter build apk --release
+```
+
+## Project Structure
+
+```
+lib/
+├── main.dart                    # App entry point
+├── models/                      # Data models (execution_state, log_entry, etc.)
+├── pages/                       # UI pages (console, editor, settings, etc.)
+├── providers/                   # State management (Provider pattern)
+├── services/                    # Core services (logger, database, bridge, etc.)
+├── utils/                       # Utilities (ANSI parser, etc.)
+└── widgets/                     # Reusable widgets
+android/                         # Android native configuration
+assets/                          # Static assets
+test/                            # Unit tests
+```
+
+## Configuration
+
+- **Python Environment**: Chaquopy automatically bundles Python 3.8+ with 50+ packages
+- **Custom Libraries**: Place `.py` files in `assets/python/` or install via built-in pip
+- **Network Debug**: Enable in Settings → Network Debug Mode
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+## Contact
+
+Your Name - [@your_twitter](https://twitter.com/your_twitter)
+
+Project Link: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
