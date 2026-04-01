@@ -2,6 +2,10 @@
 
 # Python Runner
 
+> 本项目由 **Claude Code**（Anthropic AI 编码助手）辅助开发
+>
+> Developed with **Claude Code** (Anthropic's AI coding assistant)
+
 一个基于 Flutter 的 Python 脚本运行器，具备实时控制台、包管理器和网络调试功能。
 
 ## 主要功能

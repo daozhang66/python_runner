@@ -2,6 +2,10 @@
 
 # Python Runner
 
+> Developed with **Claude Code** (Anthropic's AI coding assistant)
+>
+> 本项目由 Claude Code 辅助开发
+
 A Flutter-based Python script runner with real-time console, package management, and network debugging capabilities.
 
 ## Features
