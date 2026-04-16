@@ -19,7 +19,7 @@ A Flutter-based Python script runner with real-time console, package management,
 - **Execution History**: Log persistence and export
 - **Script Management**: Import/export/batch operations
 
-## Network Debugging System (v1.3.0)
+## Network Debugging
 
 Three-layer network debugging:
 
