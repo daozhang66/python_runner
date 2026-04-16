@@ -187,9 +187,43 @@ class AppLogger {
     buf.writeln('====== 系统日志 ======');
     buf.writeln(await readSystemLog());
     buf.writeln();
-    buf.writeln('====== 崩溃日志 ======');
+    buf.writeln('====== Dart 崩溃日志 ======');
     buf.writeln(await readCrashLog());
+    buf.writeln();
+    buf.writeln('====== 原生崩溃日志 ======');
+    buf.writeln(await readNativeCrashLogs());
     return buf.toString();
+  }
+
+  /// Read native (Kotlin/Java) crash logs written by App.kt.
+  Future<String> readNativeCrashLogs() async {
+    try {
+      // Native crash logs are stored in app's internal filesDir/crash_logs/
+      // Flutter can access via getApplicationDocumentsDirectory's parent
+      final appDir = await getApplicationDocumentsDirectory();
+      // filesDir is the parent of the documents directory on Android
+      final nativeDir = Directory('${appDir.parent.path}/crash_logs');
+      if (!await nativeDir.exists()) return '(暂无原生崩溃日志)';
+      final files = await nativeDir.list()
+          .where((f) => f.path.endsWith('.txt'))
+          .toList();
+      if (files.isEmpty) return '(暂无原生崩溃日志)';
+      files.sort((a, b) => b.path.compareTo(a.path)); // newest first
+      // Read up to 5 most recent crash files
+      final recent = files.take(5);
+      final buf = StringBuffer();
+      for (final f in recent) {
+        try {
+          final content = await File(f.path).readAsString();
+          buf.writeln('--- ${f.path.split('/').last} ---');
+          buf.writeln(content);
+          buf.writeln();
+        } catch (_) {}
+      }
+      return buf.toString();
+    } catch (e) {
+      return '(读取原生崩溃日志失败: $e)';
+    }
   }
 
   /// Get the log directory path.

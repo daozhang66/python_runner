@@ -18,13 +18,48 @@ class PythonForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.daozhang.py.ACTION_STOP"
         const val EXTRA_TASK_TYPE = "task_type"
+        const val EXTRA_SCRIPT_NAME = "script_name"
         const val TASK_EXECUTE = "execute"
         const val TASK_PIP_INSTALL = "pip_install"
     }
 
+    private var scriptName: String? = null
+    private var startTime: Long = 0
+    private val updateHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val updateRunnable = object : Runnable {
+        override fun run() {
+            updateNotificationWithDuration()
+            updateHandler.postDelayed(this, 10_000)
+        }
+    }
+
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        try {
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "PythonRunner::ScriptExecution")
+            wakeLock?.acquire(4 * 60 * 60 * 1000L)
+        } catch (e: Exception) {
+            android.util.Log.w("PythonRunner", "WakeLock acquire failed: ${e.message}")
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Don't try to restart — just let it die gracefully
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onDestroy() {
+        updateHandler.removeCallbacks(updateRunnable)
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {}
+        super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -35,9 +70,15 @@ class PythonForegroundService : Service() {
         }
 
         val taskType = intent?.getStringExtra(EXTRA_TASK_TYPE) ?: TASK_EXECUTE
+        scriptName = intent?.getStringExtra(EXTRA_SCRIPT_NAME)
+        startTime = System.currentTimeMillis()
+
         val contentText = when (taskType) {
             TASK_PIP_INSTALL -> "正在安装 Python 包..."
-            else -> "Python 脚本运行中..."
+            else -> {
+                val name = scriptName?.removeSuffix(".py") ?: "脚本"
+                "$name 运行中..."
+            }
         }
 
         try {
@@ -54,6 +95,10 @@ class PythonForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        // Start periodic notification updates (every 10s)
+        updateHandler.removeCallbacks(updateRunnable)
+        updateHandler.postDelayed(updateRunnable, 10_000)
+
         return START_STICKY
     }
 
@@ -69,6 +114,21 @@ class PythonForegroundService : Service() {
         }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
+    }
+
+    private fun updateNotificationWithDuration() {
+        val name = scriptName?.removeSuffix(".py") ?: "脚本"
+        val elapsed = (System.currentTimeMillis() - startTime) / 1000
+        val duration = when {
+            elapsed < 60 -> "${elapsed}s"
+            elapsed < 3600 -> "${elapsed / 60}m ${elapsed % 60}s"
+            else -> "${elapsed / 3600}h ${(elapsed % 3600) / 60}m"
+        }
+        try {
+            val notification = buildNotification("$name 已运行 $duration")
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
     }
 
     private fun buildNotification(contentText: String): Notification {

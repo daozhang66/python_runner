@@ -36,6 +36,33 @@ class MainActivity : FlutterActivity() {
     private var currentExecutionJob: Job? = null
     private var currentExecutionThread: Thread? = null
     private var currentExecutionId: String? = null
+    private var batteryOptRequested = false
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        // Register native crash handler ASAP — before Flutter engine init
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val dir = File(filesDir, "crash_logs")
+                if (!dir.exists()) dir.mkdirs()
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US)
+                val ts = sdf.format(java.util.Date())
+                val file = File(dir, "crash_$ts.txt")
+                java.io.FileWriter(file).use { writer ->
+                    writer.write("Time: $ts\n")
+                    writer.write("Thread: ${thread.name}\n")
+                    writer.write("Exception: ${throwable.javaClass.name}\n")
+                    writer.write("Message: ${throwable.message}\n\n")
+                    writer.write("Stack trace:\n")
+                    throwable.printStackTrace(java.io.PrintWriter(writer))
+                }
+            } catch (_: Exception) {}
+            // Pass to original handler (let Android show crash dialog)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
+        super.onCreate(savedInstanceState)
+    }
 
     private fun scriptsDir(): File {
         val dir = File(filesDir, "scripts")
@@ -298,7 +325,7 @@ class MainActivity : FlutterActivity() {
         currentExecutionId = executionId
 
         // Start foreground service to keep alive in background
-        startForegroundServiceSafely(PythonForegroundService.TASK_EXECUTE)
+        startForegroundServiceSafely(PythonForegroundService.TASK_EXECUTE, scriptName = name)
 
         sendStatus(executionId, "running", null)
         result.success(mapOf("executionId" to executionId, "status" to "started"))
@@ -641,10 +668,13 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {}
     }
 
-    private fun startForegroundServiceSafely(taskType: String) {
+    private fun startForegroundServiceSafely(taskType: String, scriptName: String? = null) {
         try {
             val intent = Intent(this, PythonForegroundService::class.java).apply {
                 putExtra(PythonForegroundService.EXTRA_TASK_TYPE, taskType)
+                if (scriptName != null) {
+                    putExtra(PythonForegroundService.EXTRA_SCRIPT_NAME, scriptName)
+                }
             }
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(intent)
@@ -654,6 +684,27 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             android.util.Log.w("PythonRunner", "Failed to start foreground service: ${e.message}")
         }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (batteryOptRequested) return
+        batteryOptRequested = true
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    ).apply { data = Uri.parse("package:$packageName") }
+                    startActivity(intent)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        requestBatteryOptimizationExemption()
     }
 
     override fun onDestroy() {

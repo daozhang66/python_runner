@@ -48,12 +48,19 @@ class ExecutionProvider extends ChangeNotifier {
   /// History of all script execution logs
   final List<ScriptLogRecord> _logHistory = [];
 
-  /// Scene/graphics state
+  /// Scene/graphics state — updated at ~60fps during scene execution.
+  /// These fields updated internally; UI reads via getters.
   bool _sceneActive = false;
   int _sceneOrientation = 0;
   List<dynamic>? _currentSceneFrame;
   int _frameCount = 0;
   bool _graphicsEnabled = false;
+
+  /// Throttled notification timer — batches rapid updates into a single
+  /// notifyListeners() call after a short delay (100ms).
+  Timer? _notifyTimer;
+  bool _disposed = false;
+  static const _notifyDelay = Duration(milliseconds: 100);
 
   ExecutionState get state => _state;
   List<LogEntry> get logs => List.unmodifiable(_logs);
@@ -99,7 +106,7 @@ class ExecutionProvider extends ChangeNotifier {
             } catch (e) {
               _logger.warn('scene init parse error: $e', source: 'Execution');
             }
-            notifyListeners();
+            _scheduleNotify();
           }
           return;
         }
@@ -112,7 +119,8 @@ class ExecutionProvider extends ChangeNotifier {
             } catch (e) {
               _logger.warn('scene frame parse error: $e', source: 'Execution');
             }
-            notifyListeners();
+            // Scene frames fire at ~60fps — throttle notifications to avoid UI rebuild storms
+            _scheduleNotify();
           }
           return;
         }
@@ -120,7 +128,7 @@ class ExecutionProvider extends ChangeNotifier {
         if (typeStr == '__scene_end__') {
           _sceneActive = false;
           _currentSceneFrame = null;
-          notifyListeners();
+          _scheduleNotify();
           return;
         }
 
@@ -149,7 +157,8 @@ class ExecutionProvider extends ChangeNotifier {
         if (_logHistory.isNotEmpty) {
           _logHistory.last.logs.add(entry);
         }
-        notifyListeners();
+        // High-frequency log streams — throttle notifications
+        _scheduleNotify();
       }, onError: (e) {
         _logger.error('logStream error: $e', source: 'Execution');
       });
@@ -171,7 +180,7 @@ class ExecutionProvider extends ChangeNotifier {
           _sceneActive = false;
           _currentSceneFrame = null;
         }
-        notifyListeners();
+        _scheduleNotify();
       }, onError: (e) {
         _logger.error('statusStream error: $e', source: 'Execution');
       });
@@ -182,13 +191,25 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       _stdinSub = _bridge.stdinRequestStream.listen((data) {
         _waitingForInput = true;
-        notifyListeners();
+        _scheduleNotify();
       }, onError: (e) {
         _logger.error('stdinRequestStream error: $e', source: 'Execution');
       });
     } catch (e) {
       _logger.error('Failed to listen stdinRequestStream: $e', source: 'Execution');
     }
+  }
+
+  /// Schedule a throttled notifyListeners() call.
+  /// Multiple rapid updates within [notifyDelay] are coalesced into one.
+  void _scheduleNotify() {
+    if (_disposed) return;
+    _notifyTimer?.cancel();
+    _notifyTimer = Timer(_notifyDelay, () {
+      if (!_disposed) {
+        notifyListeners();
+      }
+    });
   }
 
   Future<void> executeScript(String name) async {
@@ -284,7 +305,7 @@ class ExecutionProvider extends ChangeNotifier {
         _logHistory.last.logs.add(_logs.last);
       }
       _waitingForInput = false;
-      notifyListeners();
+      _scheduleNotify();
     } catch (e) {
       _logger.error('sendStdin error: $e', source: 'Execution');
     }
@@ -346,6 +367,8 @@ class ExecutionProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _notifyTimer?.cancel();
     _logSub?.cancel();
     _statusSub?.cancel();
     _stdinSub?.cancel();

@@ -200,10 +200,6 @@ class _ScriptListPageState extends State<ScriptListPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.play_arrow, color: Colors.green),
-              title: const Text('运行'),
-              onTap: () { Navigator.pop(ctx); _runScript(name); }),
             ListTile(leading: const Icon(Icons.edit), title: const Text('重命名'),
               onTap: () { Navigator.pop(ctx); _renameScript(name); }),
             ListTile(leading: const Icon(Icons.copy), title: const Text('复制'),
@@ -373,13 +369,16 @@ class _ScriptListPageState extends State<ScriptListPage> {
   }
 
   Widget _buildListView(List<dynamic> scripts) {
+    final colors = Theme.of(context).colorScheme;
     return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: scripts.length,
       itemBuilder: (context, index) {
         final script = scripts[index];
         final displayName = script.name.replaceAll('.py', '');
         final selected = _selectedScripts.contains(script.name);
         return TweenAnimationBuilder<double>(
+          key: ValueKey('script_${script.name}'),
           tween: Tween(begin: 0.0, end: 1.0),
           duration: Duration(milliseconds: 200 + index * 30),
           curve: Curves.easeOutCubic,
@@ -387,25 +386,76 @@ class _ScriptListPageState extends State<ScriptListPage> {
             opacity: v,
             child: Transform.translate(offset: Offset(0, 16 * (1 - v)), child: child),
           ),
-          child: ListTile(
-          leading: _multiSelectMode
-              ? Checkbox(value: selected, onChanged: (_) => setState(() {
-                  if (selected) _selectedScripts.remove(script.name);
-                  else _selectedScripts.add(script.name);
-                }))
-              : const Icon(Icons.description_outlined),
-          title: Text(displayName),
-          subtitle: Text('修改于 ${_dateFormat.format(script.modifiedAt)}  运行 ${script.runCount} 次',
-              style: const TextStyle(fontSize: 12)),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _multiSelectMode
-              ? setState(() {
-                  if (selected) _selectedScripts.remove(script.name);
-                  else _selectedScripts.add(script.name);
-                })
-              : _openEditor(script.name),
-          onLongPress: () => _multiSelectMode ? null : _showContextMenu(script.name),
-        ),
+          child: Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _multiSelectMode
+                  ? setState(() {
+                      if (selected) _selectedScripts.remove(script.name);
+                      else _selectedScripts.add(script.name);
+                    })
+                  : _openEditor(script.name),
+              onLongPress: () => _multiSelectMode ? null : _showContextMenu(script.name),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    if (_multiSelectMode)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Checkbox(
+                          value: selected,
+                          onChanged: (_) => setState(() {
+                            if (selected) _selectedScripts.remove(script.name);
+                            else _selectedScripts.add(script.name);
+                          }),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text('Py', style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600,
+                            color: colors.onPrimaryContainer,
+                          )),
+                        ),
+                      ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(displayName,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${_dateFormat.format(script.modifiedAt)}  ${script.runCount > 0 ? "运行 ${script.runCount} 次" : "未运行"}',
+                            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!_multiSelectMode)
+                      IconButton(
+                        icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                        color: colors.primary,
+                        onPressed: () => _runScript(script.name),
+                        tooltip: '运行',
+                      ),
+                    Icon(Icons.chevron_right, size: 18, color: colors.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -413,14 +463,15 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   Widget _buildGridView(List<dynamic> scripts) {
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, childAspectRatio: 1.6, crossAxisSpacing: 10, mainAxisSpacing: 10),
+        crossAxisCount: 2, childAspectRatio: 1.6, crossAxisSpacing: 6, mainAxisSpacing: 6),
       itemCount: scripts.length,
       itemBuilder: (context, index) {
         final script = scripts[index];
         final selected = _selectedScripts.contains(script.name);
         return _ScriptGridCard(
+          key: ValueKey('script_grid_${script.name}'), // Preserve identity
           name: script.name,
           modifiedAt: script.modifiedAt,
           runCount: script.runCount,
@@ -433,6 +484,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
                 })
               : _openEditor(script.name),
           onLongPress: () => _multiSelectMode ? null : _showContextMenu(script.name),
+          onRun: _multiSelectMode ? null : () => _runScript(script.name),
         );
       },
     );
@@ -447,11 +499,13 @@ class _ScriptGridCard extends StatelessWidget {
   final bool? selected;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onRun;
 
   const _ScriptGridCard({
+    super.key,
     required this.name, required this.modifiedAt, required this.runCount,
     required this.dateFormat, this.selected,
-    required this.onTap, required this.onLongPress,
+    required this.onTap, required this.onLongPress, this.onRun,
   });
 
   @override
@@ -459,6 +513,7 @@ class _ScriptGridCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final displayName = name.replaceAll('.py', '');
     return Card(
+      margin: EdgeInsets.zero,
       elevation: 1,
       color: selected == true ? colorScheme.primaryContainer : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -485,7 +540,18 @@ class _ScriptGridCard extends StatelessWidget {
                 const Spacer(),
                 if (selected != null)
                   Icon(selected! ? Icons.check_circle : Icons.radio_button_unchecked,
-                      size: 18, color: selected! ? colorScheme.primary : colorScheme.outline),
+                      size: 18, color: selected! ? colorScheme.primary : colorScheme.outline)
+                else if (onRun != null)
+                  SizedBox(
+                    width: 28, height: 28,
+                    child: IconButton(
+                      icon: Icon(Icons.play_arrow_rounded, size: 18),
+                      color: Colors.green,
+                      padding: EdgeInsets.zero,
+                      onPressed: onRun,
+                      tooltip: '运行',
+                    ),
+                  ),
               ]),
               const Spacer(),
               Text(displayName,
