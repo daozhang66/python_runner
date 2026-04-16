@@ -584,6 +584,16 @@ def run_script(code, working_dir="", hook_env_json=""):
         sys.stdout.write("__HOOK_DIAG__{\"source\": \"%s\", \"record_body\": \"%s\"}\n" % (_hook_source, _cfg_body))
         sys.stdout.flush()
 
+    # ── Periodic GC thread to prevent memory accumulation ──
+    _gc_stop = threading.Event()
+
+    def _periodic_gc():
+        while not _gc_stop.wait(30.0):
+            gc.collect()
+
+    _gc_thread = threading.Thread(target=_periodic_gc, name="periodic-gc", daemon=True)
+    _gc_thread.start()
+
     try:
         exec(code, {
             "__name__": "__main__",
@@ -598,6 +608,7 @@ def run_script(code, working_dir="", hook_env_json=""):
         traceback.print_exc(file=sys.stderr)
         exit_code = 1
     finally:
+        _gc_stop.set()
         # Clear stop flag so cleanup code runs normally
         _stop_requested.clear()
 

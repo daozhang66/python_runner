@@ -16,7 +16,6 @@ import 'providers/script_provider.dart';
 import 'providers/execution_provider.dart';
 import 'providers/package_provider.dart';
 import 'pages/script_list_page.dart';
-import 'pages/console_page.dart';
 import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
@@ -132,12 +131,70 @@ class _PythonRunnerAppState extends State<PythonRunnerApp> {
       ],
       locale: const Locale('zh', 'CN'),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1A73E8),
+          brightness: Brightness.light,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 0.5,
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          elevation: 0,
+          height: 60,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       ),
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1A73E8),
+          brightness: Brightness.dark,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 0.5,
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          elevation: 0,
+          height: 60,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       ),
       home: SplashGate(
         child: HomePage(
@@ -239,20 +296,34 @@ class _SplashGateState extends State<SplashGate> with SingleTickerProviderStateM
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 88,
+                  height: 88,
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: primaryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        primaryColor,
+                        primaryColor.withValues(alpha: 0.4),
+                      ],
+                    ),
                   ),
-                  child: Center(
-                    child: Text(
-                      'Py',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w300,
-                        color: primaryColor,
-                        letterSpacing: -1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Py',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w300,
+                          color: primaryColor,
+                          letterSpacing: -1,
+                        ),
                       ),
                     ),
                   ),
@@ -343,7 +414,7 @@ class _HomePageState extends State<HomePage> {
         ),
         child: KeyedSubtree(
           key: ValueKey(_currentIndex),
-          child: [const ScriptListPage(), const ConsolePage(), const NetworkInspectorPage(), const PackageManagerPage()][_currentIndex],
+          child: [const ScriptListPage(), const NetworkInspectorPage(), const PackageManagerPage()][_currentIndex],
         ),
       ),
       bottomNavigationBar: NavigationBar(
@@ -351,7 +422,6 @@ class _HomePageState extends State<HomePage> {
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.code), label: '脚本'),
-          NavigationDestination(icon: Icon(Icons.terminal), label: '日志'),
           NavigationDestination(icon: Icon(Icons.http), label: '网络'),
           NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: '库管理'),
         ],

@@ -86,7 +86,7 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("$rootDir/../daozhang.jks")
+            storeFile file("/root/Projects/python_runner/android/daozhang.jks")
             storePassword "daozhang"
             keyAlias "daozhang"
             keyPassword "daozhang"

@@ -37,34 +37,44 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   Widget build(BuildContext context) {
     final records = _store.filteredRecords;
     final colors = Theme.of(context).colorScheme;
+    final stats = _computeStats();
 
     return Scaffold(
       body: Column(
         children: [
-          // ── Top bar ──
+          // ── Search bar ──
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: colors.surfaceContainerHighest,
             child: Row(
               children: [
-                const Icon(Icons.http, size: 18),
-                const SizedBox(width: 8),
+                const Icon(Icons.search, size: 18, color: Colors.grey),
+                const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    '网络请求 (${records.length}/${_store.count})',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      hintText: '搜索 URL / 域名...',
+                      border: InputBorder.none, isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onChanged: (v) => _store.setFilterDomain(v.trim()),
                   ),
                 ),
+                if (_store.filterDomain.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _searchController.clear();
+                      _store.setFilterDomain('');
+                    },
+                  ),
                 IconButton(
                   icon: const Icon(Icons.filter_list, size: 20),
                   onPressed: () => _showFilterSheet(context),
                   tooltip: '筛选',
-                  visualDensity: VisualDensity.compact,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.file_download_outlined, size: 20),
-                  onPressed: records.isEmpty ? null : () => _showExportOptions(context),
-                  tooltip: '导出',
                   visualDensity: VisualDensity.compact,
                 ),
                 IconButton(
@@ -111,6 +121,28 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ],
               ),
             ),
+          // ── Stats bar ──
+          if (_store.count > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+              child: Row(
+                children: [
+                  _StatBadge(label: '${stats['total']}', icon: Icons.http, color: colors.primary),
+                  const SizedBox(width: 12),
+                  _StatBadge(label: '${stats['success']}', icon: Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 12),
+                  _StatBadge(label: '${stats['error']}', icon: Icons.error_outline, color: colors.error),
+                  const SizedBox(width: 12),
+                  if (stats['avgMs'] != null)
+                    _StatBadge(label: '${stats['avgMs']}ms', icon: Icons.speed, color: colors.onSurfaceVariant),
+                  const Spacer(),
+                  Text('全部 ${_store.count}',
+                      style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+
           // ── Request list ──
           Expanded(
             child: records.isEmpty
@@ -150,6 +182,25 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         ],
       ),
     );
+  }
+
+  Map<String, dynamic> _computeStats() {
+    final all = _store.records;
+    var success = 0;
+    var errors = 0;
+    var totalMs = 0;
+    var count = 0;
+    for (final r in all) {
+      if (r.isSuccess) success++;
+      if (r.isError) errors++;
+      if (r.durationMs != null) { totalMs += r.durationMs!; count++; }
+    }
+    return {
+      'total': all.length,
+      'success': success,
+      'error': errors,
+      'avgMs': count > 0 ? (totalMs / count).round() : null,
+    };
   }
 
   void _showFilterSheet(BuildContext context) {
@@ -470,6 +521,26 @@ class _FilterChip extends StatelessWidget {
         padding: EdgeInsets.zero,
         labelPadding: const EdgeInsets.only(left: 6),
       ),
+    );
+  }
+}
+
+// ── Stat badge ──
+class _StatBadge extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _StatBadge({required this.label, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color)),
+      ],
     );
   }
 }

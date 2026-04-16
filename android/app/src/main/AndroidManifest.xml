@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- 通知权限（Android 13+） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 唤醒锁（脚本后台运行） -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 可选：电池优化豁免 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 存储权限（Android 12及以下） -->

@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:highlight/languages/python.dart';
 import '../providers/script_provider.dart';
 import '../providers/execution_provider.dart';
-import '../widgets/log_viewer.dart';
-import '../widgets/scene_view.dart';
 import 'run_console_page.dart';
 
 class ScriptEditorPage extends StatefulWidget {
@@ -21,16 +18,10 @@ class ScriptEditorPage extends StatefulWidget {
 
 class _ScriptEditorPageState extends State<ScriptEditorPage> {
   late CodeController _codeController;
-  final _stdinController = TextEditingController();
   final _undoController = UndoHistoryController();
-  final _stdinFocusNode = FocusNode();
   bool _loading = false;
   bool _modified = false;
   bool _readOnly = true;
-  bool _outputExpanded = false;
-  bool _outputFullscreen = false;
-  double _outputRatio = 0.50;
-  Size? _lastSentCanvasSize;
   bool _searchVisible = false;
   String _searchQuery = '';
   int _searchMatchIndex = 0;
@@ -43,18 +34,12 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
 
   static const _minFontSize = 10.0;
   static const _maxFontSize = 28.0;
-  // The gutter icons (fold toggle, error) are hardcoded at 16px in
-  // flutter_code_editor.  We must ensure each code line is at least that tall
-  // so the gutter Table rows and the TextField lines stay aligned.
   static const _gutterIconSize = 16.0;
 
   String get _displayName => widget.scriptName.replaceAll('.py', '');
 
-  /// Compute a stable line-height multiplier so that:
-  ///   fontSize * height  >=  _gutterIconSize  (16px)
-  /// At large sizes we clamp to 1.3 for comfortable reading.
   double get _lineHeight {
-    final minHeight = (_gutterIconSize + 1) / _fontSize; // +1 for rounding safety
+    final minHeight = (_gutterIconSize + 1) / _fontSize;
     return minHeight.clamp(1.3, 1.8);
   }
 
@@ -63,7 +48,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     super.initState();
     _codeController = CodeController(language: python);
     _loadContent();
-    // No longer auto-stop: user may return from RunConsolePage while script runs
   }
 
   Future<void> _loadContent() async {
@@ -89,9 +73,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     if (_searchQuery.isNotEmpty) _updateSearchMatches();
   }
 
-  /// [queryChanged] – the user typed a new search term → reset index to 0, don't jump
-  /// [jump]         – the user pressed Enter → keep current index & jump
-  /// Both false     – code text changed → just update match list, don't jump
   void _updateSearchMatches({bool queryChanged = false, bool jump = false}) {
     final text = _codeController.text;
     final q = _searchQuery.toLowerCase();
@@ -135,8 +116,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     if (_searchMatches.isEmpty || _searchQuery.isEmpty) return;
     final pos = _searchMatches[index];
     _codeController.selection = TextSelection(
-      baseOffset: pos,
-      extentOffset: pos + _searchQuery.length,
+      baseOffset: pos, extentOffset: pos + _searchQuery.length,
     );
     _codeFocusNode.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -146,10 +126,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     });
   }
 
-  /// Walk down from the CodeField's GlobalKey to locate the inner
-  /// [EditableTextState].  This is more reliable than using
-  /// `_codeFocusNode.context.findAncestorStateOfType` because
-  /// CodeField wraps the real TextField several layers deep.
   EditableTextState? _findEditableTextState() {
     final ctx = _codeFieldKey.currentContext;
     if (ctx == null) return null;
@@ -222,12 +198,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     return success;
   }
 
-  void _submitStdin(ExecutionProvider execProvider) {
-    final input = _stdinController.text;
-    _stdinController.clear();
-    execProvider.sendStdin(input);
-  }
-
   Future<void> _run() async {
     try {
       if (_modified) { final saved = await _saveSilently(); if (!saved || !mounted) return; }
@@ -285,8 +255,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           IconButton(icon: const Icon(Icons.close, size: 16),
               onPressed: () {
                 _searchController.clear();
-                // Collapse selection at current position to remove highlight
-                // without jumping to a different location
                 final curPos = _codeController.selection.baseOffset
                     .clamp(0, _codeController.text.length);
                 _codeController.selection = TextSelection.collapsed(offset: curPos);
@@ -329,22 +297,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     final execProvider = context.watch<ExecutionProvider>();
     final isThisRunning = execProvider.isRunning &&
         execProvider.currentScriptName == widget.scriptName;
-
-    // Auto-expand and fullscreen when scene becomes active
-    if (execProvider.sceneActive && !_outputExpanded) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() { _outputExpanded = true; _outputFullscreen = true; });
-      });
-    }
-
-    // When waiting for input, move focus from code editor to stdin field
-    if (execProvider.waitingForInput && _codeFocusNode.hasFocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _stdinFocusNode.canRequestFocus) {
-          _stdinFocusNode.requestFocus();
-        }
-      });
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -403,7 +355,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
             tooltip: isThisRunning ? '停止' : '运行',
           ),
           IconButton(
-            icon: const Icon(Icons.terminal),
+            icon: const Icon(Icons.fullscreen),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -411,11 +363,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
               ),
             ),
             tooltip: '全屏终端',
-          ),
-          IconButton(
-            icon: Icon(_outputExpanded ? Icons.vertical_align_bottom : Icons.code),
-            onPressed: () => setState(() => _outputExpanded = !_outputExpanded),
-            tooltip: _outputExpanded ? '隐藏输出' : '显示输出',
           ),
         ],
       ),
@@ -425,12 +372,10 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
               children: [
                 if (_searchVisible) _buildSearchBar(),
                 _buildIndentBar(),
-                if (!_outputFullscreen)
-                  Expanded(
-                    flex: _outputExpanded ? ((1 - _outputRatio) * 100).round() : 1,
-                    child: CodeTheme(
-                      data: CodeThemeData(styles: _editorTheme(context)),
-                      child: _readOnly
+                Expanded(
+                  child: CodeTheme(
+                    data: CodeThemeData(styles: _editorTheme(context)),
+                    child: _readOnly
                         ? CodeField(
                             key: _codeFieldKey,
                             controller: _codeController,
@@ -441,9 +386,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                               fontSize: _fontSize,
                               height: _lineHeight,
                             ),
-                            gutterStyle: const GutterStyle(
-                              showFoldingHandles: false,
-                            ),
+                            gutterStyle: const GutterStyle(showFoldingHandles: false),
                             expands: true,
                             wrap: false)
                         : CodeField(
@@ -456,127 +399,13 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                               fontSize: _fontSize,
                               height: _lineHeight,
                             ),
-                            gutterStyle: const GutterStyle(
-                              showFoldingHandles: false,
-                            ),
+                            gutterStyle: const GutterStyle(showFoldingHandles: false),
                             expands: true,
                             wrap: false),
-                    ),
                   ),
-                if (_outputExpanded) ...[
-                  GestureDetector(
-                    onVerticalDragUpdate: _outputFullscreen ? null : (details) {
-                      final renderBox = context.findRenderObject() as RenderBox;
-                      final totalHeight = renderBox.size.height;
-                      setState(() {
-                        _outputRatio = (_outputRatio - details.delta.dy / totalHeight).clamp(0.15, 0.85);
-                      });
-                    },
-                    child: Container(
-                      height: 28,
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 16),
-                          Icon(isThisRunning ? Icons.circle : Icons.circle_outlined,
-                              size: 10, color: isThisRunning ? Colors.green
-                                  : Theme.of(context).colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 6),
-                          Text('输出', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          const Spacer(),
-                          if (!_outputFullscreen) const Icon(Icons.drag_handle, size: 16),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: () => setState(() => _outputFullscreen = !_outputFullscreen),
-                            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: Icon(_outputFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 16))),
-                          InkWell(
-                            onTap: () => execProvider.clearLogs(),
-                            child: const Padding(padding: EdgeInsets.symmetric(horizontal: 8),
-                              child: Icon(Icons.delete_outline, size: 16))),
-                          InkWell(
-                            onTap: () => setState(() { _outputExpanded = false; _outputFullscreen = false; }),
-                            child: const Padding(padding: EdgeInsets.symmetric(horizontal: 8),
-                              child: Icon(Icons.close, size: 16))),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: _outputFullscreen ? 1 : (_outputRatio * 100).round(),
-                    child: execProvider.sceneActive
-                        ? _buildSceneOutput(execProvider)
-                        : Column(children: [
-                      Expanded(child: LogViewer(
-                          logs: execProvider.logs,
-                          showCopyAll: execProvider.logs.isNotEmpty)),
-                      if (execProvider.waitingForInput)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          child: Row(children: [
-                            Icon(Icons.chevron_right, size: 18,
-                                color: Theme.of(context).colorScheme.primary),
-                            Expanded(child: TextField(
-                              controller: _stdinController,
-                              focusNode: _stdinFocusNode,
-                              autofocus: true,
-                              enableSuggestions: false,
-                              autocorrect: false,
-                              enableIMEPersonalizedLearning: false,
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                              decoration: const InputDecoration(
-                                hintText: '输入内容...', border: InputBorder.none, isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-                              onSubmitted: (_) => _submitStdin(execProvider))),
-                            IconButton(icon: const Icon(Icons.send, size: 18),
-                                onPressed: () => _submitStdin(execProvider),
-                                visualDensity: VisualDensity.compact),
-                          ]),
-                        ),
-                    ]),
-                  ),
-                ],
+                ),
               ],
             ),
-    );
-  }
-
-  Widget _buildSceneOutput(ExecutionProvider execProvider) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
-
-        // Send canvas size to Python on first frame or size change
-        if (_lastSentCanvasSize != canvasSize) {
-          _lastSentCanvasSize = canvasSize;
-          execProvider.sendSceneTouch(jsonEncode({
-            'type': 'size',
-            'w': canvasSize.width,
-            'h': canvasSize.height,
-          }));
-        }
-
-        final frame = execProvider.currentSceneFrame;
-        if (frame == null) {
-          return Container(
-            color: Colors.black,
-            child: const Center(
-              child: Text('Scene loading...',
-                  style: TextStyle(color: Colors.white54)),
-            ),
-          );
-        }
-
-        return Container(
-          color: Colors.black,
-          child: SceneView(
-            frameCommands: frame,
-            canvasSize: canvasSize,
-            onTouch: (touchJson) => execProvider.sendSceneTouch(touchJson),
-          ),
-        );
-      },
     );
   }
 
@@ -612,8 +441,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   void dispose() {
     _codeController.removeListener(_onTextChanged);
     _codeController.dispose();
-    _stdinController.dispose();
-    _stdinFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _undoController.dispose();
