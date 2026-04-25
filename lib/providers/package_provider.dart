@@ -52,6 +52,7 @@ class PackageProvider extends ChangeNotifier {
     'certifi', 'urllib3', 'chardet',
     'ujson', 'marshmallow', 'python-dateutil', 'pytz',
     'pycryptodome', 'cffi', 'six', 'cryptography',
+    'pyDes', 'rsa', 'pyasn1',
     'tinydb', 'peewee', 'pymysql', 'redis',
     'loguru', 'tqdm', 'openpyxl', 'python-docx',
     'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',

@@ -63,12 +63,13 @@ class NativeBridge {
   }
 
   Future<void> executeScript(String name, String executionId,
-      {String? workingDir, Map<String, String>? hookEnv}) async {
+      {String? workingDir, Map<String, String>? hookEnv, int? timeoutSeconds}) async {
     await _invoke('executeScript', {
       'name': name,
       'executionId': executionId,
       'workingDir': workingDir,
       'hookEnv': hookEnv,
+      'timeoutSeconds': timeoutSeconds,
     });
   }
 

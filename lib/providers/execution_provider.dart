@@ -238,10 +238,12 @@ class ExecutionProvider extends ChangeNotifier {
 
     // Load graphics setting and working directory
     String? workingDir;
+    int? timeoutSeconds;
     try {
       final prefs = await SharedPreferences.getInstance();
       _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? false;
       workingDir = prefs.getString('working_dir');
+      timeoutSeconds = prefs.getInt('execution_timeout');
     } catch (_) {
       _graphicsEnabled = false;
     }
@@ -271,7 +273,7 @@ class ExecutionProvider extends ChangeNotifier {
       }
 
       await _bridge.executeScript(name, executionId,
-          workingDir: workingDir, hookEnv: hookEnv);
+          workingDir: workingDir, hookEnv: hookEnv, timeoutSeconds: timeoutSeconds);
       _logger.info('脚本开始执行: $name (id: $executionId)', source: 'Execution');
     } catch (e) {
       _logger.error('脚本启动失败: $name, error: $e', source: 'Execution');

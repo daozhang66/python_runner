@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -121,6 +122,50 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ],
               ),
             ),
+          // ── Domain tag bar ──
+          if (_store.count > 0)
+            Builder(builder: (context) {
+              final domains = _store.domainStats;
+              if (domains.isEmpty) return const SizedBox.shrink();
+              return Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: domains.length > 20 ? 21 : domains.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                  itemBuilder: (_, i) {
+                    if (i == 20) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Chip(
+                          label: Text('+${domains.length - 20}',
+                              style: const TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      );
+                    }
+                    final d = domains[i];
+                    final selected = _store.filterDomain == d.key;
+                    return FilterChip(
+                      label: Text('${d.key} (${d.value})',
+                          style: const TextStyle(fontSize: 10)),
+                      selected: selected,
+                      onSelected: (_) {
+                        _searchController.text = selected ? '' : d.key;
+                        _store.setFilterDomain(selected ? '' : d.key);
+                      },
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    );
+                  },
+                ),
+              );
+            }),
           // ── Stats bar ──
           if (_store.count > 0)
             Container(
@@ -637,14 +682,13 @@ class _HttpRecordDetailPage extends StatelessWidget {
               record.responseBodyPreview!.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SectionCard(
-              title: '响应体预览',
-              icon: Icons.description_outlined,
+              title: record.isImageBody ? '响应图片' : '响应体预览',
+              icon: record.isImageBody ? Icons.image : Icons.description_outlined,
               children: [
-                _CodeBlock(
-                  record.responseBodyPreview!.length > 200
-                      ? '${record.responseBodyPreview!.substring(0, 200)}...'
-                      : record.responseBodyPreview!,
-                ),
+                if (record.isImageBody)
+                  _ImagePreview(dataUri: record.responseBodyPreview!)
+                else
+                  _CodeBlock(record.responseBodyPreview!),
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerRight,
@@ -652,14 +696,17 @@ class _HttpRecordDetailPage extends StatelessWidget {
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => _BodyFullViewPage(
-                          body: record.responseBodyPreview!,
-                          title: '响应体',
-                        ),
+                        builder: (_) => record.isImageBody
+                            ? _ImageFullViewPage(dataUri: record.responseBodyPreview!)
+                            : _BodyFullViewPage(
+                                body: record.responseBodyPreview!,
+                                title: '响应体',
+                              ),
                       ),
                     ),
-                    icon: const Icon(Icons.open_in_full, size: 14),
-                    label: const Text('查看完整内容', style: TextStyle(fontSize: 12)),
+                    icon: Icon(record.isImageBody ? Icons.zoom_in : Icons.open_in_full, size: 14),
+                    label: Text(record.isImageBody ? '查看原图' : '查看完整内容',
+                        style: const TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -766,43 +813,79 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
-// ── Full body view page with JSON formatting ──
-class _BodyFullViewPage extends StatelessWidget {
+// ── Full body view page with JSON tree viewer ──
+class _BodyFullViewPage extends StatefulWidget {
   final String body;
   final String title;
   const _BodyFullViewPage({required this.body, required this.title});
 
-  String _formatBody(String raw) {
-    // Try to parse and pretty-print as JSON
+  @override
+  State<_BodyFullViewPage> createState() => _BodyFullViewPageState();
+}
+
+class _BodyFullViewPageState extends State<_BodyFullViewPage> {
+  dynamic _parsedJson;
+  String _formatted = '';
+  double _fontSize = 12.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _parseBody();
+  }
+
+  @override
+  void didUpdateWidget(covariant _BodyFullViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.body != widget.body) _parseBody();
+  }
+
+  void _parseBody() {
     try {
-      final decoded = jsonDecode(raw);
+      _parsedJson = jsonDecode(widget.body);
       const encoder = JsonEncoder.withIndent('  ');
-      return encoder.convert(decoded);
+      _formatted = encoder.convert(_parsedJson);
     } catch (_) {
-      return raw;
+      _parsedJson = null;
+      _formatted = widget.body;
     }
   }
 
-  bool _isJson(String raw) {
+  void _changeFontSize(double delta) {
+    setState(() {
+      _fontSize = (_fontSize + delta).clamp(8.0, 24.0);
+    });
+  }
+
+  Future<void> _exportJson() async {
     try {
-      jsonDecode(raw);
-      return true;
-    } catch (_) {
-      return false;
+      final bridge = NativeBridge();
+      final now = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final path = await bridge.exportLog(_formatted, fileName: 'response_$now.json');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已导出: $path'), duration: const Duration(seconds: 3)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final formatted = _formatBody(body);
-    final isJson = _isJson(body);
+    final isJson = _parsedJson != null;
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
-            Text(title, style: const TextStyle(fontSize: 15)),
+            Text(widget.title, style: const TextStyle(fontSize: 15)),
             if (isJson) ...[
               const SizedBox(width: 8),
               Container(
@@ -818,15 +901,71 @@ class _BodyFullViewPage extends StatelessWidget {
           ],
         ),
         actions: [
+          if (isJson)
+            IconButton(
+              icon: const Icon(Icons.account_tree, size: 20),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => _JsonTreePage(data: _parsedJson),
+                ),
+              ),
+              tooltip: '树形查看',
+            ),
           IconButton(
             icon: const Icon(Icons.copy),
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: formatted));
+              Clipboard.setData(ClipboardData(text: _formatted));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
               );
             },
             tooltip: '复制',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20),
+            tooltip: '更多',
+            position: PopupMenuPosition.under,
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                enabled: false,
+                padding: EdgeInsets.zero,
+                child: StatefulBuilder(
+                  builder: (ctx, setLocal) => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.text_decrease),
+                        onPressed: _fontSize > 8
+                            ? () { _changeFontSize(-2); setLocal(() {}); }
+                            : null,
+                      ),
+                      Text('${_fontSize.toInt()}px', style: const TextStyle(fontSize: 13)),
+                      IconButton(
+                        icon: const Icon(Icons.text_increase),
+                        onPressed: _fontSize < 24
+                            ? () { _changeFontSize(2); setLocal(() {}); }
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'export',
+                child: const Row(
+                  children: [
+                    Icon(Icons.file_download_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('导出 JSON', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (v) {
+              if (v == 'export') _exportJson();
+            },
           ),
         ],
       ),
@@ -840,11 +979,309 @@ class _BodyFullViewPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: SelectableText(
-            formatted,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.5),
+            _formatted,
+            style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Full-screen JSON tree page ──
+class _JsonTreePage extends StatelessWidget {
+  final dynamic data;
+  const _JsonTreePage({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('JSON 树形查看', style: TextStyle(fontSize: 15)),
+      ),
+      body: SelectionArea(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _JsonTreeNode(data: data, depth: 0, fontSize: 12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JsonTreeNode extends StatefulWidget {
+  final dynamic data;
+  final int depth;
+  final double fontSize;
+  const _JsonTreeNode({super.key, required this.data, required this.depth, required this.fontSize});
+
+  @override
+  State<_JsonTreeNode> createState() => _JsonTreeNodeState();
+}
+
+class _JsonTreeNodeState extends State<_JsonTreeNode> {
+  bool _expanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-collapse deep nodes
+    _expanded = widget.depth < 2;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = widget.data;
+    final depth = widget.depth;
+    final fs = widget.fontSize;
+
+    if (data is Map) return _buildObject(data, depth, fs);
+    if (data is List) return _buildArray(data, depth, fs);
+    return _buildPrimitive(data, fs);
+  }
+
+  Widget _buildObject(Map<dynamic, dynamic> map, int depth, double fs) {
+    final colors = Theme.of(context).colorScheme;
+    final items = map.entries.toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 12,
+                child: Text(_expanded ? '▼' : '▶',
+                    style: TextStyle(fontSize: fs - 3, color: colors.primary)),
+              ),
+              Text('{', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              if (!_expanded) ...[
+                Text(' ${map.length} keys ', style: TextStyle(fontSize: fs - 2, color: colors.onSurfaceVariant)),
+                Text('}', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              ],
+            ],
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: EdgeInsets.only(left: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < items.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('"${items[i].key}": ',
+                            style: TextStyle(
+                                fontFamily: 'monospace', fontSize: fs,
+                                color: Colors.blue.shade700)),
+                        Expanded(
+                          child: _JsonValue(
+                            data: items[i].value,
+                            depth: depth + 1,
+                            fontSize: fs,
+                            trailing: i < items.length - 1 ? ',' : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Text('}', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildArray(List<dynamic> list, int depth, double fs) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 12,
+                child: Text(_expanded ? '▼' : '▶',
+                    style: TextStyle(fontSize: fs - 3, color: colors.primary)),
+              ),
+              Text('[', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              if (!_expanded) ...[
+                Text(' ${list.length} items ', style: TextStyle(fontSize: fs - 2, color: colors.onSurfaceVariant)),
+                Text(']', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              ],
+            ],
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: EdgeInsets.only(left: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < list.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: _JsonValue(
+                      data: list[i],
+                      depth: depth + 1,
+                      fontSize: fs,
+                      trailing: i < list.length - 1 ? ',' : null,
+                    ),
+                  ),
+                Text(']', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPrimitive(dynamic value, double fs) {
+    return Text(
+      _primitiveText(value),
+      style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: _primitiveColor(value)),
+    );
+  }
+}
+
+/// Wraps a value: shows inline for primitives, expandable for objects/arrays.
+class _JsonValue extends StatelessWidget {
+  final dynamic data;
+  final int depth;
+  final double fontSize;
+  final String? trailing;
+  const _JsonValue({required this.data, required this.depth, required this.fontSize, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    if (data is Map || data is List) {
+      // Complex types: no trailing comma in tree view (avoids floating symbol)
+      return _JsonTreeNode(data: data, depth: depth, fontSize: fontSize);
+    }
+    return Text(
+      _primitiveText(data) + (trailing ?? ''),
+      style: TextStyle(fontFamily: 'monospace', fontSize: fontSize, color: _primitiveColor(data)),
+    );
+  }
+}
+
+// ── Helpers ──
+
+String _primitiveText(dynamic value) {
+  if (value == null) return 'null';
+  if (value is bool) return value.toString();
+  if (value is num) return value.toString();
+  if (value is String) return '"${value}"';
+  return value.toString();
+}
+
+Color _primitiveColor(dynamic value) {
+  if (value == null) return Colors.grey;
+  if (value is bool) return Colors.purple;
+  if (value is num) return Colors.orange.shade800;
+  if (value is String) return Colors.green.shade700;
+  return Colors.black;
+}
+
+// ── Image preview widget ──
+class _ImagePreview extends StatelessWidget {
+  final String dataUri;
+  const _ImagePreview({required this.dataUri});
+
+  Uint8List? _decodeDataUri() {
+    // data:image/png;base64,AAAA...
+    final commaIdx = dataUri.indexOf(',');
+    if (commaIdx < 0) return null;
+    final base64Str = dataUri.substring(commaIdx + 1);
+    try {
+      return base64Decode(base64Str);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeDataUri();
+    if (bytes == null) {
+      return const Text('(图片解码失败)', style: TextStyle(fontSize: 12));
+    }
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 300),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Text('(图片渲染失败)', style: TextStyle(fontSize: 12)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Image full view page (pinch-to-zoom) ──
+class _ImageFullViewPage extends StatelessWidget {
+  final String dataUri;
+  const _ImageFullViewPage({required this.dataUri});
+
+  Uint8List? _decodeDataUri() {
+    final commaIdx = dataUri.indexOf(',');
+    if (commaIdx < 0) return null;
+    try {
+      return base64Decode(dataUri.substring(commaIdx + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeDataUri();
+    final colors = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: colors.surface,
+      appBar: AppBar(
+        title: const Text('图片预览', style: TextStyle(fontSize: 15)),
+      ),
+      body: bytes == null
+          ? Center(child: Text('(图片解码失败)', style: TextStyle(color: colors.error)))
+          : InteractiveViewer(
+              minScale: 0.2,
+              maxScale: 8.0,
+              child: Center(
+                child: Image.memory(
+                  bytes,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      Center(child: Text('(图片渲染失败)', style: TextStyle(color: colors.error))),
+                ),
+              ),
+            ),
     );
   }
 }

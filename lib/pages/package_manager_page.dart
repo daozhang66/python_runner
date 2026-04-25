@@ -15,6 +15,7 @@ const _builtinPackages = {
   'ujson', 'marshmallow', 'python-dateutil', 'pytz',
   // 加密与底层
   'pycryptodome', 'cffi', 'six', 'cryptography',
+  'pyDes', 'rsa', 'pyasn1',
   // 数据库
   'tinydb', 'peewee', 'pymysql', 'redis',
   // 实用工具

@@ -43,7 +43,7 @@ def _reload_config():
     _CFG['proxy_host'] = os.environ.get('PYRUNNER_PROXY_HOST', '')
     _CFG['proxy_port'] = os.environ.get('PYRUNNER_PROXY_PORT', '')
     _CFG['ssl_verify'] = os.environ.get('PYRUNNER_SSL_VERIFY', '1') == '1'
-    _CFG['body_limit'] = 2048
+    _CFG['body_limit'] = 128 * 1024
     raw_headers = hc.get('global_headers', '')
     try:
         _CFG['global_headers'] = json.loads(raw_headers) if raw_headers else {}
@@ -51,6 +51,16 @@ def _reload_config():
         _CFG['global_headers'] = {}
 
 _reload_config()
+
+# ── Record count limit per script run ──
+_record_count = 0
+_MAX_RECORDS_PER_SCRIPT = 5000
+
+
+def _reset_record_count():
+    """Reset record counter — called from script_runner at start of each run."""
+    global _record_count
+    _record_count = 0
 
 
 def _get_proxy_dict():
@@ -86,7 +96,16 @@ def _match_domain_rule(url):
 
 def _send_record(record):
     """Send a captured HTTP record to Flutter via special log line."""
+    global _record_count
     if not _CFG['record_requests']:
+        return
+    _record_count += 1
+    if _record_count > _MAX_RECORDS_PER_SCRIPT:
+        if _record_count == _MAX_RECORDS_PER_SCRIPT + 1:
+            try:
+                print(f"__HTTP_RECORD__{{\"note\": \"HTTP 记录已达上限 {_MAX_RECORDS_PER_SCRIPT} 条\"}}", flush=True)
+            except Exception:
+                pass
         return
     try:
         payload = json.dumps(record, ensure_ascii=False, default=str)
@@ -128,14 +147,44 @@ def _apply_overrides_to_headers(headers, library_name, url=None):
     return headers
 
 
-def _safe_body_preview(body):
-    """Capture response body for preview. Uses a generous limit to allow
-    full JSON formatting on the Flutter side."""
+def _detect_content_type(headers):
+    """Extract Content-Type from response headers."""
+    if headers is None:
+        return None
+    try:
+        if isinstance(headers, dict):
+            ct = headers.get('Content-Type') or headers.get('content-type')
+        else:
+            ct = None
+            for k, v in dict(headers).items():
+                if k.lower() == 'content-type':
+                    ct = v
+                    break
+        if ct:
+            return ct.split(';')[0].strip().lower()
+    except Exception:
+        pass
+    return None
+
+
+def _safe_body_preview(body, response_headers=None):
+    """Capture response body for preview.
+    - For image/* content types: full base64 encode (no size limit)
+    - For other types: use configured body_limit (default 2KB) to keep memory low
+    """
     if body is None:
         return None
-    # 512KB max to prevent OOM on huge responses
-    limit = 512 * 1024
     try:
+        # Check if this is an image response
+        ct = _detect_content_type(response_headers)
+        if ct and ct.startswith('image/'):
+            if isinstance(body, bytes) and len(body) > 0:
+                import base64
+                return 'data:' + ct + ';base64,' + base64.b64encode(body).decode('ascii')
+            return None
+
+        # Non-image: truncate to limit
+        limit = _CFG.get('body_limit', 2048)
         if isinstance(body, bytes):
             if len(body) == 0:
                 return None
@@ -230,7 +279,7 @@ def _hook_requests():
                 record['response_headers'] = _safe_headers_dict(response.headers)
                 if _CFG['record_body']:
                     try:
-                        record['response_body_preview'] = _safe_body_preview(response.content)
+                        record['response_body_preview'] = _safe_body_preview(response.content, response.headers)
                     except Exception:
                         pass
                 record['duration_ms'] = elapsed_ms
@@ -301,7 +350,7 @@ def _hook_httpx():
                     record['response_headers'] = _safe_headers_dict(response.headers)
                     if _CFG['record_body']:
                         try:
-                            record['response_body_preview'] = _safe_body_preview(response.content)
+                            record['response_body_preview'] = _safe_body_preview(response.content, response.headers)
                         except Exception:
                             pass
                     record['duration_ms'] = elapsed_ms
@@ -354,7 +403,7 @@ def _hook_httpx():
                     record['response_headers'] = _safe_headers_dict(response.headers)
                     if _CFG['record_body']:
                         try:
-                            record['response_body_preview'] = _safe_body_preview(response.content)
+                            record['response_body_preview'] = _safe_body_preview(response.content, response.headers)
                         except Exception:
                             pass
                     record['duration_ms'] = elapsed_ms
@@ -430,7 +479,7 @@ def _hook_urllib3():
             record['response_headers'] = _safe_headers_dict(response.headers)
             if _CFG['record_body']:
                 try:
-                    record['response_body_preview'] = _safe_body_preview(response.data)
+                    record['response_body_preview'] = _safe_body_preview(response.data, response.headers)
                 except Exception:
                     pass
             record['duration_ms'] = elapsed_ms
@@ -528,7 +577,7 @@ def _hook_aiohttp():
             if _CFG['record_body']:
                 try:
                     body_bytes = await response.read()
-                    record['response_body_preview'] = _safe_body_preview(body_bytes)
+                    record['response_body_preview'] = _safe_body_preview(body_bytes, response.headers)
                 except Exception:
                     pass
             record['duration_ms'] = elapsed_ms
@@ -623,7 +672,7 @@ def _hook_urllib_request():
             if _CFG['record_body']:
                 try:
                     body = response.read()
-                    record['response_body_preview'] = _safe_body_preview(body)
+                    record['response_body_preview'] = _safe_body_preview(body, dict(response.headers))
                     import io
                     response = _UrllibResponseWrapper(response, body)
                 except Exception:

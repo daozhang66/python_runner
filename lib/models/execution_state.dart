@@ -1,4 +1,4 @@
-enum ExecutionStatus { idle, running, stopping, completed, error, stopped }
+enum ExecutionStatus { idle, running, stopping, completed, error, stopped, timeout }
 
 class ExecutionState {
   final String? executionId;
