@@ -406,7 +406,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         Text('执行超时时间', style: Theme.of(context).textTheme.titleSmall),
                         const Spacer(),
-                        Text('$_timeout 秒',
+                        Text(_timeout == 0 ? '无限制' : _timeout >= 3600
+                            ? '${(_timeout / 3600).toStringAsFixed(1)} 小时'
+                            : _timeout >= 60
+                            ? '${(_timeout / 60).toStringAsFixed(0)} 分钟'
+                            : '$_timeout 秒',
                             style: TextStyle(
                                 fontSize: 13,
                                 color: Theme.of(context).colorScheme.primary,
@@ -414,13 +418,42 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ),
                     Slider(
-                      value: _timeout.toDouble(),
-                      min: 10,
-                      max: 300,
-                      divisions: 29,
-                      label: '$_timeout 秒',
-                      onChanged: (v) => setState(() => _timeout = v.round()),
-                      onChangeEnd: (v) => _saveTimeout(v.round()),
+                      value: _timeout == 0 ? 0 : _timeout <= 60
+                          ? _timeout.toDouble()
+                          : _timeout <= 600
+                          ? 60 + (_timeout - 60) * 40 / 540
+                          : _timeout <= 3600
+                          ? 100 + (_timeout - 600) * 40 / 3000
+                          : 140 + (_timeout - 3600) * 10 / 32400,
+                      min: 0,
+                      max: 150,
+                      divisions: 150,
+                      label: _timeout == 0 ? '无限制'
+                          : _timeout >= 3600 ? '${(_timeout / 3600).toStringAsFixed(1)}h'
+                          : _timeout >= 60 ? '${(_timeout / 60).toStringAsFixed(0)}m'
+                          : '${_timeout}s',
+                      onChanged: (v) {
+                        int val;
+                        if (v == 0) {
+                          val = 0;
+                        } else if (v <= 60) {
+                          val = v.round();
+                        } else if (v <= 100) {
+                          // 60s -> 600s (1m -> 10m), step 60s
+                          val = 60 + ((v - 60) * 540 / 40).round();
+                          val = (val / 60).round() * 60;
+                        } else if (v <= 140) {
+                          // 600s -> 3600s (10m -> 1h), step 300s
+                          val = 600 + ((v - 100) * 3000 / 40).round();
+                          val = (val / 300).round() * 300;
+                        } else {
+                          // 3600s -> 36000s (1h -> 10h), step 1800s
+                          val = 3600 + ((v - 140) * 32400 / 10).round();
+                          val = (val / 1800).round() * 1800;
+                        }
+                        setState(() => _timeout = val);
+                      },
+                      onChangeEnd: (v) => _saveTimeout(_timeout),
                     ),
                   ],
                 ),
@@ -1017,7 +1050,7 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
               _ManualItem(Icons.videogame_asset_outlined, '图形引擎', '开启后支持 scene 模块游戏/动画'),
               _ManualItem(Icons.inventory_2_outlined, 'PyPI 镜像源', 'pip 安装镜像地址，留空用官方源'),
-              _ManualItem(Icons.timer_outlined, '执行超时', '脚本最长运行时间（10-300秒）'),
+              _ManualItem(Icons.timer_outlined, '执行超时', '脚本最长运行时间（可设为无限制）'),
               _ManualItem(Icons.work_outline, '工作目录', '脚本中 open() 等相对路径的基准目录'),
               _ManualItem(Icons.folder_outlined, '导出目录', '脚本导出目标文件夹'),
               _ManualItem(Icons.bug_report_outlined, '网络调试模式', '代理/SSL 配置，用于外部抓包工具'),

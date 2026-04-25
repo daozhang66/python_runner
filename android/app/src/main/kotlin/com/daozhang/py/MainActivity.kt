@@ -153,9 +153,10 @@ class MainActivity : FlutterActivity() {
                         val name = call.argument<String>("name") ?: ""
                         val executionId = call.argument<String>("executionId") ?: ""
                         val workingDir = call.argument<String>("workingDir")
+                        val timeoutSeconds = call.argument<Int>("timeoutSeconds") ?: 0
                         @Suppress("UNCHECKED_CAST")
                         val hookEnv = call.argument<Map<String, String>>("hookEnv")
-                        handleExecuteScript(name, executionId, workingDir, hookEnv, result)
+                        handleExecuteScript(name, executionId, workingDir, hookEnv, timeoutSeconds, result)
                     }
                     "stopExecution" -> handleStopExecution(result)
                     "sendStdin" -> {
@@ -293,7 +294,7 @@ class MainActivity : FlutterActivity() {
 
     // --- Script Execution ---
 
-    private fun handleExecuteScript(name: String, executionId: String, workingDir: String?, hookEnv: Map<String, String>?, result: MethodChannel.Result) {
+    private fun handleExecuteScript(name: String, executionId: String, workingDir: String?, hookEnv: Map<String, String>?, timeoutSeconds: Int, result: MethodChannel.Result) {
         // If a previous execution is still running, force-stop it first
         val oldThread = currentExecutionThread
         if (oldThread != null && oldThread.isAlive) {
@@ -369,7 +370,9 @@ class MainActivity : FlutterActivity() {
                     }
                     Thread.sleep(50)
                 } catch (e: Exception) {
-                    break
+                    // Don't silently die — check if script is still running
+                    if (scriptDone.get()) break
+                    Thread.sleep(200)
                 }
             }
             // Final poll to flush remaining output
@@ -398,6 +401,8 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) {
                 sendLog("stderr", "执行错误: ${e.message}")
                 exitCode = 1
+                // Persist script error to log file for post-mortem debugging
+                _writeScriptErrorLog(name, e.message ?: "Unknown error", e.stackTrace?.toString())
             } finally {
                 scriptDone.set(true)
                 // Small delay to let the polling thread flush remaining output
@@ -409,6 +414,34 @@ class MainActivity : FlutterActivity() {
                 stopServiceSafely()
             }
         }.also { it.name = "python-exec"; it.start() }
+
+        // Watchdog thread: kill script if it exceeds the timeout
+        if (timeoutSeconds > 0) {
+            Thread {
+                try {
+                    val timeoutMs = timeoutSeconds * 1000L
+                    Thread.sleep(timeoutMs)
+                    if (!scriptDone.get()) {
+                        // Script is still running — kill it
+                        try {
+                            val py = Python.getInstance()
+                            val runner = py.getModule("script_runner")
+                            runner.callAttr("stop_running")
+                        } catch (_: Exception) {}
+                        // Wait for exec thread to finish
+                        currentExecutionThread?.join(3000)
+                        if (!scriptDone.get()) {
+                            scriptDone.set(true)
+                            sendLog("stderr", "脚本执行超时（${timeoutSeconds}秒），已强制停止")
+                            sendStatus(executionId, "timeout", 1)
+                            currentExecutionId = null
+                            currentExecutionThread = null
+                            stopServiceSafely()
+                        }
+                    }
+                } catch (_: InterruptedException) {}
+            }.also { it.name = "timeout-watchdog"; it.isDaemon = true; it.start() }
+        }
     }
 
     private fun handleSendStdin(input: String, result: MethodChannel.Result) {
@@ -665,6 +698,24 @@ class MainActivity : FlutterActivity() {
         try {
             val intent = Intent(this, PythonForegroundService::class.java)
             stopService(intent)
+        } catch (_: Exception) {}
+    }
+
+    private fun _writeScriptErrorLog(scriptName: String, errorMessage: String, stackTrace: String?) {
+        try {
+            val logDir = File(filesDir, "script_error_logs")
+            if (!logDir.exists()) logDir.mkdirs()
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US)
+            val ts = sdf.format(java.util.Date())
+            val file = File(logDir, "err_${ts}.txt")
+            java.io.FileWriter(file).use { writer ->
+                writer.write("Time: $ts\n")
+                writer.write("Script: $scriptName\n")
+                writer.write("Error: $errorMessage\n")
+                if (stackTrace != null) {
+                    writer.write("\nStack trace:\n$stackTrace\n")
+                }
+            }
         } catch (_: Exception) {}
     }
 

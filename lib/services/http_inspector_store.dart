@@ -43,6 +43,31 @@ class HttpRecord {
   bool get isError => statusCode == null || statusCode! >= 400 || errorType != null;
   bool get isSuccess => statusCode != null && statusCode! >= 200 && statusCode! < 400;
 
+  /// Whether the response body is a base64-encoded image (data URI).
+  bool get isImageBody {
+    final body = responseBodyPreview;
+    if (body == null || !body.startsWith('data:image/')) return false;
+    return true;
+  }
+
+  /// Extract the image MIME type from the data URI, or null.
+  String? get imageMimeType {
+    final body = responseBodyPreview;
+    if (body == null || !body.startsWith('data:image/')) return null;
+    final end = body.indexOf(';');
+    if (end < 0) return null;
+    return body.substring(5, end); // skip "data:"
+  }
+
+  /// Extract domain from URL.
+  String get domain {
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return url;
+    }
+  }
+
   String get statusText {
     if (errorType != null) return errorType!;
     if (statusCode == null) return 'pending';
@@ -125,7 +150,7 @@ class HttpInspectorStore extends ChangeNotifier {
   HttpInspectorStore._();
   static final HttpInspectorStore instance = HttpInspectorStore._();
 
-  static const int maxRecords = 500;
+  static const int maxRecords = 5000;
 
   final List<HttpRecord> _records = [];
   String _filterDomain = '';
@@ -183,6 +208,20 @@ class HttpInspectorStore extends ChangeNotifier {
     _filterMethod = '';
     _filterStatus = null;
     notifyListeners();
+  }
+
+  /// Get domain statistics: list of (domain, count) sorted by count desc.
+  List<MapEntry<String, int>> get domainStats {
+    final counts = <String, int>{};
+    for (final r in _records) {
+      final d = r.domain;
+      if (d.isNotEmpty) {
+        counts[d] = (counts[d] ?? 0) + 1;
+      }
+    }
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries;
   }
 
   /// Add a new record from Python hook JSON.

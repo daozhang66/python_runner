@@ -44,7 +44,9 @@ def stop_requested():
 # --- Real-time output and stdin support ---
 
 # Thread-safe queue for output lines: items are (type, content) tuples
-_output_queue = _queue_mod.Queue()
+# Bounded to prevent OOM when scripts produce massive output (e.g. crawlers)
+_OUTPUT_QUEUE_MAX = 2000
+_output_queue = _queue_mod.Queue(maxsize=_OUTPUT_QUEUE_MAX)
 
 # Stdin support: use a Queue for thread-safe, race-free blocking reads.
 _stdin_queue = _queue_mod.Queue()
@@ -76,12 +78,33 @@ class _QueueWriter:
         self._line_buf += text
         while "\n" in self._line_buf:
             line, self._line_buf = self._line_buf.split("\n", 1)
-            _output_queue.put((self._type, line))
+            try:
+                _output_queue.put_nowait((self._type, line))
+            except _queue_mod.Full:
+                # Drop oldest item to make room, then retry
+                try:
+                    _output_queue.get_nowait()
+                except _queue_mod.Empty:
+                    pass
+                try:
+                    _output_queue.put_nowait((self._type, line))
+                except _queue_mod.Full:
+                    pass
         return len(text)
 
     def flush(self):
         if self._line_buf:
-            _output_queue.put((self._type, self._line_buf))
+            try:
+                _output_queue.put_nowait((self._type, self._line_buf))
+            except _queue_mod.Full:
+                try:
+                    _output_queue.get_nowait()
+                except _queue_mod.Empty:
+                    pass
+                try:
+                    _output_queue.put_nowait((self._type, self._line_buf))
+                except _queue_mod.Full:
+                    pass
             self._line_buf = ""
 
     def isatty(self):
@@ -100,8 +123,19 @@ class _BlockingStdin:
         if _stop_requested.is_set():
             raise KeyboardInterrupt()
         _waiting_for_input = True
-        # Notify Kotlin that input is needed
-        _output_queue.put(("__stdin_request__", ""))
+        # Notify Kotlin that input is needed (use put_nowait to respect queue bounds)
+        try:
+            _output_queue.put_nowait(("__stdin_request__", ""))
+        except _queue_mod.Full:
+            # Drop oldest to make room
+            try:
+                _output_queue.get_nowait()
+            except _queue_mod.Empty:
+                pass
+            try:
+                _output_queue.put_nowait(("__stdin_request__", ""))
+            except _queue_mod.Full:
+                pass
         # Use a timeout loop so we can periodically check the stop flag.
         # This ensures that even if the stop signal arrives between checks,
         # we will notice it within 0.2 seconds.
@@ -442,6 +476,13 @@ def run_script(code, working_dir="", hook_env_json=""):
 
     # Clear the stop flag from any previous run
     _stop_requested.clear()
+
+    # Reset HTTP hook record counter for this run
+    try:
+        import http_debug_hook as _hdm_reset
+        _hdm_reset._reset_record_count()
+    except Exception:
+        pass
 
     # ── Inject hook environment variables ──
     _injected_env_keys = []
@@ -795,6 +836,8 @@ def verify_package(package_name):
         "opencv-python": "cv2",
         "opencv-python-headless": "cv2",
         "pycryptodome": "Crypto",
+        "pydes": "pyDes",
+        "rsa": "rsa",
     }
 
     actual_import = name_mapping.get(package_name.lower(), import_name)

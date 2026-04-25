@@ -56,6 +56,8 @@ android {
                 install "cffi"
                 install "six"
                 install "cryptography"
+                install "pyDes"
+                install "rsa"
                 // 数据库
                 install "tinydb"
                 install "peewee"

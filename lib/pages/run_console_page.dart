@@ -18,10 +18,21 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
 
   String get _displayName => widget.scriptName.replaceAll('.py', '');
 
+  /// Record the time when execution started (from logHistory).
+  DateTime? _runStartTime;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _captureStartTime();
+  }
+
+  void _captureStartTime() {
+    final exec = context.read<ExecutionProvider>();
+    if (exec.isRunning && exec.logHistory.isNotEmpty) {
+      _runStartTime = exec.logHistory.last.startTime;
+    }
   }
 
   @override
@@ -59,10 +70,16 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
         ? (isDark ? Colors.greenAccent : Colors.green)
         : (exec.state.status == ExecutionStatus.error
             ? colors.error
-            : colors.onSurfaceVariant);
+            : exec.state.status == ExecutionStatus.timeout
+                ? Colors.orange
+                : colors.onSurfaceVariant);
     final statusText = isRunning
         ? (waiting ? '等待输入' : '运行中')
-        : (exec.state.status == ExecutionStatus.error ? '错误' : '已结束');
+        : (exec.state.status == ExecutionStatus.error
+            ? '错误'
+            : exec.state.status == ExecutionStatus.timeout
+                ? '超时'
+                : '已结束');
 
     final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
 
@@ -104,10 +121,16 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
                 color: statusColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text(
-                statusText,
-                style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w500),
-              ),
+              child: isRunning
+                  ? _RunningTimer(
+                      startTime: _runStartTime ?? DateTime.now(),
+                      label: waiting ? '等待输入' : '运行中',
+                      color: statusColor,
+                    )
+                  : Text(
+                      statusText,
+                      style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w500),
+                    ),
             ),
             const SizedBox(width: 8),
           ],
@@ -144,5 +167,69 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+}
+
+/// A real-time running timer widget that updates every second.
+class _RunningTimer extends StatefulWidget {
+  final DateTime startTime;
+  final String label;
+  final Color color;
+  const _RunningTimer({
+    required this.startTime,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  State<_RunningTimer> createState() => _RunningTimerState();
+}
+
+class _RunningTimerState extends State<_RunningTimer> {
+  late DateTime _startTime;
+  Duration _elapsed = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTime = widget.startTime;
+    _tick();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RunningTimer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.startTime != widget.startTime) {
+      _startTime = widget.startTime;
+    }
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    setState(() {
+      _elapsed = DateTime.now().difference(_startTime);
+    });
+    Future.delayed(const Duration(seconds: 1), _tick);
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) {
+      return '${h}h${m.toString().padLeft(2, '0')}m';
+    }
+    if (m > 0) {
+      return '${m}m${s.toString().padLeft(2, '0')}s';
+    }
+    return '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${widget.label} ${_formatDuration(_elapsed)}',
+      style: TextStyle(fontSize: 11, color: widget.color, fontWeight: FontWeight.w500),
+    );
   }
 }
