@@ -838,6 +838,7 @@ def verify_package(package_name):
         "pycryptodome": "Crypto",
         "pydes": "pyDes",
         "rsa": "rsa",
+        "ruamel.yaml": "ruamel.yaml",
     }
 
     actual_import = name_mapping.get(package_name.lower(), import_name)

@@ -20,6 +20,8 @@ const _builtinPackages = {
   'tinydb', 'peewee', 'pymysql', 'redis',
   // 实用工具
   'loguru', 'tqdm', 'openpyxl', 'python-docx', 'et-xmlfile',
+  // YAML
+  'PyYAML', 'ruamel.yaml', 'ruamel.yaml.clib',
   // 科学计算
   'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',
   'scipy', 'matplotlib', 'scikit-learn', 'opencv-python',

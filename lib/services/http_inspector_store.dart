@@ -50,6 +50,23 @@ class HttpRecord {
     return true;
   }
 
+  /// Whether the response body is an audio/video metadata record.
+  bool get isMediaBody {
+    final body = responseBodyPreview;
+    return body != null && body.startsWith('media:');
+  }
+
+  /// Parse media metadata (type + size). Returns null if not media.
+  Map<String, dynamic>? get mediaMeta {
+    final body = responseBodyPreview;
+    if (body == null || !body.startsWith('media:')) return null;
+    try {
+      return jsonDecode(body.substring(6)) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Extract the image MIME type from the data URI, or null.
   String? get imageMimeType {
     final body = responseBodyPreview;

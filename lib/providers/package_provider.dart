@@ -55,6 +55,7 @@ class PackageProvider extends ChangeNotifier {
     'pyDes', 'rsa', 'pyasn1',
     'tinydb', 'peewee', 'pymysql', 'redis',
     'loguru', 'tqdm', 'openpyxl', 'python-docx',
+    'PyYAML', 'ruamel.yaml', 'ruamel.yaml.clib',
     'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',
     'scipy', 'matplotlib', 'scikit-learn', 'opencv-python',
     'plyer', 'schedule',

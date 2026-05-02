@@ -126,6 +126,12 @@ class NativeBridge {
     return map.map((k, v) => MapEntry(k.toString(), v.toString()));
   }
 
+  Future<Map<String, String>> getAppInfo() async {
+    final result = await _invoke('getAppInfo', {});
+    final map = result as Map;
+    return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+  }
+
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
     try {
       return await _methodChannel.invokeMethod(method, arguments);

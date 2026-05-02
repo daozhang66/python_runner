@@ -682,37 +682,49 @@ class _HttpRecordDetailPage extends StatelessWidget {
               record.responseBodyPreview!.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SectionCard(
-              title: record.isImageBody ? '响应图片' : '响应体预览',
-              icon: record.isImageBody ? Icons.image : Icons.description_outlined,
+              title: record.isImageBody
+                  ? '响应图片'
+                  : record.isMediaBody
+                      ? '响应媒体'
+                      : '响应体预览',
+              icon: record.isImageBody
+                  ? Icons.image
+                  : record.isMediaBody
+                      ? Icons.audiotrack
+                      : Icons.description_outlined,
               children: [
                 if (record.isImageBody)
                   _ImagePreview(dataUri: record.responseBodyPreview!)
+                else if (record.isMediaBody)
+                  _MediaInfoCard(meta: record.mediaMeta!)
                 else
                   _CodeBlock(record.responseBodyPreview!),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => record.isImageBody
-                            ? _ImageFullViewPage(dataUri: record.responseBodyPreview!)
-                            : _BodyFullViewPage(
-                                body: record.responseBodyPreview!,
-                                title: '响应体',
-                              ),
+                if (!record.isMediaBody) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => record.isImageBody
+                              ? _ImageFullViewPage(dataUri: record.responseBodyPreview!)
+                              : _BodyFullViewPage(
+                                  body: record.responseBodyPreview!,
+                                  title: '响应体',
+                                ),
+                        ),
+                      ),
+                      icon: Icon(record.isImageBody ? Icons.zoom_in : Icons.open_in_full, size: 14),
+                      label: Text(record.isImageBody ? '查看原图' : '查看完整内容',
+                          style: const TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
                     ),
-                    icon: Icon(record.isImageBody ? Icons.zoom_in : Icons.open_in_full, size: 14),
-                    label: Text(record.isImageBody ? '查看原图' : '查看完整内容',
-                        style: const TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ],
@@ -795,20 +807,106 @@ class _CodeBlock extends StatelessWidget {
   final String text;
   const _CodeBlock(this.text);
 
+  String get _formatted {
+    try {
+      final parsed = jsonDecode(text);
+      return const JsonEncoder.withIndent('  ').convert(parsed);
+    } catch (_) {
+      return text;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 300),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: colors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: SelectableText(
-        text,
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+      child: SingleChildScrollView(
+        child: SelectableText(
+          _formatted,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+        ),
       ),
+    );
+  }
+}
+
+// ── Media info card ──
+class _MediaInfoCard extends StatelessWidget {
+  final Map<String, dynamic> meta;
+  const _MediaInfoCard({required this.meta});
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  String _mediaLabel(String type) {
+    if (type.startsWith('audio/')) return '音频';
+    if (type.startsWith('video/')) return '视频';
+    return '媒体';
+  }
+
+  IconData _mediaIcon(String type) {
+    if (type.startsWith('audio/')) return Icons.audiotrack;
+    if (type.startsWith('video/')) return Icons.videocam;
+    return Icons.perm_media;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final type = meta['type'] as String? ?? 'unknown';
+    final size = meta['size'] as int? ?? 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(_mediaIcon(type), size: 40, color: colors.primary),
+          const SizedBox(height: 8),
+          Text(_mediaLabel(type), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.primary)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _MediaMetaItem(label: '类型', value: type),
+              const SizedBox(width: 24),
+              _MediaMetaItem(label: '大小', value: _formatSize(size)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MediaMetaItem extends StatelessWidget {
+  final String label;
+  final String value;
+  const _MediaMetaItem({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }
@@ -827,11 +925,29 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   dynamic _parsedJson;
   String _formatted = '';
   double _fontSize = 12.0;
+  final _scrollController = ScrollController();
+  bool _showFab = false;
+  bool _searchVisible = false;
+  final _searchCtrl = TextEditingController();
+  int _searchCurrent = -1;
+  List<int> _searchMatches = [];
+  String _lineNumberedText = '';
 
   @override
   void initState() {
     super.initState();
     _parseBody();
+    _scrollController.addListener(() {
+      final show = _scrollController.offset > 300;
+      if (show != _showFab) setState(() => _showFab = show);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -840,15 +956,121 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     if (oldWidget.body != widget.body) _parseBody();
   }
 
+  bool _isTruncated = false;
+
   void _parseBody() {
+    // Try 1: parse as-is
     try {
       _parsedJson = jsonDecode(widget.body);
       const encoder = JsonEncoder.withIndent('  ');
       _formatted = encoder.convert(_parsedJson);
     } catch (_) {
-      _parsedJson = null;
-      _formatted = widget.body;
+      // Try 2: repair truncated JSON
+      final repaired = _tryRepairTruncatedJson(widget.body);
+      if (repaired != null) {
+        try {
+          _parsedJson = jsonDecode(repaired);
+          const encoder = JsonEncoder.withIndent('  ');
+          _formatted = encoder.convert(_parsedJson);
+          _isTruncated = true;
+        } catch (_) {
+          _parsedJson = null;
+          _formatted = _looksLikeJson(widget.body) ? _basicFormatJson(widget.body) : widget.body;
+        }
+      } else {
+        _parsedJson = null;
+        _formatted = _looksLikeJson(widget.body) ? _basicFormatJson(widget.body) : widget.body;
+      }
     }
+    _buildLineNumberedText();
+  }
+
+  bool _looksLikeJson(String s) {
+    final t = s.trimLeft();
+    return t.startsWith('{') || t.startsWith('[');
+  }
+
+  /// Try to repair a truncated JSON string by cutting back to last valid boundary
+  /// and adding missing closing brackets.
+  String? _tryRepairTruncatedJson(String input) {
+    final marker = '... (truncated)';
+    final idx = input.lastIndexOf(marker);
+    if (idx <= 0) return null;
+
+    var s = input.substring(0, idx).trimRight();
+
+    // Find the last comma outside of strings — cut back to a valid boundary
+    int lastComma = -1;
+    bool inStr = false, esc = false;
+    for (int i = 0; i < s.length; i++) {
+      if (esc) { esc = false; continue; }
+      if (s[i] == '\\') { esc = true; continue; }
+      if (s[i] == '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (s[i] == ',') lastComma = i;
+    }
+    if (lastComma > 0) s = s.substring(0, lastComma);
+
+    // Count and close unclosed brackets
+    int curly = 0, square = 0;
+    inStr = false; esc = false;
+    for (int i = 0; i < s.length; i++) {
+      if (esc) { esc = false; continue; }
+      if (s[i] == '\\') { esc = true; continue; }
+      if (s[i] == '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (s[i] == '{') curly++;
+      if (s[i] == '}') curly--;
+      if (s[i] == '[') square++;
+      if (s[i] == ']') square--;
+    }
+    for (int i = 0; i < square; i++) s += ']';
+    for (int i = 0; i < curly; i++) s += '}';
+
+    return s;
+  }
+
+  /// Basic formatting for JSON-like content that can't be fully parsed.
+  String _basicFormatJson(String input) {
+    final buf = StringBuffer();
+    int indent = 0;
+    bool inStr = false, esc = false;
+    for (int i = 0; i < input.length; i++) {
+      final c = input[i];
+      if (esc) { buf.write(c); esc = false; continue; }
+      if (c == '\\' && inStr) { buf.write(c); esc = true; continue; }
+      if (c == '"') { buf.write(c); inStr = !inStr; continue; }
+      if (inStr) { buf.write(c); continue; }
+      if (c == '{' || c == '[') {
+        buf.writeln(c);
+        indent++;
+        buf.write('  ' * indent);
+      } else if (c == '}' || c == ']') {
+        buf.writeln();
+        if (indent > 0) indent--;
+        buf.write('  ' * indent);
+        buf.write(c);
+      } else if (c == ',') {
+        buf.writeln(c);
+        buf.write('  ' * indent);
+      } else if (c == ':') {
+        buf.write(': ');
+      } else if (c != ' ' && c != '\n' && c != '\r' && c != '\t') {
+        buf.write(c);
+      }
+    }
+    return buf.toString();
+  }
+
+  void _buildLineNumberedText() {
+    final lines = _formatted.split('\n');
+    final totalWidth = lines.length.toString().length;
+    final buf = StringBuffer();
+    for (int i = 0; i < lines.length; i++) {
+      final num = (i + 1).toString().padLeft(totalWidth);
+      buf.writeln('$num  ${lines[i]}');
+    }
+    _lineNumberedText = buf.toString();
   }
 
   void _changeFontSize(double delta) {
@@ -876,10 +1098,55 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     }
   }
 
+  void _doSearch(String query) {
+    if (query.isEmpty) {
+      setState(() { _searchMatches = []; _searchCurrent = -1; });
+      return;
+    }
+    final lines = _formatted.split('\n');
+    final matches = <int>[];
+    final q = query.toLowerCase();
+    for (int i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().contains(q)) matches.add(i);
+    }
+    setState(() {
+      _searchMatches = matches;
+      _searchCurrent = matches.isNotEmpty ? 0 : -1;
+    });
+    if (matches.isNotEmpty) _scrollToLine(matches[0]);
+  }
+
+  void _nextSearchMatch() {
+    if (_searchMatches.isEmpty) return;
+    setState(() {
+      _searchCurrent = (_searchCurrent + 1) % _searchMatches.length;
+    });
+    _scrollToLine(_searchMatches[_searchCurrent]);
+  }
+
+  void _prevSearchMatch() {
+    if (_searchMatches.isEmpty) return;
+    setState(() {
+      _searchCurrent = (_searchCurrent - 1 + _searchMatches.length) % _searchMatches.length;
+    });
+    _scrollToLine(_searchMatches[_searchCurrent]);
+  }
+
+  void _scrollToLine(int lineIndex) {
+    // Approximate: each line is roughly fontSize * 1.5 height
+    final approxOffset = lineIndex * _fontSize * 1.5;
+    _scrollController.animateTo(
+      approxOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isJson = _parsedJson != null;
     final colors = Theme.of(context).colorScheme;
+    final lineCount = _formatted.split('\n').length;
 
     return Scaffold(
       appBar: AppBar(
@@ -901,6 +1168,11 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search, size: 20),
+            onPressed: () => setState(() => _searchVisible = !_searchVisible),
+            tooltip: '搜索',
+          ),
           if (isJson)
             IconButton(
               icon: const Icon(Icons.account_tree, size: 20),
@@ -969,20 +1241,129 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+      body: Column(
+        children: [
+          // ── Search bar ──
+          if (_searchVisible)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: colors.surfaceContainerHighest,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        hintText: '搜索内容...',
+                        border: InputBorder.none, isDense: true,
+                      ),
+                      onSubmitted: _doSearch,
+                      onChanged: (v) { if (v.isEmpty) _doSearch(''); },
+                    ),
+                  ),
+                  if (_searchMatches.isNotEmpty)
+                    Text('${_searchCurrent + 1}/${_searchMatches.length}',
+                        style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                    onPressed: _prevSearchMatch,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                    onPressed: _nextSearchMatch,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() { _searchVisible = false; _searchMatches = []; _searchCurrent = -1; });
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ),
+          // ── Info bar ──
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+            child: Row(
+              children: [
+                if (_isTruncated) ...[
+                  Icon(Icons.warning_amber, size: 12, color: Colors.orange.shade700),
+                  const SizedBox(width: 3),
+                  Text('已截断', style: TextStyle(fontSize: 10, color: Colors.orange.shade700)),
+                  const SizedBox(width: 8),
+                ],
+                Text('$lineCount 行', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+                const Spacer(),
+                Text('${_formatted.length} 字符', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+              ],
+            ),
           ),
-          child: SelectableText(
-            _formatted,
-            style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
+          // ── Content: single SelectableText for performance ──
+          Expanded(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      _lineNumberedText,
+                      style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
+                    ),
+                  ),
+                ),
+                // ── Floating nav buttons ──
+                if (_showFab)
+                  Positioned(
+                    right: 12,
+                    bottom: 16,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: FloatingActionButton.small(
+                            heroTag: 'top',
+                            onPressed: () => _scrollController.animateTo(0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut),
+                            child: const Icon(Icons.keyboard_arrow_up, size: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: FloatingActionButton.small(
+                            heroTag: 'bottom',
+                            onPressed: () => _scrollController.animateTo(
+                                _scrollController.position.maxScrollExtent,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut),
+                            child: const Icon(Icons.keyboard_arrow_down, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1079,18 +1460,17 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                     padding: const EdgeInsets.symmetric(vertical: 1),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('"${items[i].key}": ',
                             style: TextStyle(
                                 fontFamily: 'monospace', fontSize: fs,
                                 color: Colors.blue.shade700)),
-                        Expanded(
-                          child: _JsonValue(
-                            data: items[i].value,
-                            depth: depth + 1,
-                            fontSize: fs,
-                            trailing: i < items.length - 1 ? ',' : null,
-                          ),
+                        _JsonValue(
+                          data: items[i].value,
+                          depth: depth + 1,
+                          fontSize: fs,
+                          trailing: i < items.length - 1 ? ',' : null,
                         ),
                       ],
                     ),
