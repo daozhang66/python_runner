@@ -104,11 +104,37 @@ class _ScriptListPageState extends State<ScriptListPage> {
       return;
     }
     final name = file.name;
-    if (!mounted) return;
     final bytes = file.bytes;
-    if (bytes != null) {
-      final content = utf8.decode(bytes, allowMalformed: true);
-      await context.read<ScriptProvider>().createScript(name, content: content);
+    if (bytes == null || !mounted) return;
+    final content = utf8.decode(bytes, allowMalformed: true);
+
+    // Check if script with same name already exists
+    final provider = context.read<ScriptProvider>();
+    final exists = provider.scripts.any((s) => s.name == name);
+    if (exists) {
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('脚本已存在'),
+          content: Text('已存在同名脚本「$name」，是否覆盖？'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('覆盖', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+            ),
+          ],
+        ),
+      );
+      if (overwrite != true) return;
+      // Overwrite existing script content
+      await provider.saveScript(name, content);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已覆盖: $name'), duration: const Duration(seconds: 2)));
+    } else {
+      await provider.createScript(name, content: content);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已导入: $name'), duration: const Duration(seconds: 2)));
     }
   }
 

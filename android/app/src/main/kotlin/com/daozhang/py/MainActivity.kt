@@ -193,6 +193,7 @@ class MainActivity : FlutterActivity() {
                         val destDir = call.argument<String>("destDir")
                         handleExportScript(name, destDir, result)
                     }
+                    "getAppInfo" -> handleGetAppInfo(result)
                     "getPythonInfo" -> handleGetPythonInfo(result)
                     "moveToBackground" -> {
                         moveTaskToBack(true)
@@ -660,6 +661,30 @@ class MainActivity : FlutterActivity() {
                 mainHandler.post { result.error("1008", "获取Python信息失败: ${e.message}", null) }
             }
         }.also { it.name = "py-info"; it.start() }
+    }
+
+    private fun handleGetAppInfo(result: MethodChannel.Result) {
+        try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            val appName = packageManager.getApplicationLabel(applicationInfo)?.toString() ?: packageName
+            val versionName = packageInfo.versionName ?: ""
+            val buildNumber = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toString()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toString()
+            }
+            result.success(
+                mapOf<String, String>(
+                    "appName" to appName,
+                    "packageName" to packageName,
+                    "version" to versionName,
+                    "buildNumber" to buildNumber
+                )
+            )
+        } catch (e: Exception) {
+            result.error("1009", "鑾峰彇搴旂敤淇℃伅澶辫触: ${e.message}", null)
+        }
     }
 
     // --- Helpers ---

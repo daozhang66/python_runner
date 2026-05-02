@@ -318,6 +318,73 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Future<void> _showSimpleAboutDialog() async {
+    Map<String, String> appInfo = {};
+    Map<String, String> pythonInfo = {};
+    try {
+      appInfo = await _bridge.getAppInfo();
+    } catch (_) {}
+    try {
+      pythonInfo = await _bridge.getPythonInfo();
+    } catch (_) {}
+    if (!mounted) return;
+
+    final appName = appInfo['appName']?.trim().isNotEmpty == true
+        ? appInfo['appName']!
+        : 'Python 运行器';
+    final version = appInfo['version']?.trim().isNotEmpty == true
+        ? appInfo['version']!
+        : '1.3.3';
+    final buildNumber = appInfo['buildNumber']?.trim().isNotEmpty == true
+        ? appInfo['buildNumber']!
+        : '7';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('关于'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                appName,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '版本 $version ($buildNumber)',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                '面向 Android 的本地 Python 脚本运行环境，支持编辑、运行、终端交互和网络调试。',
+                style: TextStyle(fontSize: 13),
+              ),
+              const Divider(height: 20),
+              const Text('Python 环境', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              _infoRow('Python 版本', pythonInfo['pythonVersion'] ?? '获取失败'),
+              _infoRow('库目录', pythonInfo['sitePackages'] ?? '获取失败'),
+              _infoRow('Python 路径', pythonInfo['pythonPath'] ?? '获取失败'),
+              const Divider(height: 20),
+              const Text('开发者', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              const Text('道长'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -868,7 +935,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 leading: const Icon(Icons.info_outline),
                 title: const Text('关于'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: _showAboutDialog,
+                onTap: _showSimpleAboutDialog,
               ),
             ],
           ),

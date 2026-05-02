@@ -443,9 +443,19 @@ class TerminalViewState extends State<TerminalView> {
                     child: SingleChildScrollView(
                       controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                      child: SelectableText.rich(
-                        TextSpan(children: _buildAllSpans(colors)),
-                        onSelectionChanged: (selection, cause) {},
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: MediaQuery.sizeOf(context).width > 20
+                                ? MediaQuery.sizeOf(context).width - 20
+                                : MediaQuery.sizeOf(context).width,
+                          ),
+                          child: SelectableText.rich(
+                            TextSpan(children: _buildAllSpans(colors)),
+                            onSelectionChanged: (selection, cause) {},
+                          ),
+                        ),
                       ),
                     ),
                   ),

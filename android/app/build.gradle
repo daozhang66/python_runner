@@ -77,6 +77,9 @@ android {
                 install "tqdm"
                 install "openpyxl"
                 install "python-docx"
+                // YAML
+                install "PyYAML"
+                install "ruamel.yaml"
                 // 科学计算（较大）
                 install "scipy"
                 install "matplotlib"

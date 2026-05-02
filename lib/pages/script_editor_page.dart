@@ -20,6 +20,7 @@ class ScriptEditorPage extends StatefulWidget {
 class _ScriptEditorPageState extends State<ScriptEditorPage> {
   late CodeLineEditingController _controller;
   CodeFindController? _findController;
+  late final SelectionToolbarController _toolbarController;
   bool _loading = true;
   bool _modified = false;
   bool _readOnly = true;
@@ -35,7 +36,79 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     super.initState();
     _controller = CodeLineEditingController();
     _findController = CodeFindController(_controller);
+    _toolbarController = _buildSelectionToolbarController();
     _loadContent();
+  }
+
+  SelectionToolbarController _buildSelectionToolbarController() {
+    return MobileSelectionToolbarController(
+      builder: ({
+        required TextSelectionToolbarAnchors anchors,
+        required BuildContext context,
+        required CodeLineEditingController controller,
+        required VoidCallback onDismiss,
+        required VoidCallback onRefresh,
+      }) {
+        final buttonItems = <ContextMenuButtonItem>[];
+
+        if (!controller.isEmpty) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.copy,
+              onPressed: () async {
+                await controller.copy();
+                onDismiss();
+              },
+            ),
+          );
+        }
+
+        if (!_readOnly && !controller.isEmpty) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.cut,
+              onPressed: () {
+                controller.cut();
+                onDismiss();
+              },
+            ),
+          );
+        }
+
+        if (!_readOnly) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.paste,
+              onPressed: () {
+                controller.paste();
+                onDismiss();
+              },
+            ),
+          );
+        }
+
+        if (!controller.isEmpty && !controller.isAllSelected) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.selectAll,
+              onPressed: () {
+                controller.selectAll();
+                onRefresh();
+              },
+            ),
+          );
+        }
+
+        if (buttonItems.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: anchors,
+          buttonItems: buttonItems,
+        );
+      },
+    );
   }
 
   Future<void> _loadContent() async {
@@ -98,7 +171,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('运行失败: $e'), duration: const Duration(seconds: 3)));
+          SnackBar(content: Text('运行失败: $e'), duration: Duration(seconds: 3)));
     }
   }
 
@@ -143,13 +216,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           ),
           IconButton(
             icon: const Icon(Icons.search, size: 20),
-            onPressed: () {
-              if (_readOnly) {
-                _findController?.findMode();
-              } else {
-                _findController?.findMode();
-              }
-            },
+            onPressed: () => _findController?.findMode(),
             tooltip: '搜索',
           ),
           PopupMenuButton<String>(
@@ -221,7 +288,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                   child: CodeEditor(
                     controller: _controller,
                     findController: _findController,
+                    toolbarController: _toolbarController,
                     readOnly: _readOnly,
+                    showCursorWhenReadOnly: false,
                     style: CodeEditorStyle(
                       fontFamily: 'monospace',
                       fontSize: _fontSize,

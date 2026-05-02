@@ -170,6 +170,7 @@ def _detect_content_type(headers):
 def _safe_body_preview(body, response_headers=None):
     """Capture response body for preview.
     - For image/* content types: full base64 encode (no size limit)
+    - For audio/* and video/* content types: store metadata only (type + size)
     - For other types: use configured body_limit (default 2KB) to keep memory low
     """
     if body is None:
@@ -182,6 +183,11 @@ def _safe_body_preview(body, response_headers=None):
                 import base64
                 return 'data:' + ct + ';base64,' + base64.b64encode(body).decode('ascii')
             return None
+
+        # Check if this is an audio/video response — store metadata only
+        if ct and (ct.startswith('audio/') or ct.startswith('video/')):
+            body_len = len(body) if body is not None else 0
+            return 'media:{"type":"' + ct + '","size":' + str(body_len) + '}'
 
         # Non-image: truncate to limit
         limit = _CFG.get('body_limit', 2048)
