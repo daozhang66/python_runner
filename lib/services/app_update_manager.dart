@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -208,19 +210,50 @@ class AppUpdateManager {
 
     await HttpInspectorStore.instance.flush();
 
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final progressTextNotifier = ValueNotifier<String>('准备下载...');
+    StreamSubscription? progressSub;
+
+    progressSub = _bridge.installProgressStream.listen((event) {
+      final progress = event['progress'] as int? ?? 0;
+      final downloaded = event['downloaded'] as int? ?? 0;
+      final total = event['total'] as int? ?? 0;
+      if (progress >= 0) {
+        progressNotifier.value = progress / 100.0;
+        final downloadedMB = (downloaded / 1024 / 1024).toStringAsFixed(1);
+        final totalMB = (total / 1024 / 1024).toStringAsFixed(1);
+        progressTextNotifier.value = '$downloadedMB / $totalMB MB ($progress%)';
+      } else {
+        progressNotifier.value = 0.0;
+        progressTextNotifier.value = '正在下载...';
+      }
+    });
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (progressContext) => const AlertDialog(
-        content: Row(
+      builder: (progressContext) => AlertDialog(
+        title: const Text('Python Runner 更新'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            Text('正在下载 v${updateInfo.latestVersion}'),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<double>(
+              valueListenable: progressNotifier,
+              builder: (_, value, __) => LinearProgressIndicator(
+                value: value > 0 ? value : null,
+                minHeight: 6,
+              ),
             ),
-            SizedBox(width: 12),
-            Expanded(child: Text('正在下载更新包...')),
+            const SizedBox(height: 8),
+            ValueListenableBuilder<String>(
+              valueListenable: progressTextNotifier,
+              builder: (_, text, __) => Text(
+                text,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
           ],
         ),
       ),
@@ -242,11 +275,14 @@ class AppUpdateManager {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('更新失败：${_formatError(error)}'),
+          content: Text('Python Runner 更新失败：${_formatError(error)}'),
           duration: const Duration(seconds: 3),
         ),
       );
     } finally {
+      await progressSub?.cancel();
+      progressNotifier.dispose();
+      progressTextNotifier.dispose();
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }

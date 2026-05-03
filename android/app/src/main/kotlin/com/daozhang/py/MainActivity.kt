@@ -696,7 +696,7 @@ class MainActivity : FlutterActivity() {
                 )
             )
         } catch (e: Exception) {
-            result.error("1009", "鑾峰彇搴旂敤淇℃伅澶辫触: ${e.message}", null)
+            result.error("1009", "获取应用信息失败: ${e.message}", null)
         }
     }
 
@@ -708,7 +708,7 @@ class MainActivity : FlutterActivity() {
             startActivity(intent)
             result.success(true)
         } catch (e: Exception) {
-            result.error("1010", "鎵撳紑閾炬帴澶辫触: ${e.message}", null)
+            result.error("1010", "打开链接失败: ${e.message}", null)
         }
     }
 
@@ -731,7 +731,7 @@ class MainActivity : FlutterActivity() {
                     }
                     startActivity(settingsIntent)
                     mainHandler.post {
-                        result.error("1011", "璇峰厛鍏佽姝ゅ簲鐢ㄥ畨瑁匒PK锛岀劧鍚庡啀閲嶈瘯鏇存柊", null)
+                        result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)
                     }
                     return@Thread
                 }
@@ -763,9 +763,26 @@ class MainActivity : FlutterActivity() {
                     throw IllegalStateException("HTTP ${connection.responseCode}")
                 }
 
+                val totalBytes = connection.contentLength.toLong()
+                var downloadedBytes = 0L
+                val buffer = ByteArray(8192)
                 connection.inputStream.use { input ->
                     apkFile.outputStream().use { output ->
-                        input.copyTo(output)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            val progress = if (totalBytes > 0) {
+                                (downloadedBytes * 100 / totalBytes).toInt().coerceIn(0, 100)
+                            } else { -1 }
+                            mainHandler.post {
+                                installSink?.success(mapOf(
+                                    "downloaded" to downloadedBytes,
+                                    "total" to totalBytes,
+                                    "progress" to progress
+                                ))
+                            }
+                        }
                     }
                 }
 
@@ -783,7 +800,7 @@ class MainActivity : FlutterActivity() {
                 mainHandler.post { result.success(apkFile.absolutePath) }
             } catch (e: Exception) {
                 mainHandler.post {
-                    result.error("1012", "涓嬭浇鎴栧畨瑁呮洿鏂板け璐? ${e.message}", null)
+                    result.error("1012", "下载或安装更新失败 ${e.message}", null)
                 }
             } finally {
                 connection?.disconnect()
