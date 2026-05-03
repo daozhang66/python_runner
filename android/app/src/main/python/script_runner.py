@@ -223,7 +223,7 @@ _RECORD_BODY = _HOOK_CONFIG.get('record_response_body', False)
 _GLOBAL_UA = _HOOK_CONFIG.get('global_user_agent', '')
 _GLOBAL_COOKIE = _HOOK_CONFIG.get('global_cookie', '')
 _GLOBAL_HEADERS_RAW = _HOOK_CONFIG.get('global_headers', '')
-_BODY_PREVIEW_LIMIT = 2048
+_BODY_PREVIEW_LIMIT = 2 * 1024 * 1024
 try:
     _GLOBAL_HEADERS = json.loads(_GLOBAL_HEADERS_RAW) if _GLOBAL_HEADERS_RAW else {}
 except Exception:
@@ -247,17 +247,51 @@ def _apply_overrides(headers):
 def _safe_body_preview(body):
     if not _RECORD_BODY or body is None: return None
     try:
+        truncated = False
         if isinstance(body, bytes):
+            truncated = len(body) > _BODY_PREVIEW_LIMIT
             text = body[:_BODY_PREVIEW_LIMIT].decode('utf-8', errors='replace')
         elif isinstance(body, str):
+            truncated = len(body) > _BODY_PREVIEW_LIMIT
             text = body[:_BODY_PREVIEW_LIMIT]
         else:
-            text = str(body)[:_BODY_PREVIEW_LIMIT]
-        if len(text) >= _BODY_PREVIEW_LIMIT:
+            raw = str(body)
+            truncated = len(raw) > _BODY_PREVIEW_LIMIT
+            text = raw[:_BODY_PREVIEW_LIMIT]
+        if truncated:
             text += '... (truncated)'
         return text
     except Exception:
         return None
+
+def _body_length(body):
+    if body is None: return 0
+    try:
+        if isinstance(body, bytes):
+            return len(body)
+        if isinstance(body, str):
+            return len(body.encode('utf-8', errors='replace'))
+        return len(str(body).encode('utf-8', errors='replace'))
+    except Exception:
+        return 0
+
+def _is_preview_truncated(body):
+    if body is None: return False
+    try:
+        if isinstance(body, bytes):
+            return len(body) > _BODY_PREVIEW_LIMIT
+        if isinstance(body, str):
+            return len(body) > _BODY_PREVIEW_LIMIT
+        return len(str(body)) > _BODY_PREVIEW_LIMIT
+    except Exception:
+        return False
+
+def _attach_response_body(record, body):
+    preview = _safe_body_preview(body)
+    if preview is None: return
+    record['response_body_preview'] = preview
+    record['response_body_size'] = _body_length(body)
+    record['response_body_truncated'] = _is_preview_truncated(body)
 
 def _safe_headers_dict(headers):
     if headers is None: return {}
@@ -287,7 +321,7 @@ try:
             resp = _orig_send(self, request, **kw)
             rec['status_code'] = resp.status_code
             rec['response_headers'] = _safe_headers_dict(resp.headers)
-            rec['response_body_preview'] = _safe_body_preview(resp.content)
+            _attach_response_body(rec, resp.content)
             rec['duration_ms'] = int((time.time()-t0)*1000)
             _send_record(rec)
             return resp
@@ -319,7 +353,7 @@ try:
                 resp = _orig_cx_send(self, request, **kw)
                 rec['status_code'] = resp.status_code
                 rec['response_headers'] = _safe_headers_dict(resp.headers)
-                rec['response_body_preview'] = _safe_body_preview(resp.content)
+                _attach_response_body(rec, resp.content)
                 rec['duration_ms'] = int((time.time()-t0)*1000)
                 _send_record(rec)
                 return resp
@@ -346,7 +380,7 @@ try:
                 resp = await _orig_ax_send(self, request, **kw)
                 rec['status_code'] = resp.status_code
                 rec['response_headers'] = _safe_headers_dict(resp.headers)
-                rec['response_body_preview'] = _safe_body_preview(resp.content)
+                _attach_response_body(rec, resp.content)
                 rec['duration_ms'] = int((time.time()-t0)*1000)
                 _send_record(rec)
                 return resp
@@ -385,7 +419,7 @@ try:
             if _RECORD_BODY:
                 try:
                     body = resp.read()
-                    rec['response_body_preview'] = _safe_body_preview(body)
+                    _attach_response_body(rec, body)
                     import io as _io
                     resp = type('_Resp', (), {
                         'read': lambda s, n=-1: _io.BytesIO(body).read(n),

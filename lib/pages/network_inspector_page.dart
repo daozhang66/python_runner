@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,7 +43,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     return Scaffold(
       body: Column(
         children: [
-          // ── Search bar ──
+          // 鈹€鈹€ Search bar 鈹€鈹€
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: colors.surfaceContainerHighest,
@@ -87,7 +87,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               ],
             ),
           ),
-          // ── Active filters ──
+          // 鈹€鈹€ Active filters 鈹€鈹€
           if (_store.filterDomain.isNotEmpty ||
               _store.filterMethod.isNotEmpty ||
               _store.filterStatus != null)
@@ -99,16 +99,16 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   const Icon(Icons.filter_alt, size: 14),
                   const SizedBox(width: 6),
                   if (_store.filterDomain.isNotEmpty)
-                    _FilterChip(label: '域名: ${_store.filterDomain}',
+                    _FilterChip(label: '域名: \${_store.filterDomain}',
                         onRemove: () => _store.setFilterDomain('')),
                   if (_store.filterMethod.isNotEmpty)
-                    _FilterChip(label: '方法: ${_store.filterMethod}',
+                    _FilterChip(label: '方法: \${_store.filterMethod}',
                         onRemove: () => _store.setFilterMethod('')),
                   if (_store.filterStatus != null)
                     _FilterChip(
                         label: _store.filterStatus == 0
                             ? '状态: 错误'
-                            : '状态: ${_store.filterStatus}xx',
+                            : '状态: \${_store.filterStatus}xx',
                         onRemove: () => _store.setFilterStatus(null)),
                   const Spacer(),
                   TextButton(
@@ -122,7 +122,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ],
               ),
             ),
-          // ── Domain tag bar ──
+          // 鈹€鈹€ Domain tag bar 鈹€鈹€
           if (_store.count > 0)
             Builder(builder: (context) {
               final domains = _store.domainStats;
@@ -166,7 +166,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ),
               );
             }),
-          // ── Stats bar ──
+          // 鈹€鈹€ Stats bar 鈹€鈹€
           if (_store.count > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -182,13 +182,13 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   if (stats['avgMs'] != null)
                     _StatBadge(label: '${stats['avgMs']}ms', icon: Icons.speed, color: colors.onSurfaceVariant),
                   const Spacer(),
-                  Text('全部 ${_store.count}',
+                  Text('全部 \${_store.count}',
                       style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
                 ],
               ),
             ),
 
-          // ── Request list ──
+          // 鈹€鈹€ Request list 鈹€鈹€
           Expanded(
             child: records.isEmpty
                 ? Center(
@@ -267,7 +267,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             TextField(
               controller: domainCtrl,
               decoration: const InputDecoration(
-                labelText: '域名 / URL 关键字',
+                labelText: 'Domain / URL keyword',
                 hintText: 'example.com',
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -351,7 +351,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('已复制 ${_store.filteredRecords.length} 条请求记录到剪贴板'),
+        content: Text('已复制 \${_store.filteredRecords.length} 条请求记录到剪贴板'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -375,8 +375,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             ),
             ListTile(
               leading: const Icon(Icons.file_present),
-              title: const Text('导出为 HAR 文件'),
-              subtitle: const Text('可被 Charles / Fiddler 等工具导入'),
+              title: const Text('导出 HAR 文件'),
+              subtitle: const Text('可导入 Charles / Fiddler 等工具'),
               onTap: () {
                 Navigator.pop(ctx);
                 _exportHar(context);
@@ -398,7 +398,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('HAR 文件已导出: $path'),
+            content: Text('HAR 文件已导出: \$path'),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -407,7 +407,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('HAR 导出失败: $e'),
+            content: Text('HAR 导出失败: \$e'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -423,6 +423,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         content: const Text('确定要清空所有已捕获的网络请求记录吗？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -436,7 +437,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   }
 }
 
-// ── Record tile ──
+// 鈹€鈹€ Record tile 鈹€鈹€
 class _HttpRecordTile extends StatelessWidget {
   final HttpRecord record;
   final VoidCallback onTap;
@@ -546,7 +547,7 @@ class _HttpRecordTile extends StatelessWidget {
   }
 }
 
-// ── Filter chip ──
+// 鈹€鈹€ Filter chip 鈹€鈹€
 class _FilterChip extends StatelessWidget {
   final String label;
   final VoidCallback onRemove;
@@ -570,7 +571,7 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-// ── Stat badge ──
+// 鈹€鈹€ Stat badge 鈹€鈹€
 class _StatBadge extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -590,7 +591,7 @@ class _StatBadge extends StatelessWidget {
   }
 }
 
-// ── Detail page ──
+// 鈹€鈹€ Detail page 鈹€鈹€
 class _HttpRecordDetailPage extends StatelessWidget {
   final HttpRecord record;
   const _HttpRecordDetailPage({required this.record});
@@ -620,7 +621,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          // ── Overview ──
+          // 鈹€鈹€ Overview 鈹€鈹€
           _SectionCard(
             title: '概览',
             icon: Icons.info_outline,
@@ -635,7 +636,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          // ── Request Headers ──
+          // 鈹€鈹€ Request Headers 鈹€鈹€
           _SectionCard(
             title: '请求头 (${record.requestHeaders.length})',
             icon: Icons.arrow_upward,
@@ -652,7 +653,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          // ── Response ──
+          // 鈹€鈹€ Response 鈹€鈹€
           _SectionCard(
             title: '响应',
             icon: Icons.arrow_downward,
@@ -693,6 +694,33 @@ class _HttpRecordDetailPage extends StatelessWidget {
                       ? Icons.audiotrack
                       : Icons.description_outlined,
               children: [
+                if (record.responseBodyTruncated) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.28)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            record.responseBodyBytes != null
+                                ? 'Response body is large. Showing ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}.'
+                                : '响应体较大，当前仅显示已捕获的内容。',
+                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (record.isImageBody)
                   _ImagePreview(dataUri: record.responseBodyPreview!)
                 else if (record.isMediaBody)
@@ -711,6 +739,8 @@ class _HttpRecordDetailPage extends StatelessWidget {
                               ? _ImageFullViewPage(dataUri: record.responseBodyPreview!)
                               : _BodyFullViewPage(
                                   body: record.responseBodyPreview!,
+                                  bodyBytes: record.responseBodyBytes,
+                                  wasTruncated: record.responseBodyTruncated,
                                   title: '响应体',
                                 ),
                         ),
@@ -803,6 +833,12 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+String _formatByteSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
 class _CodeBlock extends StatelessWidget {
   final String text;
   const _CodeBlock(this.text);
@@ -837,7 +873,7 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
-// ── Media info card ──
+// 鈹€鈹€ Media info card 鈹€鈹€
 class _MediaInfoCard extends StatelessWidget {
   final Map<String, dynamic> meta;
   const _MediaInfoCard({required this.meta});
@@ -849,7 +885,7 @@ class _MediaInfoCard extends StatelessWidget {
   }
 
   String _mediaLabel(String type) {
-    if (type.startsWith('audio/')) return '音频';
+    if (type.startsWith('audio/')) return '闊抽';
     if (type.startsWith('video/')) return '视频';
     return '媒体';
   }
@@ -882,7 +918,7 @@ class _MediaInfoCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _MediaMetaItem(label: '类型', value: type),
+              _MediaMetaItem(label: '绫诲瀷', value: type),
               const SizedBox(width: 24),
               _MediaMetaItem(label: '大小', value: _formatSize(size)),
             ],
@@ -911,11 +947,18 @@ class _MediaMetaItem extends StatelessWidget {
   }
 }
 
-// ── Full body view page with JSON tree viewer ──
+// 鈹€鈹€ Full body view page with JSON tree viewer 鈹€鈹€
 class _BodyFullViewPage extends StatefulWidget {
   final String body;
+  final int? bodyBytes;
   final String title;
-  const _BodyFullViewPage({required this.body, required this.title});
+  final bool wasTruncated;
+  const _BodyFullViewPage({
+    required this.body,
+    this.bodyBytes,
+    required this.title,
+    this.wasTruncated = false,
+  });
 
   @override
   State<_BodyFullViewPage> createState() => _BodyFullViewPageState();
@@ -959,6 +1002,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   bool _isTruncated = false;
 
   void _parseBody() {
+    _isTruncated = widget.wasTruncated;
     // Try 1: parse as-is
     try {
       _parsedJson = jsonDecode(widget.body);
@@ -993,13 +1037,13 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   /// Try to repair a truncated JSON string by cutting back to last valid boundary
   /// and adding missing closing brackets.
   String? _tryRepairTruncatedJson(String input) {
-    final marker = '... (truncated)';
+    final marker = '...（已截断）';
     final idx = input.lastIndexOf(marker);
     if (idx <= 0) return null;
 
     var s = input.substring(0, idx).trimRight();
 
-    // Find the last comma outside of strings — cut back to a valid boundary
+    // Find the last comma outside of strings 鈥?cut back to a valid boundary
     int lastComma = -1;
     bool inStr = false, esc = false;
     for (int i = 0; i < s.length; i++) {
@@ -1073,10 +1117,55 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     _lineNumberedText = buf.toString();
   }
 
-  void _changeFontSize(double delta) {
-    setState(() {
-      _fontSize = (_fontSize + delta).clamp(8.0, 24.0);
-    });
+  void _showFontSizeSlider() {
+    double tempSize = _fontSize;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('A', style: TextStyle(fontSize: 12)),
+                  Expanded(
+                    child: Slider(
+                      value: tempSize,
+                      min: 6.0,
+                      max: 32.0,
+                      divisions: 26,
+                      onChanged: (v) {
+                        setDialogState(() => tempSize = v);
+                      },
+                    ),
+                  ),
+                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setDialogState(() => tempSize = 12.0);
+              },
+              child: const Text('重置'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() => _fontSize = tempSize);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _exportJson() async {
@@ -1086,13 +1175,13 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       final path = await bridge.exportLog(_formatted, fileName: 'response_$now.json');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已导出: $path'), duration: const Duration(seconds: 3)),
+          SnackBar(content: Text('已导出: \$path'), duration: const Duration(seconds: 3)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e'), duration: const Duration(seconds: 2)),
+          SnackBar(content: Text('导出失败: \$e'), duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -1182,51 +1271,36 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   builder: (_) => _JsonTreePage(data: _parsedJson),
                 ),
               ),
-              tooltip: '树形查看',
+              tooltip: '树形视图',
             ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _formatted));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
-              );
-            },
-            tooltip: '复制',
-          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: '更多',
             position: PopupMenuPosition.under,
             itemBuilder: (_) => [
-              PopupMenuItem<String>(
-                enabled: false,
-                padding: EdgeInsets.zero,
-                child: StatefulBuilder(
-                  builder: (ctx, setLocal) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.text_decrease),
-                        onPressed: _fontSize > 8
-                            ? () { _changeFontSize(-2); setLocal(() {}); }
-                            : null,
-                      ),
-                      Text('${_fontSize.toInt()}px', style: const TextStyle(fontSize: 13)),
-                      IconButton(
-                        icon: const Icon(Icons.text_increase),
-                        onPressed: _fontSize < 24
-                            ? () { _changeFontSize(2); setLocal(() {}); }
-                            : null,
-                      ),
-                    ],
-                  ),
+              const PopupMenuItem<String>(
+                value: 'font',
+                child: Row(
+                  children: [
+                    Icon(Icons.format_size, size: 18),
+                    SizedBox(width: 8),
+                    Text('字体大小', style: TextStyle(fontSize: 13)),
+                  ],
                 ),
               ),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(
+              const PopupMenuItem<String>(
+                value: 'copy',
+                child: Row(
+                  children: [
+                    Icon(Icons.copy, size: 18),
+                    SizedBox(width: 8),
+                    Text('复制全部', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
                 value: 'export',
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.file_download_outlined, size: 18),
                     SizedBox(width: 8),
@@ -1236,14 +1310,24 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
               ),
             ],
             onSelected: (v) {
-              if (v == 'export') _exportJson();
+              switch (v) {
+                case 'font':
+                  _showFontSizeSlider();
+                case 'copy':
+                  Clipboard.setData(ClipboardData(text: _formatted));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+                  );
+                case 'export':
+                  _exportJson();
+              }
             },
           ),
         ],
       ),
       body: Column(
         children: [
-          // ── Search bar ──
+          // 鈹€鈹€ Search bar 鈹€鈹€
           if (_searchVisible)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1287,7 +1371,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 ],
               ),
             ),
-          // ── Info bar ──
+          // 鈹€鈹€ Info bar 鈹€鈹€
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
             color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
@@ -1296,72 +1380,80 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 if (_isTruncated) ...[
                   Icon(Icons.warning_amber, size: 12, color: Colors.orange.shade700),
                   const SizedBox(width: 3),
-                  Text('已截断', style: TextStyle(fontSize: 10, color: Colors.orange.shade700)),
+                    Text('已截断', style: TextStyle(fontSize: 10, color: Colors.orange.shade700)),
                   const SizedBox(width: 8),
                 ],
                 Text('$lineCount 行', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+                if (widget.bodyBytes != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    _isTruncated
+                        ? '已捕获 \${_formatByteSize(utf8.encode(widget.body).length)} / \${_formatByteSize(widget.bodyBytes!)}'
+                        : _formatByteSize(widget.bodyBytes!),
+                    style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+                  ),
+                ],
                 const Spacer(),
                 Text('${_formatted.length} 字符', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
               ],
             ),
           ),
-          // ── Content: single SelectableText for performance ──
+          // 鈹€鈹€ Content: single SelectableText for performance 鈹€鈹€
           Expanded(
             child: Stack(
-              children: [
-                SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
-                  child: Container(
-                    width: double.infinity,
+                children: [
+                  SingleChildScrollView(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: SelectableText(
-                      _lineNumberedText,
-                      style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
-                    ),
-                  ),
-                ),
-                // ── Floating nav buttons ──
-                if (_showFab)
-                  Positioned(
-                    right: 12,
-                    bottom: 16,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: FloatingActionButton.small(
-                            heroTag: 'top',
-                            onPressed: () => _scrollController.animateTo(0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut),
-                            child: const Icon(Icons.keyboard_arrow_up, size: 20),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: FloatingActionButton.small(
-                            heroTag: 'bottom',
-                            onPressed: () => _scrollController.animateTo(
-                                _scrollController.position.maxScrollExtent,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut),
-                            child: const Icon(Icons.keyboard_arrow_down, size: 20),
-                          ),
-                        ),
-                      ],
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        _lineNumberedText,
+                        style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
+                      ),
                     ),
                   ),
-              ],
-            ),
+                  if (_showFab)
+                    Positioned(
+                      right: 12,
+                      bottom: 16,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: FloatingActionButton.small(
+                              heroTag: 'top',
+                              onPressed: () => _scrollController.animateTo(0,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut),
+                              child: const Icon(Icons.keyboard_arrow_up, size: 20),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: FloatingActionButton.small(
+                              heroTag: 'bottom',
+                              onPressed: () => _scrollController.animateTo(
+                                  _scrollController.position.maxScrollExtent,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut),
+                              child: const Icon(Icons.keyboard_arrow_down, size: 20),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
           ),
         ],
       ),
@@ -1369,7 +1461,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   }
 }
 
-// ── Full-screen JSON tree page ──
+// 鈹€鈹€ Full-screen JSON tree page 鈹€鈹€
 class _JsonTreePage extends StatelessWidget {
   final dynamic data;
   const _JsonTreePage({required this.data});
@@ -1559,7 +1651,7 @@ class _JsonValue extends StatelessWidget {
   }
 }
 
-// ── Helpers ──
+// 鈹€鈹€ Helpers 鈹€鈹€
 
 String _primitiveText(dynamic value) {
   if (value == null) return 'null';
@@ -1577,7 +1669,7 @@ Color _primitiveColor(dynamic value) {
   return Colors.black;
 }
 
-// ── Image preview widget ──
+// 鈹€鈹€ Image preview widget 鈹€鈹€
 class _ImagePreview extends StatelessWidget {
   final String dataUri;
   const _ImagePreview({required this.dataUri});
@@ -1623,7 +1715,7 @@ class _ImagePreview extends StatelessWidget {
   }
 }
 
-// ── Image full view page (pinch-to-zoom) ──
+// 鈹€鈹€ Image full view page (pinch-to-zoom) 鈹€鈹€
 class _ImageFullViewPage extends StatelessWidget {
   final String dataUri;
   const _ImageFullViewPage({required this.dataUri});

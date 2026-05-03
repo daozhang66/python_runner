@@ -1,10 +1,12 @@
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../utils/ansi_parser.dart';
 
-/// Unified terminal widget — all log lines rendered as ONE SelectableText
+/// Unified terminal widget 鈥?all log lines rendered as ONE SelectableText
 /// so the user can freely drag-select across multiple lines.
 /// Long-press any line for a context menu with range-copy options.
 class TerminalView extends StatefulWidget {
@@ -45,9 +47,9 @@ class TerminalViewState extends State<TerminalView> {
   bool _filterErrors = false;
   final _searchController = TextEditingController();
 
-  static const double _fontSizeMin = 9.0;
-  static const double _fontSizeMax = 22.0;
-  static const double _fontSizeStep = 1.0;
+  static const double _fontSizeMin = 6.0;
+  static const double _fontSizeMax = 32.0;
+  static const String _fontSizePrefsKey = 'terminal_font_size';
 
   final Map<int, List<TextSpan>> _ansiCache = {};
   int _lastLogCount = 0;
@@ -56,6 +58,74 @@ class TerminalViewState extends State<TerminalView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadFontSize();
+  }
+
+  Future<void> _loadFontSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getDouble(_fontSizePrefsKey);
+    if (!mounted || saved == null) return;
+    setState(() {
+      _fontSize = saved.clamp(_fontSizeMin, _fontSizeMax).toDouble();
+    });
+  }
+
+  Future<void> _persistFontSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_fontSizePrefsKey, _fontSize);
+  }
+
+  void _showFontSizeSlider() {
+    double tempSize = _fontSize;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('A', style: TextStyle(fontSize: 12)),
+                  Expanded(
+                    child: Slider(
+                      value: tempSize,
+                      min: _fontSizeMin,
+                      max: _fontSizeMax,
+                      divisions: (_fontSizeMax - _fontSizeMin).round(),
+                      onChanged: (v) {
+                        setDialogState(() => tempSize = v);
+                        setState(() => _fontSize = v);
+                      },
+                    ),
+                  ),
+                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() => _fontSize = 13.0);
+                setDialogState(() => tempSize = 13.0);
+              },
+              child: const Text('重置'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                unawaited(_persistFontSize());
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -103,7 +173,7 @@ class TerminalViewState extends State<TerminalView> {
     if (mounted && _stdinFocusNode.canRequestFocus) _stdinFocusNode.requestFocus();
   }
 
-  // ── Colors ──
+  // 鈹€鈹€ Colors 鈹€鈹€
 
   Color _logColor(LogType type, ColorScheme colors) {
     switch (type) {
@@ -136,7 +206,7 @@ class TerminalViewState extends State<TerminalView> {
     return result;
   }
 
-  // ── Build the single SelectableText with all lines ──
+  // 鈹€鈹€ Build the single SelectableText with all lines 鈹€鈹€
 
   /// Build one big TextSpan tree: each log line is a group of spans
   /// followed by a `\n`. This lets the user drag-select across lines.
@@ -199,7 +269,7 @@ class TerminalViewState extends State<TerminalView> {
         .map((e) => AnsiParser.strip(e.content))
         .join('\n');
     Clipboard.setData(ClipboardData(text: text));
-    _showToast('已复制第 ${lo + 1}-${hi + 1} 行 (${hi - lo + 1} 行)');
+    _showToast('已复制第 ${lo + 1}-${hi + 1} 行（共 ${hi - lo + 1} 行）');
   }
 
   void _showToast(String msg) {
@@ -209,7 +279,7 @@ class TerminalViewState extends State<TerminalView> {
     );
   }
 
-  // ── Long-press menu ──
+  // 鈹€鈹€ Long-press menu 鈹€鈹€
 
   void _showLineMenu(int index) {
     final log = widget.logs[index];
@@ -246,11 +316,11 @@ class TerminalViewState extends State<TerminalView> {
             ListTile(
               dense: true,
               leading: const Icon(Icons.copy, size: 20),
-              title: const Text('复制该行'),
+              title: const Text('复制此行'),
               onTap: () {
                 Navigator.pop(ctx);
                 Clipboard.setData(ClipboardData(text: AnsiParser.strip(log.content)));
-                _showToast('已复制第 ${index + 1} 行');
+                _showToast('已复制');
               },
             ),
             if (index > 0)
@@ -270,7 +340,7 @@ class TerminalViewState extends State<TerminalView> {
             ListTile(
               dense: true,
               leading: const Icon(Icons.select_all, size: 20),
-              title: Text('复制全部 (${widget.logs.length} 行)'),
+              title: Text('复制全部（${widget.logs.length} 行）'),
               onTap: () { Navigator.pop(ctx); _copyAll(); },
             ),
             const SizedBox(height: 8),
@@ -285,7 +355,7 @@ class TerminalViewState extends State<TerminalView> {
     return (s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'));
   }
 
-  // ── Build ──
+  // 鈹€鈹€ Build 鈹€鈹€
 
   @override
   Widget build(BuildContext context) {
@@ -308,23 +378,6 @@ class TerminalViewState extends State<TerminalView> {
           ),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.text_decrease_rounded, size: 18),
-                visualDensity: VisualDensity.compact,
-                onPressed: _fontSize <= _fontSizeMin
-                    ? null
-                    : () => setState(() => _fontSize = (_fontSize - _fontSizeStep).clamp(_fontSizeMin, _fontSizeMax)),
-                tooltip: '缩小字体',
-              ),
-              Text('${_fontSize.toInt()}', style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-              IconButton(
-                icon: const Icon(Icons.text_increase_rounded, size: 18),
-                visualDensity: VisualDensity.compact,
-                onPressed: _fontSize >= _fontSizeMax
-                    ? null
-                    : () => setState(() => _fontSize = (_fontSize + _fontSizeStep).clamp(_fontSizeMin, _fontSizeMax)),
-                tooltip: '放大字体',
-              ),
               if (widget.showLineNumberToggle)
                 IconButton(
                   icon: Icon(Icons.format_list_numbered,
@@ -351,6 +404,12 @@ class TerminalViewState extends State<TerminalView> {
                   tooltip: '显示全部',
                 ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.format_size, size: 18),
+                visualDensity: VisualDensity.compact,
+                onPressed: _showFontSizeSlider,
+                tooltip: '字体大小',
+              ),
               if (logs.isNotEmpty)
                 TextButton.icon(
                   onPressed: _copyAll,
@@ -386,8 +445,8 @@ class TerminalViewState extends State<TerminalView> {
                     enableSuggestions: false,
                     autocorrect: false,
                     style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: '搜索日志内容...',
+                    decoration: const InputDecoration(
+                      hintText: '搜索日志...',
                       border: InputBorder.none, isDense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     ),
@@ -399,7 +458,7 @@ class TerminalViewState extends State<TerminalView> {
                       color: _filterErrors ? colors.error : colors.onSurfaceVariant),
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() => _filterErrors = !_filterErrors),
-                  tooltip: _filterErrors ? '显示全部' : '只看错误',
+                  tooltip: _filterErrors ? '显示全部' : '仅看错误',
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
@@ -413,12 +472,12 @@ class TerminalViewState extends State<TerminalView> {
             ),
           ),
 
-        // Terminal output — single SelectableText for multi-line drag select
+        // Terminal output 鈥?single SelectableText for multi-line drag select
         Expanded(
           child: Container(
-            color: bgColor,
-            child: displayLogs.isEmpty
-                ? Center(
+              color: bgColor,
+              child: displayLogs.isEmpty
+                  ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -430,35 +489,36 @@ class TerminalViewState extends State<TerminalView> {
                         const SizedBox(height: 12),
                         Text(
                           (_searchQuery.isNotEmpty || _filterErrors)
-                              ? '无匹配结果'
+                              ? '无匹配输出'
                               : (widget.emptyMessage ?? (widget.isRunning ? '等待输出...' : '暂无输出')),
+
                           style: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 14),
                         ),
                       ],
                     ),
                   )
-                : Scrollbar(
-                    controller: _scrollController,
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
+                  : Scrollbar(
                       controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                      thumbVisibility: true,
                       child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: MediaQuery.sizeOf(context).width > 20
-                                ? MediaQuery.sizeOf(context).width - 20
-                                : MediaQuery.sizeOf(context).width,
-                          ),
-                          child: SelectableText.rich(
-                            TextSpan(children: _buildAllSpans(colors)),
-                            onSelectionChanged: (selection, cause) {},
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: MediaQuery.sizeOf(context).width > 20
+                                  ? MediaQuery.sizeOf(context).width - 20
+                                  : MediaQuery.sizeOf(context).width,
+                            ),
+                            child: SelectableText.rich(
+                              TextSpan(children: _buildAllSpans(colors)),
+                              onSelectionChanged: (selection, cause) {},
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
           ),
         ),
 
@@ -475,7 +535,7 @@ class TerminalViewState extends State<TerminalView> {
                 children: [
                   Icon(Icons.arrow_downward, size: 14, color: colors.onSurfaceVariant),
                   const SizedBox(width: 4),
-                  Text('新输出，点击回到底部',
+                  Text('有新输出，点击跳转到底部',
                       style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
                 ],
               ),
@@ -531,7 +591,7 @@ class TerminalViewState extends State<TerminalView> {
                         ),
                         cursorColor: colors.primary,
                         decoration: InputDecoration(
-                          hintText: widget.waitingForInput ? '请输入...' : '等待脚本请求输入...',
+                          hintText: widget.waitingForInput ? 'Enter input...' : 'Waiting for script input request...',
                           hintStyle: TextStyle(
                             color: isDark ? Colors.white30 : colors.onSurfaceVariant.withValues(alpha: 0.4),
                             fontSize: 13,
@@ -574,3 +634,6 @@ class TerminalViewState extends State<TerminalView> {
     super.dispose();
   }
 }
+
+
+

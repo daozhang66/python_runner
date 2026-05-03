@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -15,6 +17,8 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
@@ -192,6 +196,15 @@ class MainActivity : FlutterActivity() {
                         val name = call.argument<String>("name") ?: ""
                         val destDir = call.argument<String>("destDir")
                         handleExportScript(name, destDir, result)
+                    }
+                    "openUrl" -> {
+                        val url = call.argument<String>("url") ?: ""
+                        handleOpenUrl(url, result)
+                    }
+                    "downloadAndInstallApk" -> {
+                        val url = call.argument<String>("url") ?: ""
+                        val fileName = call.argument<String>("fileName") ?: "python_runner_update.apk"
+                        handleDownloadAndInstallApk(url, fileName, result)
                     }
                     "getAppInfo" -> handleGetAppInfo(result)
                     "getPythonInfo" -> handleGetPythonInfo(result)
@@ -685,6 +698,97 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             result.error("1009", "鑾峰彇搴旂敤淇℃伅澶辫触: ${e.message}", null)
         }
+    }
+
+    private fun handleOpenUrl(url: String, result: MethodChannel.Result) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1010", "鎵撳紑閾炬帴澶辫触: ${e.message}", null)
+        }
+    }
+
+    private fun handleDownloadAndInstallApk(
+        url: String,
+        fileName: String,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            var connection: HttpURLConnection? = null
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                    !packageManager.canRequestPackageInstalls()
+                ) {
+                    val settingsIntent = Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    ).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(settingsIntent)
+                    mainHandler.post {
+                        result.error("1011", "璇峰厛鍏佽姝ゅ簲鐢ㄥ畨瑁匒PK锛岀劧鍚庡啀閲嶈瘯鏇存柊", null)
+                    }
+                    return@Thread
+                }
+
+                val targetDir = File(
+                    getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir,
+                    "updates"
+                )
+                if (!targetDir.exists()) targetDir.mkdirs()
+
+                val safeFileName = if (fileName.lowercase().endsWith(".apk")) {
+                    fileName
+                } else {
+                    "$fileName.apk"
+                }
+                val apkFile = File(targetDir, safeFileName)
+                if (apkFile.exists()) apkFile.delete()
+
+                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 60000
+                    setRequestProperty("Accept", "application/octet-stream")
+                    setRequestProperty("User-Agent", "python_runner-updater")
+                    instanceFollowRedirects = true
+                    connect()
+                }
+                if (connection.responseCode !in 200..299) {
+                    throw IllegalStateException("HTTP ${connection.responseCode}")
+                }
+
+                connection.inputStream.use { input ->
+                    apkFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val apkUri = FileProvider.getUriForFile(
+                    this,
+                    "$packageName.fileprovider",
+                    apkFile
+                )
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(installIntent)
+                mainHandler.post { result.success(apkFile.absolutePath) }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    result.error("1012", "涓嬭浇鎴栧畨瑁呮洿鏂板け璐? ${e.message}", null)
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }.also { it.name = "apk-update"; it.start() }
     }
 
     // --- Helpers ---

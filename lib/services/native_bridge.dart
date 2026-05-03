@@ -132,6 +132,18 @@ class NativeBridge {
     return map.map((k, v) => MapEntry(k.toString(), v.toString()));
   }
 
+  Future<void> openUrl(String url) async {
+    await _invoke('openUrl', {'url': url});
+  }
+
+  Future<String> downloadAndInstallApk(String url, {required String fileName}) async {
+    final result = await _invoke('downloadAndInstallApk', {
+      'url': url,
+      'fileName': fileName,
+    });
+    return result as String;
+  }
+
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
     try {
       return await _methodChannel.invokeMethod(method, arguments);

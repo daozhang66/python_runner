@@ -1,10 +1,11 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/native_bridge.dart';
 import '../services/app_logger.dart';
+import '../services/app_update_manager.dart';
 import '../services/network_debug_config.dart';
 import '../services/request_override_config.dart';
 
@@ -41,7 +42,10 @@ class _SettingsPageState extends State<SettingsPage> {
   int _defaultHttpTimeout = 30;
   bool _followRedirects = true;
   bool _forceProxy = false;
+  bool _autoCheckUpdates = true;
   final _bridge = NativeBridge();
+  final _appUpdateManager = AppUpdateManager();
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
@@ -53,6 +57,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     final overrideCfg = RequestOverrideConfig.instance;
     await overrideCfg.load();
+    final autoCheckUpdates = await _appUpdateManager.isAutoCheckEnabled();
     setState(() {
       _mirrorController.text = prefs.getString('pypi_index_url') ?? '';
       _timeout = prefs.getInt('execution_timeout') ?? 60;
@@ -74,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _defaultHttpTimeout = overrideCfg.defaultTimeout;
       _followRedirects = overrideCfg.followRedirects;
       _forceProxy = overrideCfg.forceProxy;
+      _autoCheckUpdates = autoCheckUpdates;
     });
   }
 
@@ -242,50 +248,55 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _showAboutDialog() async {
+  Future<void> _showSimpleAboutDialog() async {
+    Map<String, String> appInfo = {};
     Map<String, String> pythonInfo = {};
+    try {
+      appInfo = await _bridge.getAppInfo();
+    } catch (_) {}
     try {
       pythonInfo = await _bridge.getPythonInfo();
     } catch (_) {}
     if (!mounted) return;
+
+    final appName = appInfo['appName']?.trim().isNotEmpty == true
+        ? appInfo['appName']!
+        : 'Python Runner';
+    final version = appInfo['version']?.trim().isNotEmpty == true
+        ? appInfo['version']!
+        : '1.3.4';
+    final buildNumber = appInfo['buildNumber']?.trim().isNotEmpty == true
+        ? appInfo['buildNumber']!
+        : '8';
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('关于'),
+        title: const Text('关于应用'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Python 运行器', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              const Text('版本 1.3.1', style: TextStyle(fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 10),
-              const Text('安卓端 Python 脚本运行环境，主要功能：'),
+              Text(
+                appName,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
-              const Text('• 代码编辑器（语法高亮、搜索、缩进）'),
-              const Text('• 本地运行'),
-              const Text('• 交互式输入（input）支持'),
-              const Text('• 图形引擎（scene 模块，游戏/动画）'),
-              const Text('• pip 包管理（安装/卸载）'),
-              const Text('• 50+ 内置 Python 库'),
-              const Text('• 运行日志历史与导出'),
-              const Text('• 脚本导入/导出/批量管理'),
-              const Text('• 网络请求查看器（requests/httpx/urllib3）'),
-              const Text('• 全局请求覆盖（UA/Headers/Cookie/超时）'),
-              const Text('• 代理 & SSL 调试（Charles/Fiddler/抓包）'),
+              Text(
+                '版本 $version ($buildNumber)',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                '本地 Python 脚本运行环境，支持脚本编辑、运行、终端输入和网络调试。',
+              ),
               const Divider(height: 20),
               const Text('Python 环境', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               _infoRow('Python 版本', pythonInfo['pythonVersion'] ?? '获取失败'),
               _infoRow('库安装目录', pythonInfo['sitePackages'] ?? '获取失败'),
               _infoRow('Python 路径', pythonInfo['pythonPath'] ?? '获取失败'),
-              const Divider(height: 20),
-              const Text('技术栈', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              const Text('• Flutter + Material 3'),
-              const Text('• Chaquopy（Python 运行时）'),
-              const Text('• CustomPaint（图形渲染）'),
               const Divider(height: 20),
               const Text('开发者', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
@@ -318,71 +329,20 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _showSimpleAboutDialog() async {
-    Map<String, String> appInfo = {};
-    Map<String, String> pythonInfo = {};
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
     try {
-      appInfo = await _bridge.getAppInfo();
-    } catch (_) {}
-    try {
-      pythonInfo = await _bridge.getPythonInfo();
-    } catch (_) {}
+      await _appUpdateManager.checkForUpdates(context, manual: true);
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
+  Future<void> _setAutoCheckUpdates(bool enabled) async {
+    await _appUpdateManager.setAutoCheckEnabled(enabled);
     if (!mounted) return;
-
-    final appName = appInfo['appName']?.trim().isNotEmpty == true
-        ? appInfo['appName']!
-        : 'Python 运行器';
-    final version = appInfo['version']?.trim().isNotEmpty == true
-        ? appInfo['version']!
-        : '1.3.3';
-    final buildNumber = appInfo['buildNumber']?.trim().isNotEmpty == true
-        ? appInfo['buildNumber']!
-        : '7';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('关于'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                appName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '版本 $version ($buildNumber)',
-                style: const TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                '面向 Android 的本地 Python 脚本运行环境，支持编辑、运行、终端交互和网络调试。',
-                style: TextStyle(fontSize: 13),
-              ),
-              const Divider(height: 20),
-              const Text('Python 环境', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              _infoRow('Python 版本', pythonInfo['pythonVersion'] ?? '获取失败'),
-              _infoRow('库目录', pythonInfo['sitePackages'] ?? '获取失败'),
-              _infoRow('Python 路径', pythonInfo['pythonPath'] ?? '获取失败'),
-              const Divider(height: 20),
-              const Text('开发者', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              const Text('道长'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
+    setState(() => _autoCheckUpdates = enabled);
   }
 
   @override
@@ -681,7 +641,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 SwitchListTile(
                   secondary: const Icon(Icons.description_outlined),
                   title: const Text('记录响应体预览'),
-                  subtitle: const Text('记录响应内容前 2KB（增加内存占用）', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('记录响应内容前 2 MB（增加内存占用）', style: TextStyle(fontSize: 12)),
                   value: _recordResponseBody,
                   onChanged: (v) async {
                     await RequestOverrideConfig.instance.setRecordResponseBody(v);
@@ -932,8 +892,34 @@ class _SettingsPageState extends State<SettingsPage> {
                   MaterialPageRoute(builder: (_) => const _UserManualPage())),
               ),
               ListTile(
+                leading: _checkingUpdate
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.system_update_alt),
+                title: const Text('检查更新'),
+                subtitle: const Text(
+                  '从 GitHub Releases 获取最新 APK',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _checkingUpdate ? null : _checkForUpdates,
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.update_outlined),
+                title: const Text('启动时自动检查更新'),
+                subtitle: const Text(
+                  '每 12 小时至多自动检查一次',
+                  style: TextStyle(fontSize: 12),
+                ),
+                value: _autoCheckUpdates,
+                onChanged: _setAutoCheckUpdates,
+              ),
+              ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('关于'),
+                title: const Text('关于应用'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _showSimpleAboutDialog,
               ),
@@ -1061,7 +1047,7 @@ class _UserManualPage extends StatelessWidget {
             items: const [
               _ManualItem(Icons.lock, '只读/编辑', '锁图标切换，默认只读防误触'),
               _ManualItem(Icons.search, '代码搜索', '搜索关键字，上下跳转匹配'),
-              _ManualItem(Icons.format_size, '字体大小', '调整编辑器字号（10-28px）'),
+              _ManualItem(Icons.format_size, '字体大小', '点击 Aa 按钮滑动调节编辑器字号'),
               _ManualItem(Icons.save, '保存', '修改后出现，点击保存'),
               _ManualItem(Icons.play_arrow, '运行脚本', '点击 ▶ 按钮保存并运行，自动跳转全屏终端'),
               _ManualItem(Icons.fullscreen, '全屏终端', '点击全屏图标直接打开终端页面'),
@@ -1077,7 +1063,7 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.error_outline, '只看错误', '搜索栏内点击错误图标，快速过滤 stderr/error'),
               _ManualItem(Icons.copy, '复制日志', '长按某行复制该行，或一键复制全部'),
               _ManualItem(Icons.select_all, '多行选择', '手指拖选可自由选择多行文本'),
-              _ManualItem(Icons.format_size, '字体大小', '工具栏调节终端字号'),
+              _ManualItem(Icons.format_size, '字体大小', '点击 Aa 按钮滑动调节终端字号'),
               _ManualItem(Icons.delete_outline, '清空', '清除终端输出'),
               _ManualItem(Icons.chevron_right, '交互输入', 'input() 时底部出现输入框'),
               _ManualItem(Icons.notifications, '运行通知', '前台通知显示脚本名称和运行时长，每 10 秒更新'),

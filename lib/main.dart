@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'services/native_bridge.dart';
 import 'services/database_service.dart';
 import 'services/app_logger.dart';
+import 'services/app_update_manager.dart';
+import 'services/http_inspector_store.dart';
 import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
 import 'providers/script_provider.dart';
@@ -33,6 +35,9 @@ void main() async {
 
   // Load request override config
   await RequestOverrideConfig.instance.load();
+
+  // Restore persisted HTTP inspector records before the UI starts.
+  await HttpInspectorStore.instance.ensureLoaded();
 
   // Global Flutter framework error handler
   FlutterError.onError = (details) {
@@ -91,13 +96,28 @@ class PythonRunnerApp extends StatefulWidget {
   State<PythonRunnerApp> createState() => _PythonRunnerAppState();
 }
 
-class _PythonRunnerAppState extends State<PythonRunnerApp> {
+class _PythonRunnerAppState extends State<PythonRunnerApp>
+    with WidgetsBindingObserver {
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadTheme();
+  }
+
+  void _flushHttpInspectorRecords() {
+    unawaited(HttpInspectorStore.instance.flush());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _flushHttpInspectorRecords();
+    }
   }
 
   Future<void> _loadTheme() async {
@@ -112,6 +132,12 @@ class _PythonRunnerAppState extends State<PythonRunnerApp> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('theme_mode', mode.name);
     setState(() => _themeMode = mode);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -368,6 +394,24 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
+  final _appUpdateManager = AppUpdateManager();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdatesOnLaunch();
+    });
+  }
+
+  Future<void> _checkForUpdatesOnLaunch() async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await _appUpdateManager.checkForUpdates(
+      context,
+      manual: false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
