@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// A single captured HTTP request/response record.
 class HttpRecord {
@@ -18,6 +21,8 @@ class HttpRecord {
   int? statusCode;
   Map<String, String>? responseHeaders;
   String? responseBodyPreview;
+  final int? responseBodyBytes;
+  final bool responseBodyTruncated;
   String? errorType;
   String? errorMessage;
   int? durationMs;
@@ -35,6 +40,8 @@ class HttpRecord {
     this.statusCode,
     this.responseHeaders,
     this.responseBodyPreview,
+    this.responseBodyBytes,
+    this.responseBodyTruncated = false,
     this.errorType,
     this.errorMessage,
     this.durationMs,
@@ -97,6 +104,19 @@ class HttpRecord {
     return '${(durationMs! / 1000).toStringAsFixed(1)}s';
   }
 
+  int get capturedResponseBodyBytes {
+    final body = responseBodyPreview;
+    if (body == null || body.isEmpty) return 0;
+    try {
+      return utf8.encode(body).length;
+    } catch (_) {
+      return body.length;
+    }
+  }
+
+  int get storedBodyBytes =>
+      (requestBody?.length ?? 0) + capturedResponseBodyBytes;
+
   /// Parse from JSON map sent by Python hook.
   factory HttpRecord.fromJson(Map<String, dynamic> json) {
     Map<String, String> parseHeaders(dynamic h) {
@@ -126,10 +146,35 @@ class HttpRecord {
       statusCode: json['status_code'] as int?,
       responseHeaders: parseHeaders(json['response_headers']),
       responseBodyPreview: json['response_body_preview'] as String?,
+      responseBodyBytes: (json['response_body_size'] as num?)?.toInt(),
+      responseBodyTruncated: json['response_body_truncated'] == true ||
+          ((json['response_body_preview'] as String?)?.endsWith('... (truncated)') ?? false),
       errorType: json['error_type'] as String?,
       errorMessage: json['error_message'] as String?,
       durationMs: json['duration_ms'] as int?,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'timestamp': timestamp.millisecondsSinceEpoch,
+      'method': method,
+      'url': url,
+      'request_headers': requestHeaders,
+      'request_body': requestBody,
+      'used_proxy': usedProxy,
+      'ssl_verify': sslVerify,
+      'library': library,
+      'status_code': statusCode,
+      'response_headers': responseHeaders,
+      'response_body_preview': responseBodyPreview,
+      'response_body_size': responseBodyBytes ?? capturedResponseBodyBytes,
+      'response_body_truncated': responseBodyTruncated,
+      'error_type': errorType,
+      'error_message': errorMessage,
+      'duration_ms': durationMs,
+    };
   }
 
   /// Export as formatted text for logging/export.
@@ -151,7 +196,11 @@ class HttpRecord {
       responseHeaders!.forEach((k, v) => buf.writeln('  $k: $v'));
     }
     if (responseBodyPreview != null && responseBodyPreview!.isNotEmpty) {
-      buf.writeln('--- Response Body Preview ---');
+      final label = responseBodyTruncated ? '--- Response Body Preview ---' : '--- Response Body ---';
+      buf.writeln(label);
+      if (responseBodyTruncated && responseBodyBytes != null) {
+        buf.writeln('  [captured $capturedResponseBodyBytes / $responseBodyBytes bytes]');
+      }
       buf.writeln('  $responseBodyPreview');
     }
     if (errorMessage != null) {
@@ -164,15 +213,41 @@ class HttpRecord {
 
 /// In-memory store for captured HTTP records.
 class HttpInspectorStore extends ChangeNotifier {
-  HttpInspectorStore._();
+  HttpInspectorStore._({
+    Future<Directory> Function()? supportDirectoryProvider,
+    Duration persistDebounce = _defaultPersistDebounce,
+  })  : _supportDirectoryProvider =
+            supportDirectoryProvider ?? getApplicationSupportDirectory,
+        _persistDebounce = persistDebounce;
+
   static final HttpInspectorStore instance = HttpInspectorStore._();
 
   static const int maxRecords = 5000;
+  static const int maxCapturedBodyBytes = 24 * 1024 * 1024;
+  static const Duration _defaultPersistDebounce = Duration(milliseconds: 250);
+  static const String _storageFileName = 'http_inspector_records.json';
+
+  @visibleForTesting
+  factory HttpInspectorStore.test({
+    required Future<Directory> Function() supportDirectoryProvider,
+    Duration persistDebounce = _defaultPersistDebounce,
+  }) {
+    return HttpInspectorStore._(
+      supportDirectoryProvider: supportDirectoryProvider,
+      persistDebounce: persistDebounce,
+    );
+  }
 
   final List<HttpRecord> _records = [];
+  final Future<Directory> Function() _supportDirectoryProvider;
+  final Duration _persistDebounce;
   String _filterDomain = '';
   String _filterMethod = '';
   int? _filterStatus; // null = all, 0 = errors, 200 = 2xx, etc.
+  Timer? _persistTimer;
+  Future<void>? _loadFuture;
+  Future<void> _persistChain = Future<void>.value();
+  bool _loaded = false;
 
   List<HttpRecord> get records => List.unmodifiable(_records);
   int get count => _records.length;
@@ -180,6 +255,7 @@ class HttpInspectorStore extends ChangeNotifier {
   String get filterDomain => _filterDomain;
   String get filterMethod => _filterMethod;
   int? get filterStatus => _filterStatus;
+  bool get isLoaded => _loaded;
 
   /// Get filtered records (newest first).
   List<HttpRecord> get filteredRecords {
@@ -244,12 +320,13 @@ class HttpInspectorStore extends ChangeNotifier {
   /// Add a new record from Python hook JSON.
   void addFromJson(Map<String, dynamic> json) {
     try {
+      if (json['note'] != null) return;
       final record = HttpRecord.fromJson(json);
+      if (record.url.isEmpty) return;
       _records.add(record);
-      if (_records.length > maxRecords) {
-        _records.removeRange(0, _records.length - maxRecords);
-      }
+      _applyLimits();
       notifyListeners();
+      _schedulePersist();
     } catch (e) {
       debugPrint('HttpInspectorStore.addFromJson error: $e');
     }
@@ -259,6 +336,17 @@ class HttpInspectorStore extends ChangeNotifier {
   void clear() {
     _records.clear();
     notifyListeners();
+    _schedulePersist();
+  }
+
+  Future<void> ensureLoaded() {
+    return _loadFuture ??= _loadFromDisk();
+  }
+
+  Future<void> flush() async {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    await _persistNow();
   }
 
   /// Export all records as text.
@@ -331,7 +419,7 @@ class HttpInspectorStore extends ChangeNotifier {
 
     // Response body
     Map<String, dynamic> responseContent = {
-      'size': r.responseBodyPreview?.length ?? 0,
+      'size': r.responseBodyBytes ?? r.responseBodyPreview?.length ?? 0,
       'mimeType': _extractMimeType(r.responseHeaders),
     };
     if (r.responseBodyPreview != null && r.responseBodyPreview!.isNotEmpty) {
@@ -361,7 +449,7 @@ class HttpInspectorStore extends ChangeNotifier {
         'content': responseContent,
         'redirectURL': '',
         'headersSize': -1,
-        'bodySize': r.responseBodyPreview?.length ?? -1,
+        'bodySize': r.responseBodyBytes ?? r.responseBodyPreview?.length ?? -1,
       },
       'cache': <String, dynamic>{},
       'timings': {
@@ -398,5 +486,94 @@ class HttpInspectorStore extends ChangeNotifier {
     } catch (_) {
       return [];
     }
+  }
+
+  static List<HttpRecord> trimRecords(
+    List<HttpRecord> records, {
+    int maxRecords = HttpInspectorStore.maxRecords,
+    int maxCapturedBodyBytes = HttpInspectorStore.maxCapturedBodyBytes,
+  }) {
+    final trimmed = List<HttpRecord>.from(records);
+
+    if (trimmed.length > maxRecords) {
+      trimmed.removeRange(0, trimmed.length - maxRecords);
+    }
+
+    var totalBytes = trimmed.fold<int>(0, (sum, record) => sum + record.storedBodyBytes);
+    while (totalBytes > maxCapturedBodyBytes && trimmed.length > 1) {
+      totalBytes -= trimmed.first.storedBodyBytes;
+      trimmed.removeAt(0);
+    }
+    return trimmed;
+  }
+
+  void _applyLimits() {
+    final trimmed = trimRecords(_records);
+    if (trimmed.length == _records.length) return;
+    _records
+      ..clear()
+      ..addAll(trimmed);
+  }
+
+  void _schedulePersist() {
+    if (_persistTimer != null) return;
+    _persistTimer = Timer(_persistDebounce, () {
+      _persistTimer = null;
+      unawaited(_persistNow());
+    });
+  }
+
+  Future<void> _loadFromDisk() async {
+    try {
+      final file = await _storageFile();
+      if (await file.exists()) {
+        final text = await file.readAsString();
+        final decoded = jsonDecode(text);
+        if (decoded is List) {
+          final loaded = decoded
+              .whereType<Map>()
+              .map((e) => HttpRecord.fromJson(Map<String, dynamic>.from(e)))
+              .where((record) => record.url.isNotEmpty)
+              .toList();
+          _records
+            ..clear()
+            ..addAll(trimRecords(loaded));
+        }
+      }
+    } catch (e) {
+      debugPrint('HttpInspectorStore.load error: $e');
+    } finally {
+      _loaded = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _persistNow() async {
+    final snapshot = _records.map((record) => record.toJson()).toList(growable: false);
+    _persistChain = _persistChain.then((_) async {
+      try {
+        final file = await _storageFile();
+        await file.parent.create(recursive: true);
+        final payload = jsonEncode(snapshot);
+        await file.writeAsString(payload, flush: true);
+      } catch (e) {
+        debugPrint('HttpInspectorStore.persist error: $e');
+      }
+    }, onError: (_) async {
+      try {
+        final file = await _storageFile();
+        await file.parent.create(recursive: true);
+        final payload = jsonEncode(snapshot);
+        await file.writeAsString(payload, flush: true);
+      } catch (e) {
+        debugPrint('HttpInspectorStore.persist error: $e');
+      }
+    });
+    await _persistChain;
+  }
+
+  Future<File> _storageFile() async {
+    final dir = await _supportDirectoryProvider();
+    return File('${dir.path}${Platform.pathSeparator}$_storageFileName');
   }
 }

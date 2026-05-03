@@ -179,6 +179,7 @@ class ExecutionProvider extends ChangeNotifier {
           _waitingForInput = false;
           _sceneActive = false;
           _currentSceneFrame = null;
+          unawaited(HttpInspectorStore.instance.flush());
         }
         _scheduleNotify();
       }, onError: (e) {

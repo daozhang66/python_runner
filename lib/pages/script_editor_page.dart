@@ -1,3 +1,5 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
@@ -25,9 +27,10 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   bool _modified = false;
   bool _readOnly = true;
   double _fontSize = 14.0;
+  String _savedText = '';
 
-  static const _minFontSize = 10.0;
-  static const _maxFontSize = 28.0;
+  static const _minFontSize = 6.0;
+  static const _maxFontSize = 36.0;
 
   String get _displayName => widget.scriptName.replaceAll('.py', '');
 
@@ -114,29 +117,92 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   Future<void> _loadContent() async {
     final prefs = await SharedPreferences.getInstance();
     final content = await context.read<ScriptProvider>().readScript(widget.scriptName);
+    _savedText = content;
     _controller.text = content;
     _controller.addListener(_onTextChanged);
     setState(() {
       _fontSize = prefs.getDouble('editor_font_size_${widget.scriptName}') ?? 14.0;
+      _modified = false;
       _loading = false;
     });
   }
 
-  Future<void> _changeFontSize(double delta) async {
-    final newSize = (_fontSize + delta).clamp(_minFontSize, _maxFontSize);
+  Future<void> _persistFontSize() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('editor_font_size_${widget.scriptName}', newSize);
-    setState(() => _fontSize = newSize);
+    await prefs.setDouble('editor_font_size_${widget.scriptName}', _fontSize);
+  }
+
+  void _showFontSizeSlider() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    double tempSize = _fontSize;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('A', style: TextStyle(fontSize: 12)),
+                  Expanded(
+                    child: Slider(
+                      value: tempSize,
+                      min: _minFontSize,
+                      max: _maxFontSize,
+                      divisions: (_maxFontSize - _minFontSize).round(),
+                      onChanged: (v) {
+                        setDialogState(() => tempSize = v);
+                        setState(() => _fontSize = v);
+                      },
+                    ),
+                  ),
+                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() => _fontSize = 14.0);
+                setDialogState(() => tempSize = 14.0);
+              },
+              child: const Text('重置'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                unawaited(_persistFontSize());
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onTextChanged() {
-    if (!_modified) setState(() => _modified = true);
+    final currentModified = _controller.text != _savedText;
+    if (currentModified == _modified) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final latestModified = _controller.text != _savedText;
+      if (latestModified != _modified) {
+        setState(() => _modified = latestModified);
+      }
+    });
   }
 
   Future<void> _save() async {
     final success = await context.read<ScriptProvider>().saveScript(
         widget.scriptName, _controller.text);
     if (success && mounted) {
+      _savedText = _controller.text;
       setState(() => _modified = false);
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已保存'), duration: Duration(seconds: 1)));
@@ -146,7 +212,10 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   Future<bool> _saveSilently() async {
     final success = await context.read<ScriptProvider>().saveScript(
         widget.scriptName, _controller.text);
-    if (success && mounted) setState(() => _modified = false);
+    if (success && mounted) {
+      _savedText = _controller.text;
+      setState(() => _modified = false);
+    }
     return success;
   }
 
@@ -219,43 +288,10 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
             onPressed: () => _findController?.findMode(),
             tooltip: '搜索',
           ),
-          PopupMenuButton<String>(
+          IconButton(
             icon: const Icon(Icons.format_size, size: 20),
+            onPressed: _showFontSizeSlider,
             tooltip: '字体大小',
-            position: PopupMenuPosition.under,
-            itemBuilder: (_) => [
-              PopupMenuItem<String>(
-                enabled: false,
-                padding: EdgeInsets.zero,
-                child: StatefulBuilder(
-                  builder: (ctx, setLocal) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.text_decrease),
-                        onPressed: _fontSize > _minFontSize
-                            ? () {
-                                _changeFontSize(-2);
-                                setLocal(() {});
-                              }
-                            : null,
-                      ),
-                      Text('${_fontSize.toInt()}px',
-                          style: const TextStyle(fontSize: 14)),
-                      IconButton(
-                        icon: const Icon(Icons.text_increase),
-                        onPressed: _fontSize < _maxFontSize
-                            ? () {
-                                _changeFontSize(2);
-                                setLocal(() {});
-                              }
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ),
           if (_modified)
             IconButton(
@@ -379,7 +415,7 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     }
     final value = controller.value!;
     final result = value.result == null
-        ? '无结果'
+        ? 'No results'
         : '${value.result!.index + 1}/${value.result!.matches.length}';
     return Container(
       margin: const EdgeInsets.only(right: 10),
@@ -398,7 +434,7 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
                 controller: controller.findInputController,
                 style: const TextStyle(fontSize: 12),
                 decoration: const InputDecoration(
-                  hintText: '搜索...',
+                  hintText: 'Search...',
                   filled: true,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -414,14 +450,14 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
               icon: const Icon(Icons.arrow_upward, size: 14),
               constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
               splashRadius: 14,
-              tooltip: '上一个',
+              tooltip: 'Previous',
             ),
             IconButton(
               onPressed: value.result == null ? null : () => controller.nextMatch(),
               icon: const Icon(Icons.arrow_downward, size: 14),
               constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
               splashRadius: 14,
-              tooltip: '下一个',
+              tooltip: 'Next',
             ),
             IconButton(
               onPressed: () => controller.close(),
@@ -436,3 +472,5 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+
