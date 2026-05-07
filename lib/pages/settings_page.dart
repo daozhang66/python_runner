@@ -911,7 +911,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 secondary: const Icon(Icons.update_outlined),
                 title: const Text('启动时自动检查更新'),
                 subtitle: const Text(
-                  '每 12 小时至多自动检查一次',
+                  '每次启动应用时自动检查更新',
                   style: TextStyle(fontSize: 12),
                 ),
                 value: _autoCheckUpdates,
