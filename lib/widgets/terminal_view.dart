@@ -509,9 +509,11 @@ class TerminalViewState extends State<TerminalView> {
                                 ? MediaQuery.sizeOf(context).width - 20
                                 : MediaQuery.sizeOf(context).width,
                           ),
-                          child: Text.rich(
-                            TextSpan(children: _buildAllSpans(colors)),
-                            softWrap: true,
+                          child: SelectionArea(
+                            child: Text.rich(
+                              TextSpan(children: _buildAllSpans(colors)),
+                              softWrap: true,
+                            ),
                           ),
                         ),
                       ),
