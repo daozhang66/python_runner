@@ -99,16 +99,16 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   const Icon(Icons.filter_alt, size: 14),
                   const SizedBox(width: 6),
                   if (_store.filterDomain.isNotEmpty)
-                    _FilterChip(label: '域名: \${_store.filterDomain}',
+                    _FilterChip(label: '域名: ${_store.filterDomain}',
                         onRemove: () => _store.setFilterDomain('')),
                   if (_store.filterMethod.isNotEmpty)
-                    _FilterChip(label: '方法: \${_store.filterMethod}',
+                    _FilterChip(label: '方法: ${_store.filterMethod}',
                         onRemove: () => _store.setFilterMethod('')),
                   if (_store.filterStatus != null)
                     _FilterChip(
                         label: _store.filterStatus == 0
                             ? '状态: 错误'
-                            : '状态: \${_store.filterStatus}xx',
+                            : '状态: ${_store.filterStatus}xx',
                         onRemove: () => _store.setFilterStatus(null)),
                   const Spacer(),
                   TextButton(
@@ -182,7 +182,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   if (stats['avgMs'] != null)
                     _StatBadge(label: '${stats['avgMs']}ms', icon: Icons.speed, color: colors.onSurfaceVariant),
                   const Spacer(),
-                  Text('全部 \${_store.count}',
+                  Text('全部 ${_store.count}',
                       style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
                 ],
               ),
@@ -267,7 +267,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             TextField(
               controller: domainCtrl,
               decoration: const InputDecoration(
-                labelText: 'Domain / URL keyword',
+                labelText: '域名 / URL 关键字',
                 hintText: 'example.com',
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -351,7 +351,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('已复制 \${_store.filteredRecords.length} 条请求记录到剪贴板'),
+        content: Text('已复制 ${_store.filteredRecords.length} 条请求记录到剪贴板'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -398,7 +398,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('HAR 文件已导出: \$path'),
+            content: Text('HAR 文件已导出: ${path}'),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -407,7 +407,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('HAR 导出失败: \$e'),
+            content: Text('HAR 导出失败: ${e}'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -711,7 +711,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
                         Expanded(
                           child: Text(
                             record.responseBodyBytes != null
-                                ? 'Response body is large. Showing ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}.'
+                                ? '响应体较大，显示 ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}。'
                                 : '响应体较大，当前仅显示已捕获的内容。',
                             style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
                           ),
@@ -967,7 +967,7 @@ class _BodyFullViewPage extends StatefulWidget {
 class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   dynamic _parsedJson;
   String _formatted = '';
-  double _fontSize = 12.0;
+  double _fontSize = 10.0;
   final _scrollController = ScrollController();
   bool _showFab = false;
   bool _searchVisible = false;
@@ -1175,13 +1175,13 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       final path = await bridge.exportLog(_formatted, fileName: 'response_$now.json');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已导出: \$path'), duration: const Duration(seconds: 3)),
+          SnackBar(content: Text('已导出: ${path}'), duration: const Duration(seconds: 3)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: \$e'), duration: const Duration(seconds: 2)),
+          SnackBar(content: Text('导出失败: ${e}'), duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -1388,7 +1388,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   const SizedBox(width: 8),
                   Text(
                     _isTruncated
-                        ? '已捕获 \${_formatByteSize(utf8.encode(widget.body).length)} / \${_formatByteSize(widget.bodyBytes!)}'
+                        ? '已捕获 ${_formatByteSize(utf8.encode(widget.body).length)} / ${_formatByteSize(widget.bodyBytes!)}'
                         : _formatByteSize(widget.bodyBytes!),
                     style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
                   ),

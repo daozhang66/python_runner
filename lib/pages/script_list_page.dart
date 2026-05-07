@@ -345,6 +345,16 @@ class _ScriptListPageState extends State<ScriptListPage> {
                   title: Text('脚本 (${allScripts.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                   actions: [
                     IconButton(
+                      icon: const Icon(Icons.file_open, size: 20),
+                      onPressed: _importScript,
+                      tooltip: '导入脚本',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 20),
+                      onPressed: _createScript,
+                      tooltip: '新建脚本',
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.search),
                       onPressed: () => setState(() => _searchVisible = true),
                       tooltip: '搜索',
@@ -372,7 +382,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
                         const SizedBox(height: 16),
                         Text(_searchQuery.isNotEmpty ? '无匹配结果' : '还没有脚本'),
                         if (_searchQuery.isEmpty) const SizedBox(height: 8),
-                        if (_searchQuery.isEmpty) const Text('点击右下角按钮创建', style: TextStyle(fontSize: 12)),
+                        if (_searchQuery.isEmpty) const Text('点击上方 + 按钮创建', style: TextStyle(fontSize: 12)),
                       ]))
                     : RefreshIndicator(
                         onRefresh: () => provider.loadScripts(),
@@ -381,16 +391,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
           ),
         ],
       ),
-      floatingActionButton: _multiSelectMode ? null : Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'import', onPressed: _importScript, child: const Icon(Icons.file_open)),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'create', onPressed: _createScript, child: const Icon(Icons.add)),
-        ],
-      ),
+      floatingActionButton: null,
     );
   }
 
