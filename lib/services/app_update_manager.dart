@@ -11,9 +11,7 @@ import 'update_service.dart';
 
 class AppUpdateManager {
   static const String _autoCheckEnabledKey = 'app_update_auto_check_enabled';
-  static const String _lastCheckAtKey = 'app_update_last_check_at';
   static const String _dismissedVersionKey = 'app_update_dismissed_version';
-  static const Duration _autoCheckInterval = Duration(hours: 12);
 
   final NativeBridge _bridge;
   final UpdateService _updateService;
@@ -38,19 +36,9 @@ class AppUpdateManager {
     BuildContext context, {
     required bool manual,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
     if (!manual) {
       if (!await isAutoCheckEnabled()) return;
-      final lastCheckAt = DateTime.tryParse(
-        prefs.getString(_lastCheckAtKey) ?? '',
-      );
-      if (lastCheckAt != null &&
-          DateTime.now().difference(lastCheckAt) < _autoCheckInterval) {
-        return;
-      }
     }
-
-    await prefs.setString(_lastCheckAtKey, DateTime.now().toIso8601String());
 
     try {
       final appInfo = await _bridge.getAppInfo();
@@ -74,6 +62,7 @@ class AppUpdateManager {
       }
 
       if (!manual) {
+        final prefs = await SharedPreferences.getInstance();
         final dismissedVersion = prefs.getString(_dismissedVersionKey) ?? '';
         if (dismissedVersion == updateInfo.latestVersion) {
           return;
