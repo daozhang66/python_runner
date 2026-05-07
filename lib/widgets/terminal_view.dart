@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../utils/ansi_parser.dart';
 
-/// Unified terminal widget 鈥?all log lines rendered as ONE SelectableText
-/// so the user can freely drag-select across multiple lines.
+/// Unified terminal widget —all log lines rendered as ONE SelectableText
+/// Toolbar provides copy-all; scrolling works on the whole output area.
 /// Long-press any line for a context menu with range-copy options.
 class TerminalView extends StatefulWidget {
   final List<LogEntry> logs;
@@ -173,7 +173,7 @@ class TerminalViewState extends State<TerminalView> {
     if (mounted && _stdinFocusNode.canRequestFocus) _stdinFocusNode.requestFocus();
   }
 
-  // 鈹€鈹€ Colors 鈹€鈹€
+  // --- Colors ---
 
   Color _logColor(LogType type, ColorScheme colors) {
     switch (type) {
@@ -206,7 +206,7 @@ class TerminalViewState extends State<TerminalView> {
     return result;
   }
 
-  // 鈹€鈹€ Build the single SelectableText with all lines 鈹€鈹€
+  // --- Build the single SelectableText with all lines ---
 
   /// Build one big TextSpan tree: each log line is a group of spans
   /// followed by a `\n`. This lets the user drag-select across lines.
@@ -279,7 +279,7 @@ class TerminalViewState extends State<TerminalView> {
     );
   }
 
-  // 鈹€鈹€ Long-press menu 鈹€鈹€
+  // --- Long-press menu ---
 
   void _showLineMenu(int index) {
     final log = widget.logs[index];
@@ -355,7 +355,7 @@ class TerminalViewState extends State<TerminalView> {
     return (s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'));
   }
 
-  // 鈹€鈹€ Build 鈹€鈹€
+  // --- Build ---
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +472,7 @@ class TerminalViewState extends State<TerminalView> {
             ),
           ),
 
-        // Terminal output 鈥?single SelectableText for multi-line drag select
+        // Terminal output —single SelectableText for multi-line drag select
         Expanded(
           child: Container(
               color: bgColor,
@@ -503,18 +503,15 @@ class TerminalViewState extends State<TerminalView> {
                       child: SingleChildScrollView(
                         controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minWidth: MediaQuery.sizeOf(context).width > 20
-                                  ? MediaQuery.sizeOf(context).width - 20
-                                  : MediaQuery.sizeOf(context).width,
-                            ),
-                            child: SelectableText.rich(
-                              TextSpan(children: _buildAllSpans(colors)),
-                              onSelectionChanged: (selection, cause) {},
-                            ),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: MediaQuery.sizeOf(context).width > 20
+                                ? MediaQuery.sizeOf(context).width - 20
+                                : MediaQuery.sizeOf(context).width,
+                          ),
+                          child: Text.rich(
+                            TextSpan(children: _buildAllSpans(colors)),
+                            softWrap: true,
                           ),
                         ),
                       ),
@@ -591,7 +588,7 @@ class TerminalViewState extends State<TerminalView> {
                         ),
                         cursorColor: colors.primary,
                         decoration: InputDecoration(
-                          hintText: widget.waitingForInput ? 'Enter input...' : 'Waiting for script input request...',
+                          hintText: widget.waitingForInput ? '输入内容...' : '等待脚本请求输入...',
                           hintStyle: TextStyle(
                             color: isDark ? Colors.white30 : colors.onSurfaceVariant.withValues(alpha: 0.4),
                             fontSize: 13,

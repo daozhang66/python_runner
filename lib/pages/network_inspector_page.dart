@@ -43,7 +43,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     return Scaffold(
       body: Column(
         children: [
-          // 鈹€鈹€ Search bar 鈹€鈹€
+          // --- Search bar ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: colors.surfaceContainerHighest,
@@ -87,7 +87,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               ],
             ),
           ),
-          // 鈹€鈹€ Active filters 鈹€鈹€
+          // --- Active filters ---
           if (_store.filterDomain.isNotEmpty ||
               _store.filterMethod.isNotEmpty ||
               _store.filterStatus != null)
@@ -122,7 +122,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ],
               ),
             ),
-          // 鈹€鈹€ Domain tag bar 鈹€鈹€
+          // --- Domain tag bar ---
           if (_store.count > 0)
             Builder(builder: (context) {
               final domains = _store.domainStats;
@@ -166,7 +166,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ),
               );
             }),
-          // 鈹€鈹€ Stats bar 鈹€鈹€
+          // --- Stats bar ---
           if (_store.count > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -188,7 +188,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               ),
             ),
 
-          // 鈹€鈹€ Request list 鈹€鈹€
+          // --- Request list ---
           Expanded(
             child: records.isEmpty
                 ? Center(
@@ -437,7 +437,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   }
 }
 
-// 鈹€鈹€ Record tile 鈹€鈹€
+// --- Record tile ---
 class _HttpRecordTile extends StatelessWidget {
   final HttpRecord record;
   final VoidCallback onTap;
@@ -547,7 +547,7 @@ class _HttpRecordTile extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Filter chip 鈹€鈹€
+// --- Filter chip ---
 class _FilterChip extends StatelessWidget {
   final String label;
   final VoidCallback onRemove;
@@ -571,7 +571,7 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Stat badge 鈹€鈹€
+// --- Stat badge ---
 class _StatBadge extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -591,7 +591,7 @@ class _StatBadge extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Detail page 鈹€鈹€
+// --- Detail page ---
 class _HttpRecordDetailPage extends StatelessWidget {
   final HttpRecord record;
   const _HttpRecordDetailPage({required this.record});
@@ -621,7 +621,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          // 鈹€鈹€ Overview 鈹€鈹€
+          // --- Overview ---
           _SectionCard(
             title: '概览',
             icon: Icons.info_outline,
@@ -636,7 +636,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          // 鈹€鈹€ Request Headers 鈹€鈹€
+          // --- Request Headers ---
           _SectionCard(
             title: '请求头 (${record.requestHeaders.length})',
             icon: Icons.arrow_upward,
@@ -653,7 +653,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          // 鈹€鈹€ Response 鈹€鈹€
+          // --- Response ---
           _SectionCard(
             title: '响应',
             icon: Icons.arrow_downward,
@@ -873,7 +873,7 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Media info card 鈹€鈹€
+// --- Media info card ---
 class _MediaInfoCard extends StatelessWidget {
   final Map<String, dynamic> meta;
   const _MediaInfoCard({required this.meta});
@@ -885,7 +885,7 @@ class _MediaInfoCard extends StatelessWidget {
   }
 
   String _mediaLabel(String type) {
-    if (type.startsWith('audio/')) return '闊抽';
+      if (type.startsWith('audio/')) return '音频';
     if (type.startsWith('video/')) return '视频';
     return '媒体';
   }
@@ -947,7 +947,7 @@ class _MediaMetaItem extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Full body view page with JSON tree viewer 鈹€鈹€
+// --- Full body view page with JSON tree viewer ---
 class _BodyFullViewPage extends StatefulWidget {
   final String body;
   final int? bodyBytes;
@@ -1043,7 +1043,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
 
     var s = input.substring(0, idx).trimRight();
 
-    // Find the last comma outside of strings 鈥?cut back to a valid boundary
+    // Find the last comma outside of strings —cut back to a valid boundary
     int lastComma = -1;
     bool inStr = false, esc = false;
     for (int i = 0; i < s.length; i++) {
@@ -1327,7 +1327,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       ),
       body: Column(
         children: [
-          // 鈹€鈹€ Search bar 鈹€鈹€
+          // --- Search bar ---
           if (_searchVisible)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1371,7 +1371,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 ],
               ),
             ),
-          // 鈹€鈹€ Info bar 鈹€鈹€
+          // --- Info bar ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
             color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
@@ -1398,7 +1398,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
               ],
             ),
           ),
-          // 鈹€鈹€ Content: single SelectableText for performance 鈹€鈹€
+          // --- Content: single SelectableText for performance ---
           Expanded(
             child: Stack(
                 children: [
@@ -1461,7 +1461,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   }
 }
 
-// 鈹€鈹€ Full-screen JSON tree page 鈹€鈹€
+// --- Full-screen JSON tree page ---
 class _JsonTreePage extends StatelessWidget {
   final dynamic data;
   const _JsonTreePage({required this.data});
@@ -1651,7 +1651,7 @@ class _JsonValue extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Helpers 鈹€鈹€
+// --- Helpers ---
 
 String _primitiveText(dynamic value) {
   if (value == null) return 'null';
@@ -1669,7 +1669,7 @@ Color _primitiveColor(dynamic value) {
   return Colors.black;
 }
 
-// 鈹€鈹€ Image preview widget 鈹€鈹€
+// --- Image preview widget ---
 class _ImagePreview extends StatelessWidget {
   final String dataUri;
   const _ImagePreview({required this.dataUri});
@@ -1715,7 +1715,7 @@ class _ImagePreview extends StatelessWidget {
   }
 }
 
-// 鈹€鈹€ Image full view page (pinch-to-zoom) 鈹€鈹€
+// --- Image full view page (pinch-to-zoom) ---
 class _ImageFullViewPage extends StatelessWidget {
   final String dataUri;
   const _ImageFullViewPage({required this.dataUri});
