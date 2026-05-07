@@ -26,7 +26,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   bool _loading = true;
   bool _modified = false;
   bool _readOnly = true;
-  double _fontSize = 14.0;
+  double _fontSize = 10.0;
   String _savedText = '';
 
   static const _minFontSize = 6.0;
@@ -121,7 +121,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     _controller.text = content;
     _controller.addListener(_onTextChanged);
     setState(() {
-      _fontSize = prefs.getDouble('editor_font_size_${widget.scriptName}') ?? 14.0;
+      _fontSize = prefs.getDouble('editor_font_size_${widget.scriptName}') ?? 10.0;
       _modified = false;
       _loading = false;
     });
@@ -168,8 +168,8 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           actions: [
             TextButton(
               onPressed: () {
-                setState(() => _fontSize = 14.0);
-                setDialogState(() => tempSize = 14.0);
+                setState(() => _fontSize = 10.0);
+                setDialogState(() => tempSize = 10.0);
               },
               child: const Text('重置'),
             ),

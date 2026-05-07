@@ -40,7 +40,7 @@ class TerminalViewState extends State<TerminalView> {
   final _stdinController = TextEditingController();
   final _stdinFocusNode = FocusNode();
   bool _autoScroll = true;
-  double _fontSize = 13.0;
+  double _fontSize = 10.0;
   bool _showLineNumbers = false;
   bool _searchVisible = false;
   String _searchQuery = '';
@@ -110,8 +110,8 @@ class TerminalViewState extends State<TerminalView> {
           actions: [
             TextButton(
               onPressed: () {
-                setState(() => _fontSize = 13.0);
-                setDialogState(() => tempSize = 13.0);
+                setState(() => _fontSize = 10.0);
+                setDialogState(() => tempSize = 10.0);
               },
               child: const Text('重置'),
             ),
