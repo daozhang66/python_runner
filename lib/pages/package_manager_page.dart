@@ -5,40 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/package_provider.dart';
 import '../widgets/confirm_dialog.dart';
 
-/// Packages bundled at build time — cannot be uninstalled at runtime.
-const _builtinPackages = {
-  'pip', 'setuptools', 'wheel',
-  // 网络
-  'aiohttp', 'requests', 'httpx', 'beautifulsoup4', 'pyjwt',
-  'certifi', 'urllib3', 'chardet',
-  // 数据处理
-  'ujson', 'marshmallow', 'python-dateutil', 'pytz',
-  // 加密与底层
-  'pycryptodome', 'cffi', 'six', 'cryptography',
-  'pyDes', 'rsa', 'pyasn1',
-  // 数据库
-  'tinydb', 'peewee', 'pymysql', 'redis',
-  // 实用工具
-  'loguru', 'tqdm', 'openpyxl', 'python-docx', 'et-xmlfile',
-  // YAML
-  'PyYAML', 'ruamel.yaml', 'ruamel.yaml.clib',
-  // 科学计算
-  'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',
-  'scipy', 'matplotlib', 'scikit-learn', 'opencv-python',
-  // 移动端与自动化
-  'plyer', 'schedule',
-  // 依赖包
-  'aiosignal', 'async-timeout', 'attrs', 'multidict', 'yarl', 'frozenlist',
-  'idna', 'charset-normalizer', 'soupsieve', 'typing-extensions', 'packaging',
-  'anyio', 'sniffio', 'exceptiongroup', 'httpcore', 'h11',
-  'pycparser', 'contourpy', 'cycler', 'fonttools', 'kiwisolver', 'pyparsing',
-  'joblib', 'threadpoolctl',
-  'chaquopy-libffi', 'chaquopy-openblas', 'chaquopy-libgfortran',
-  'chaquopy-libcxx', 'chaquopy-freetype', 'chaquopy-libjpeg',
-  'chaquopy-libpng', 'chaquopy-libxml2', 'chaquopy-libxslt',
-  'chaquopy-libomp',
-};
-
 class PackageManagerPage extends StatefulWidget {
   const PackageManagerPage({super.key});
 
@@ -103,13 +69,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     return null;
   }
 
-  static final _builtinNormalized = _builtinPackages
-      .map((n) => n.toLowerCase().replaceAll('-', '_'))
-      .toSet();
-
-  bool _isBuiltin(String name) =>
-      _builtinNormalized.contains(name.toLowerCase().replaceAll('-', '_'));
-
   bool _matchesSearch(String name) =>
       _searchQuery.isEmpty || name.toLowerCase().contains(_searchQuery);
 
@@ -120,10 +79,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     final installResult = _getInstallResult(provider.installLog);
 
     final userPackages = packages
-        .where((p) => !_isBuiltin(p.name) && _matchesSearch(p.name))
+        .where((p) => p.isUserPackage && _matchesSearch(p.name))
         .toList();
     final builtinPackagesList = packages
-        .where((p) => _isBuiltin(p.name) && _matchesSearch(p.name))
+        .where((p) => !p.isUserPackage && _matchesSearch(p.name))
         .toList();
 
     return Scaffold(

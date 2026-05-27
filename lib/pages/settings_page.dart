@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import '../services/native_bridge.dart';
 import '../services/app_logger.dart';
 import '../services/app_update_manager.dart';
@@ -43,6 +44,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _followRedirects = true;
   bool _forceProxy = false;
   bool _autoCheckUpdates = true;
+  bool _floatingBallEnabled = false;
   final _bridge = NativeBridge();
   final _appUpdateManager = AppUpdateManager();
   bool _checkingUpdate = false;
@@ -80,6 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _followRedirects = overrideCfg.followRedirects;
       _forceProxy = overrideCfg.forceProxy;
       _autoCheckUpdates = autoCheckUpdates;
+      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
     });
   }
 
@@ -201,7 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // ── System Log Management ──
 
   Future<void> _viewSystemLogs() async {
-    final logContent = AppLogger.instance.readRecentLogs(count: 100);
+    final logContent = await AppLogger.instance.exportAll();
     if (!mounted) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => _SystemLogViewPage(logContent: logContent)));
   }
@@ -209,10 +212,18 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _exportSystemLogs() async {
     try {
       final content = await AppLogger.instance.exportAll();
-      final path = await _bridge.exportLog(content);
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final prefs = await SharedPreferences.getInstance();
+      final workingDir = (prefs.getString('working_dir') ?? '').trim();
+      final logExportDir = workingDir.isEmpty ? null : workingDir;
+      final path = await _bridge.exportLog(
+        content,
+        fileName: 'python_runner_logs_$timestamp.txt',
+        destDir: logExportDir,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('系统日志已导出到: $path'), duration: const Duration(seconds: 3)),
+          SnackBar(content: Text('完整日志已导出到: $path'), duration: const Duration(seconds: 3)),
         );
       }
     } catch (e) {
@@ -382,6 +393,56 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() => _graphicsEnabled = v);
                 },
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.bubble_chart),
+                title: const Text('悬浮球'),
+                subtitle: const Text('脚本运行时显示悬浮球，点击返回应用，长按查看详情', style: TextStyle(fontSize: 12)),
+                value: _floatingBallEnabled,
+                onChanged: (v) async {
+                  if (v) {
+                    try {
+                      final hasPermission = await _bridge.checkOverlayPermission();
+                      if (!hasPermission) {
+                        if (!mounted) return;
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('需要悬浮窗权限'),
+                            content: const Text(
+                              '悬浮球需要「显示在其他应用上层」权限。\n\n'
+                              '点击确认后，请在系统设置中开启此权限。',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('取消'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('去设置'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await _bridge.requestOverlayPermission();
+                        } else {
+                          return;
+                        }
+                      }
+                    } catch (_) {}
+                  }
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('floating_ball_enabled', v);
+                  setState(() => _floatingBallEnabled = v);
+                  if (v) {
+                    // Show idle ball immediately
+                    try { await _bridge.showFloatingBall(''); } catch (_) {}
+                  } else {
+                    try { await _bridge.hideFloatingBall(); } catch (_) {}
+                  }
+                },
+              ),
             ],
           ),
 
@@ -411,7 +472,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             enableSuggestions: false,
                             autocorrect: false,
                             decoration: const InputDecoration(
-                              hintText: 'https://pypi.tuna.tsinghua.edu.cn/simple',
+                              hintText: 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple',
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             ),
@@ -863,15 +924,15 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.visibility_outlined),
-                title: const Text('查看最近日志'),
-                subtitle: const Text('查看内存中最近的系统日志', style: TextStyle(fontSize: 12)),
+                title: const Text('查看完整日志'),
+                subtitle: const Text('查看完整诊断日志、崩溃日志和脚本错误', style: TextStyle(fontSize: 12)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _viewSystemLogs,
               ),
               ListTile(
                 leading: const Icon(Icons.file_download_outlined),
-                title: const Text('导出系统日志'),
-                subtitle: const Text('导出完整系统日志和崩溃日志', style: TextStyle(fontSize: 12)),
+                title: const Text('导出完整日志'),
+                subtitle: const Text('导出完整诊断日志到工作目录，未设置则使用默认目录', style: TextStyle(fontSize: 12)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _exportSystemLogs,
               ),
@@ -981,12 +1042,58 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _SystemLogViewPage extends StatelessWidget {
+class _SystemLogViewPage extends StatefulWidget {
   final String logContent;
   const _SystemLogViewPage({required this.logContent});
 
   @override
+  State<_SystemLogViewPage> createState() => _SystemLogViewPageState();
+}
+
+class _SystemLogViewPageState extends State<_SystemLogViewPage> {
+  String _query = '';
+  String _levelFilter = 'ALL';
+  String _sectionFilter = '全部';
+
+  static const List<String> _sectionFilters = [
+    '全部',
+    '诊断信息',
+    '系统日志',
+    'Dart 崩溃日志',
+    '脚本错误日志',
+    '原生脚本错误日志',
+    '原生崩溃日志',
+    'Diagnostic Archive',
+    'Current Diagnostics',
+    'Local Log Files',
+    'Archived Diagnostics',
+  ];
+
+  String get _filteredLogContent {
+    final query = _query.trim().toLowerCase();
+    final sectionContent = _sectionLogContent(widget.logContent);
+    final lines = sectionContent.split('\n').where((line) {
+      final lower = line.toLowerCase();
+      final matchesQuery = query.isEmpty || lower.contains(query);
+      final matchesLevel = _levelFilter == 'ALL' || lower.contains(_levelFilter.toLowerCase());
+      return matchesQuery && matchesLevel;
+    });
+    return lines.join('\n');
+  }
+
+  String _sectionLogContent(String input) {
+    if (_sectionFilter == '全部') return input;
+    final header = '====== $_sectionFilter ======';
+    final start = input.indexOf(header);
+    if (start < 0) return '';
+    final next = input.indexOf('====== ', start + header.length);
+    return next < 0 ? input.substring(start) : input.substring(start, next);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filteredLogContent;
+    final isEmpty = widget.logContent.isEmpty || filtered.trim().isEmpty || widget.logContent.startsWith('(暂无');
     return Scaffold(
       appBar: AppBar(
         title: const Text('系统日志'),
@@ -994,24 +1101,69 @@ class _SystemLogViewPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.copy),
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: logContent));
+              Clipboard.setData(ClipboardData(text: filtered));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已复制系统日志'), duration: Duration(seconds: 1)),
+                const SnackBar(content: Text('已复制当前日志内容'), duration: Duration(seconds: 1)),
               );
             },
             tooltip: '复制',
           ),
         ],
       ),
-      body: logContent.isEmpty || logContent.startsWith('(暂无')
-          ? const Center(child: Text('暂无系统日志', style: TextStyle(color: Colors.grey)))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: SelectableText(
-                logContent,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: '搜索日志',
+                hintText: '输入关键字过滤日志内容',
               ),
+              onChanged: (value) => setState(() => _query = value),
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _levelFilter,
+                    decoration: const InputDecoration(labelText: '级别'),
+                    items: const ['ALL', 'INFO', 'WARN', 'ERROR']
+                        .map((level) => DropdownMenuItem(value: level, child: Text(level)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _levelFilter = value ?? 'ALL'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _sectionFilter,
+                    decoration: const InputDecoration(labelText: '区块'),
+                    items: _sectionFilters
+                        .map((section) => DropdownMenuItem(value: section, child: Text(section)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _sectionFilter = value ?? '全部'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: isEmpty
+                ? const Center(child: Text('暂无匹配日志', style: TextStyle(color: Colors.grey)))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: SelectableText(
+                      filtered,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1071,6 +1223,22 @@ class _UserManualPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _ManualSection(
+            icon: Icons.bubble_chart,
+            title: '悬浮球',
+            items: const [
+              _ManualItem(Icons.play_arrow, '状态指示', '灰色=空闲，绿色脉冲=运行中，红色=报错，橙色=等待输入；不同状态显示不同图标（Py/▶/×/?）'),
+              _ManualItem(Icons.touch_app, '点击操作', '折叠时点击展开悬浮球；展开时点击显示/隐藏信息面板'),
+              _ManualItem(Icons.open_in_full, '长按展开', '长按显示信息面板：运行中查看脚本名、实时计时和停止按钮；空闲时查看最近运行的脚本列表'),
+              _ManualItem(Icons.history, '快捷运行', '空闲面板显示最近 5 个脚本，点击即可快速重新运行'),
+              _ManualItem(Icons.swap_vert, '贴边收起', '松手自动贴向最近屏幕边缘，仅露出 16px；3 秒后自动收起，点击或长按重新展开'),
+              _ManualItem(Icons.swipe, '拖拽移动', '拖动悬浮球到屏幕任意位置，松手自动贴边'),
+              _ManualItem(Icons.delete_outline, '拖拽停止', '运行中拖到底部红色区域松手可快速停止脚本'),
+              _ManualItem(Icons.settings, '开关控制', '在设置页开启或关闭，开启后悬浮球常驻屏幕，关闭后消失'),
+              _ManualItem(Icons.security, '权限', '首次开启需授予「显示在其他应用上层」权限'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ManualSection(
             icon: Icons.http,
             title: '网络请求调试',
             items: const [
@@ -1103,6 +1271,7 @@ class _UserManualPage extends StatelessWidget {
             items: const [
               _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
               _ManualItem(Icons.videogame_asset_outlined, '图形引擎', '开启后支持 scene 模块游戏/动画'),
+              _ManualItem(Icons.bubble_chart, '悬浮球', '开启后悬浮球常驻屏幕，支持贴边收起、快捷运行最近脚本、拖拽停止等'),
               _ManualItem(Icons.inventory_2_outlined, 'PyPI 镜像源', 'pip 安装镜像地址，留空用官方源'),
               _ManualItem(Icons.timer_outlined, '执行超时', '脚本最长运行时间（可设为无限制）'),
               _ManualItem(Icons.work_outline, '工作目录', '脚本中 open() 等相对路径的基准目录'),

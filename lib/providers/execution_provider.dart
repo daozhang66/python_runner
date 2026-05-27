@@ -55,6 +55,20 @@ class ExecutionProvider extends ChangeNotifier {
   List<dynamic>? _currentSceneFrame;
   int _frameCount = 0;
   bool _graphicsEnabled = false;
+  bool _floatingBallEnabled = false;
+
+  /// Callback for navigating to the console page when script is triggered from floating ball.
+  static void Function(String scriptName)? onNavigateToConsole;
+  static String? _pendingNavigateScriptName;
+
+  static void setNavigateToConsoleHandler(void Function(String scriptName)? handler) {
+    onNavigateToConsole = handler;
+    if (handler != null && _pendingNavigateScriptName != null) {
+      final pending = _pendingNavigateScriptName!;
+      _pendingNavigateScriptName = null;
+      handler(pending);
+    }
+  }
 
   /// Throttled notification timer — batches rapid updates into a single
   /// notifyListeners() call after a short delay (100ms).
@@ -77,6 +91,8 @@ class ExecutionProvider extends ChangeNotifier {
   ExecutionProvider(this._bridge) {
     _loadGraphicsSetting();
     _listenStreams();
+    syncFloatingBallVisibility();
+    _pollPendingRunScript();
   }
 
   final _logger = AppLogger.instance;
@@ -85,6 +101,7 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? false;
+      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
     } catch (_) {}
   }
 
@@ -180,6 +197,8 @@ class ExecutionProvider extends ChangeNotifier {
           _sceneActive = false;
           _currentSceneFrame = null;
           unawaited(HttpInspectorStore.instance.flush());
+          // Update floating ball status and hide after delay
+          _updateFloatingBallOnTerminal(_state.status);
         }
         _scheduleNotify();
       }, onError: (e) {
@@ -192,6 +211,8 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       _stdinSub = _bridge.stdinRequestStream.listen((data) {
         _waitingForInput = true;
+        // Update floating ball to show waiting state
+        _updateFloatingBallStatus('waiting_input');
         _scheduleNotify();
       }, onError: (e) {
         _logger.error('stdinRequestStream error: $e', source: 'Execution');
@@ -243,6 +264,7 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? false;
+      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
       workingDir = prefs.getString('working_dir');
       timeoutSeconds = prefs.getInt('execution_timeout');
     } catch (_) {
@@ -276,6 +298,9 @@ class ExecutionProvider extends ChangeNotifier {
       await _bridge.executeScript(name, executionId,
           workingDir: workingDir, hookEnv: hookEnv, timeoutSeconds: timeoutSeconds);
       _logger.info('脚本开始执行: $name (id: $executionId)', source: 'Execution');
+
+      // Show floating ball if enabled and permitted
+      _showFloatingBallIfNeeded(name);
     } catch (e) {
       _logger.error('脚本启动失败: $name, error: $e', source: 'Execution');
       _logs.add(LogEntry(
@@ -324,7 +349,6 @@ class ExecutionProvider extends ChangeNotifier {
 
   Future<void> stopExecution() async {
     try {
-      // Immediately show "stopping" in UI so user knows the request was sent
       if (_state.status == ExecutionStatus.running) {
         _state = _state.copyWith(status: ExecutionStatus.stopping);
         notifyListeners();
@@ -376,5 +400,79 @@ class ExecutionProvider extends ChangeNotifier {
     _statusSub?.cancel();
     _stdinSub?.cancel();
     super.dispose();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Floating Ball Helpers
+  // ═══════════════════════════════════════════════════════════
+
+  Future<void> _showFloatingBallIfNeeded(String scriptName) async {
+    if (!_floatingBallEnabled) return;
+    try {
+      final hasPermission = await _bridge.checkOverlayPermission();
+      if (hasPermission) {
+        await _bridge.showFloatingBall(scriptName);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> syncFloatingBallVisibility() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
+    } catch (_) {}
+    if (!_floatingBallEnabled) {
+      await _hideFloatingBall();
+      return;
+    }
+    try {
+      final hasPermission = await _bridge.checkOverlayPermission();
+      if (hasPermission) {
+        // Show with empty name → idle state
+        await _bridge.showFloatingBall(isRunning ? (_currentScriptName ?? '') : '');
+      }
+    } catch (_) {}
+  }
+
+  void _pollPendingRunScript() {
+    // Poll every 500ms to check if floating ball triggered a script run
+    Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+      if (_disposed) { timer.cancel(); return; }
+      if (isRunning) return;
+      try {
+        final name = await _bridge.consumePendingRunScript();
+        if (name != null && name.isNotEmpty) {
+          executeScript(name);
+          if (onNavigateToConsole != null) {
+            onNavigateToConsole!.call(name);
+          } else {
+            _pendingNavigateScriptName = name;
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _hideFloatingBall() async {
+    try {
+      await _bridge.hideFloatingBall();
+    } catch (_) {}
+  }
+
+  Future<void> _updateFloatingBallStatus(String status) async {
+    if (!_floatingBallEnabled) return;
+    try {
+      await _bridge.updateFloatingBallStatus(status);
+    } catch (_) {}
+  }
+
+  void _updateFloatingBallOnTerminal(ExecutionStatus status) async {
+    if (!_floatingBallEnabled) return;
+    if (status == ExecutionStatus.error) {
+      await _updateFloatingBallStatus('error');
+      // Show error for 3 seconds, then go idle
+      await Future.delayed(const Duration(seconds: 3));
+    }
+    await _updateFloatingBallStatus('idle');
   }
 }

@@ -502,8 +502,9 @@ def _cleanup_network_modules():
         pass
 
 
-def run_script(code, working_dir="", hook_env_json=""):
+def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
     """Execute Python code with real-time output and stdin support."""
+    _original_home = os.environ.get("HOME", "")
     _ensure_site_packages()
     global _waiting_for_input
     _waiting_for_input = False
@@ -535,9 +536,10 @@ def run_script(code, working_dir="", hook_env_json=""):
     if working_dir and working_dir.strip():
         workspace = working_dir.strip()
     else:
-        workspace = os.path.join(os.environ.get("HOME", "/data/data/com.daozhang.py"), "workspace")
+        workspace = "/sdcard/Download/PythonRunner"
     os.makedirs(workspace, exist_ok=True)
     os.chdir(workspace)
+    os.environ["HOME"] = workspace
 
     # Drain any stale stdin/output/touch from a previous run
     while not _stdin_queue.empty():
@@ -674,6 +676,7 @@ def run_script(code, working_dir="", hook_env_json=""):
             "__name__": "__main__",
             "__builtins__": __builtins__,
             "__stop_requested__": stop_requested,
+            "__file__": os.path.join(workspace, os.path.basename(script_file_path)) if script_file_path else os.path.join(workspace, "script.py"),
         })
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else 1
@@ -757,6 +760,10 @@ def run_script(code, working_dir="", hook_env_json=""):
         # ── Clean up injected environment variables ──
         for k in _injected_env_keys:
             os.environ.pop(k, None)
+
+        # ── Restore HOME ──
+        if _original_home:
+            os.environ["HOME"] = _original_home
 
     return {
         "stdout": "",
@@ -1014,8 +1021,8 @@ def uninstall_package(package_name):
 
 
 def list_packages():
-    """List installed packages by directly scanning site-packages and using importlib.metadata.
-    Returns accurate list without relying on pkg_resources cache."""
+    """List top-level installed packages only (no transitive dependencies).
+    Returns packages from build.gradle builtins + user-installed via pip."""
     _ensure_site_packages()
     import importlib
     import importlib.util
@@ -1027,6 +1034,34 @@ def list_packages():
         importlib.metadata.packages_distributions.cache_clear()
     except Exception:
         pass
+
+    # Top-level packages from build.gradle pip install (no transitive deps)
+    _BUILTIN_TOP = {
+        'pip', 'setuptools', 'wheel',
+        'aiohttp', 'requests', 'httpx', 'beautifulsoup4', 'pyjwt',
+        'certifi', 'urllib3', 'chardet',
+        'marshmallow', 'python_dateutil', 'pytz',
+        'pycryptodome', 'cffi', 'six', 'cryptography', 'rsa',
+        'tinydb', 'peewee', 'pymysql', 'redis',
+        'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',
+        'plyer', 'schedule',
+        'loguru', 'tqdm', 'openpyxl', 'python_docx',
+        'pyyaml', 'ruamel_yaml',
+        'matplotlib',
+    }
+
+    # Load user-installed packages (explicitly installed at runtime)
+    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
+    user_pkgs = set()
+    if os.path.exists(_USER_FILE):
+        try:
+            with open(_USER_FILE) as f:
+                for k in json.load(f).keys():
+                    user_pkgs.add(k.lower().replace('-', '_'))
+        except Exception:
+            pass
+
+    top_level = _BUILTIN_TOP | user_pkgs
 
     # Load exclusion list (packages explicitly uninstalled at runtime)
     _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
@@ -1041,7 +1076,6 @@ def list_packages():
     packages = []
     seen_names = set()
 
-    # Scan ALL installed packages (builtin + user-installed) via importlib.metadata
     try:
         for dist in importlib.metadata.distributions():
             name = dist.metadata.get('Name') or dist.name
@@ -1051,7 +1085,10 @@ def list_packages():
             if norm in seen_names or norm in excluded:
                 continue
             seen_names.add(norm)
-            packages.append({'name': name, 'version': dist.version or 'unknown'})
+            if norm not in top_level:
+                continue
+            source = 'user' if norm in user_pkgs else 'builtin'
+            packages.append({'name': name, 'version': dist.version or 'unknown', 'source': source})
     except Exception:
         pass
 

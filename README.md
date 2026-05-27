@@ -90,7 +90,7 @@ test/                            # 单元测试
 
 ## 配置说明
 
-- **Python 环境**：Chaquopy 自动捆绑 Python 3.8+ 及 50+ 常用库
+- **Python 环境**：Chaquopy 自动捆绑 Python 3.11 及 50+ 常用库
 - **自定义库**：将 `.py` 文件放入 `assets/python/` 或使用内置 pip 安装
 - **网络调试**：设置页 → 启用「网络调试模式」
 
