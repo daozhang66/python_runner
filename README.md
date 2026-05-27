@@ -88,22 +88,6 @@ assets/                          # 静态资源
 test/                            # 单元测试
 ```
 
-## 配置说明
-
-- **Python 环境**：Chaquopy 自动捆绑 Python 3.11 及 50+ 常用库
-- **自定义库**：将 `.py` 文件放入 `assets/python/` 或使用内置 pip 安装
-- **网络调试**：设置页 → 启用「网络调试模式」
-
-## 贡献指南
-
-欢迎贡献代码！请遵循：
-
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交 Pull Request
-
 ## 许可证
 
 采用 MIT 许可证。详见 `LICENSE` 文件。
