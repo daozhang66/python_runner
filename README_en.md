@@ -88,22 +88,6 @@ assets/                          # Static assets
 test/                            # Unit tests
 ```
 
-## Configuration
-
-- **Python Environment**: Chaquopy automatically bundles Python 3.11 with 50+ packages
-- **Custom Libraries**: Place `.py` files in `assets/python/` or install via built-in pip
-- **Network Debug**: Enable in Settings → Network Debug Mode
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
