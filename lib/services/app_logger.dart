@@ -49,6 +49,13 @@ class AppLogger {
 
   List<AppLogEntry> get recentLogs => List.unmodifiable(_memoryLogs);
 
+  String _dateStamp([DateTime? value]) =>
+      DateFormat('yyyy-MM-dd').format(value ?? DateTime.now());
+
+  String _appLogFileName([DateTime? value]) => 'app-${_dateStamp(value)}.log';
+  String _scriptLogFileName([DateTime? value]) => 'script-${_dateStamp(value)}.log';
+  String _crashLogFileName([DateTime? value]) => 'crash-${_dateStamp(value)}.log';
+
   /// Initialize the logger, creating the log directory.
   Future<void> init() async {
     if (_initialized) return;
@@ -106,8 +113,10 @@ class AppLogger {
     detail.writeln('Error: $errorMessage');
     if (stackTrace != null) detail.writeln('StackTrace:\n$stackTrace');
     _log(AppLogLevel.error, '脚本执行错误: $scriptName', source: 'Script', detail: detail.toString());
-    _writeSyncToLog(_scriptErrorLogFile, '=== ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())} ===\n'
-        'Script: $scriptName\nError: $errorMessage\n${stackTrace != null ? "StackTrace:\n$stackTrace\n" : ""}\n');
+    final content = '=== ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())} ===\n'
+        'Script: $scriptName\nError: $errorMessage\n${stackTrace != null ? "StackTrace:\n$stackTrace\n" : ""}\n';
+    _writeSyncToLog(_scriptErrorLogFile, content);
+    _writeSyncToLog(_scriptLogFileName(), content);
   }
 
   /// Log an error from an exception/stack trace (crash-level).
@@ -147,13 +156,51 @@ class AppLogger {
     try {
       final line = '${entry.formatted}\n';
       _systemLogSink?.write(line);
-      // Flush error/crash entries immediately
-      if (entry.level == AppLogLevel.error) {
+      _writeSyncToLog(_appLogFileName(entry.timestamp), line);
+      _systemLogSize += line.length;
+      // Flush warning/error entries so important breadcrumbs survive process death.
+      if (entry.level == AppLogLevel.warn || entry.level == AppLogLevel.error) {
         _systemLogSink?.flush();
       }
     } catch (_) {
       // Silently fail to avoid recursion
     }
+  }
+
+  Future<void> flush() async {
+    try {
+      await _systemLogSink?.flush();
+    } catch (_) {}
+  }
+
+  Future<List<FileSystemEntity>> _listLogFiles({
+    required String prefix,
+    required String suffix,
+    int limit = 20,
+  }) async {
+    if (_logDir == null || !await _logDir!.exists()) return [];
+    final files = await _logDir!
+        .list()
+        .where((entity) {
+          final name = entity.path.split(Platform.pathSeparator).last;
+          return name.startsWith(prefix) && name.endsWith(suffix);
+        })
+        .toList();
+    files.sort((a, b) => b.path.compareTo(a.path));
+    return files.take(limit).toList();
+  }
+
+  Future<String> _readLogFiles(List<FileSystemEntity> files) async {
+    final buf = StringBuffer();
+    for (final entity in files) {
+      try {
+        final name = entity.path.split(Platform.pathSeparator).last;
+        buf.writeln('--- $name ---');
+        buf.writeln(await File(entity.path).readAsString());
+        buf.writeln();
+      } catch (_) {}
+    }
+    return buf.toString();
   }
 
   /// Synchronous crash log write — guaranteed to survive app termination.
@@ -170,6 +217,8 @@ class AppLogger {
 
       final file = File('${_logDir!.path}/$_crashLogFile');
       file.writeAsStringSync(buf.toString(), mode: FileMode.append, flush: true);
+      final datedFile = File('${_logDir!.path}/${_crashLogFileName()}');
+      datedFile.writeAsStringSync(buf.toString(), mode: FileMode.append, flush: true);
     } catch (_) {}
   }
 
@@ -186,9 +235,27 @@ class AppLogger {
   Future<String> readSystemLog() async {
     if (_logDir == null) return '(日志系统未初始化)';
     try {
+      await flush();
+      final oldFile = File('${_logDir!.path}/$_systemLogFile.old');
       final file = File('${_logDir!.path}/$_systemLogFile');
+      final buf = StringBuffer();
+      if (await oldFile.exists()) {
+        buf.writeln('--- $_systemLogFile.old ---');
+        buf.writeln(await oldFile.readAsString());
+      }
       if (await file.exists()) {
-        return await file.readAsString();
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln('--- $_systemLogFile ---');
+        buf.writeln(await file.readAsString());
+      }
+      final appLogs = await _listLogFiles(prefix: 'app-', suffix: '.log');
+      if (appLogs.isNotEmpty) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln('--- dated app logs ---');
+        buf.writeln(await _readLogFiles(appLogs));
+      }
+      if (buf.isNotEmpty) {
+        return buf.toString();
       }
       return '(暂无系统日志)';
     } catch (e) {
@@ -209,11 +276,18 @@ class AppLogger {
   Future<String> readCrashLog() async {
     if (_logDir == null) return '(日志系统未初始化)';
     try {
+      final buf = StringBuffer();
       final file = File('${_logDir!.path}/$_crashLogFile');
       if (await file.exists()) {
-        return await file.readAsString();
+        buf.writeln('--- $_crashLogFile ---');
+        buf.writeln(await file.readAsString());
       }
-      return '(暂无崩溃日志)';
+      final dated = await _listLogFiles(prefix: 'crash-', suffix: '.log');
+      if (dated.isNotEmpty) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln(await _readLogFiles(dated));
+      }
+      return buf.isEmpty ? '(暂无崩溃日志)' : buf.toString();
     } catch (e) {
       return '(读取崩溃日志失败: $e)';
     }
@@ -223,11 +297,18 @@ class AppLogger {
   Future<String> readScriptErrorLog() async {
     if (_logDir == null) return '(日志系统未初始化)';
     try {
+      final buf = StringBuffer();
       final file = File('${_logDir!.path}/$_scriptErrorLogFile');
       if (await file.exists()) {
-        return await file.readAsString();
+        buf.writeln('--- $_scriptErrorLogFile ---');
+        buf.writeln(await file.readAsString());
       }
-      return '(暂无脚本错误日志)';
+      final dated = await _listLogFiles(prefix: 'script-', suffix: '.log');
+      if (dated.isNotEmpty) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln(await _readLogFiles(dated));
+      }
+      return buf.isEmpty ? '(暂无脚本错误日志)' : buf.toString();
     } catch (e) {
       return '(读取脚本错误日志失败: $e)';
     }
@@ -244,12 +325,30 @@ class AppLogger {
       if (await crashFile.exists()) await crashFile.delete();
       final scriptErrFile = File('${_logDir!.path}/$_scriptErrorLogFile');
       if (await scriptErrFile.exists()) await scriptErrFile.delete();
+      await for (final entity in _logDir!.list()) {
+        final name = entity.path.split(Platform.pathSeparator).last;
+        final isManagedLog =
+            (name.startsWith('app-') ||
+                    name.startsWith('script-') ||
+                    name.startsWith('crash-')) &&
+                name.endsWith('.log');
+        if (isManagedLog) {
+          await File(entity.path).delete();
+        }
+      }
     } catch (_) {}
   }
 
   /// Export all logs as a combined string (for sharing/saving).
   Future<String> exportAll() async {
+    await flush();
     final buf = StringBuffer();
+    buf.writeln('====== 诊断信息 ======');
+    buf.writeln('Generated at: ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())}');
+    buf.writeln('Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+    buf.writeln('Log directory: ${logDirPath ?? "(日志系统未初始化)"}');
+    buf.writeln('Recent memory entries: ${_memoryLogs.length}');
+    buf.writeln();
     buf.writeln('====== 系统日志 ======');
     buf.writeln(await readSystemLog());
     buf.writeln();

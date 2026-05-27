@@ -16,11 +16,14 @@ import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
 import 'providers/script_provider.dart';
 import 'providers/execution_provider.dart';
-import 'providers/package_provider.dart';
+import 'providers/package_provider.dart' show PackageProvider;
 import 'pages/script_list_page.dart';
 import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/run_console_page.dart';
+
+final appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,10 +116,14 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(context.read<ExecutionProvider>().syncFloatingBallVisibility());
+    }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _flushHttpInspectorRecords();
+      unawaited(AppLogger.instance.flush());
     }
   }
 
@@ -143,6 +150,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'Python运行器',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
@@ -400,8 +408,26 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(context.read<ExecutionProvider>().syncFloatingBallVisibility());
       _checkForUpdatesOnLaunch();
+      // When floating ball triggers a script, switch to script tab and open console page
+      ExecutionProvider.setNavigateToConsoleHandler((scriptName) {
+        if (!mounted) return;
+        setState(() => _currentIndex = 0);
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (!mounted) return;
+          appNavigatorKey.currentState?.push(
+            MaterialPageRoute(builder: (_) => RunConsolePage(scriptName: scriptName)),
+          );
+        });
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    ExecutionProvider.setNavigateToConsoleHandler(null);
+    super.dispose();
   }
 
   Future<void> _checkForUpdatesOnLaunch() async {

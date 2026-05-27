@@ -110,8 +110,12 @@ class NativeBridge {
     return result as String;
   }
 
-  Future<String> exportLog(String content, {String fileName = 'log.txt'}) async {
-    final result = await _invoke('exportLog', {'content': content, 'fileName': fileName});
+  Future<String> exportLog(String content, {String fileName = 'log.txt', String? destDir}) async {
+    final result = await _invoke('exportLog', {
+      'content': content,
+      'fileName': fileName,
+      'destDir': destDir,
+    });
     return result as String;
   }
 
@@ -134,6 +138,36 @@ class NativeBridge {
 
   Future<void> openUrl(String url) async {
     await _invoke('openUrl', {'url': url});
+  }
+
+  Future<bool> checkOverlayPermission() async {
+    final result = await _invoke('checkOverlayPermission', {});
+    return result as bool;
+  }
+
+  Future<void> requestOverlayPermission() async {
+    await _invoke('requestOverlayPermission', {});
+  }
+
+  Future<void> showFloatingBall(String scriptName) async {
+    await _invoke('showFloatingBall', {'scriptName': scriptName});
+  }
+
+  Future<void> hideFloatingBall() async {
+    await _invoke('hideFloatingBall', {});
+  }
+
+  Future<void> updateFloatingBallStatus(String status) async {
+    await _invoke('updateFloatingBallStatus', {'status': status});
+  }
+
+  Future<void> pushFloatingBallOutput(String output) async {
+    await _invoke('pushFloatingBallOutput', {'output': output});
+  }
+
+  Future<String?> consumePendingRunScript() async {
+    final result = await _invoke('consumePendingRunScript', {});
+    return result as String?;
   }
 
   Future<String> downloadAndInstallApk(String url, {required String fileName}) async {

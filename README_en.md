@@ -90,7 +90,7 @@ test/                            # Unit tests
 
 ## Configuration
 
-- **Python Environment**: Chaquopy automatically bundles Python 3.8+ with 50+ packages
+- **Python Environment**: Chaquopy automatically bundles Python 3.11 with 50+ packages
 - **Custom Libraries**: Place `.py` files in `assets/python/` or install via built-in pip
 - **Network Debug**: Enable in Settings → Network Debug Mode
 

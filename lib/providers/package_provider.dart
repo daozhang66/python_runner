@@ -46,35 +46,16 @@ class PackageProvider extends ChangeNotifier {
     });
   }
 
-  static const _builtins = [
-    'pip', 'setuptools', 'wheel',
-    'aiohttp', 'requests', 'httpx', 'beautifulsoup4', 'pyjwt',
-    'certifi', 'urllib3', 'chardet',
-    'ujson', 'marshmallow', 'python-dateutil', 'pytz',
-    'pycryptodome', 'cffi', 'six', 'cryptography',
-    'pyDes', 'rsa', 'pyasn1',
-    'tinydb', 'peewee', 'pymysql', 'redis',
-    'loguru', 'tqdm', 'openpyxl', 'python-docx',
-    'PyYAML', 'ruamel.yaml', 'ruamel.yaml.clib',
-    'numpy', 'pandas', 'pillow', 'lxml', 'sqlalchemy',
-    'scipy', 'matplotlib', 'scikit-learn', 'opencv-python',
-    'plyer', 'schedule',
-  ];
-
   static String _norm(String n) => n.toLowerCase().replaceAll('-', '_');
 
   Future<void> loadPackages() async {
     try {
       final result = await _bridge.listInstalledPackages();
-      final runtimePkgs = result.map((m) => PackageInfo(
+      _packages = result.map((m) => PackageInfo(
         name: m['name'] ?? '',
         version: m['version'] ?? '',
+        isUserPackage: m['source'] == 'user',
       )).toList();
-      final runtimeNames = runtimePkgs.map((p) => _norm(p.name)).toSet();
-      final builtinPkgs = _builtins
-          .where((n) => !runtimeNames.contains(_norm(n)))
-          .map((n) => PackageInfo(name: n, version: 'built-in'));
-      _packages = [...runtimePkgs, ...builtinPkgs];
       _packages.sort((a, b) => a.name.compareTo(b.name));
       notifyListeners();
     } catch (e) {

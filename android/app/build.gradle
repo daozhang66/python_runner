@@ -32,7 +32,7 @@ android {
         }
 
         python {
-            version "3.8"
+            version "3.11"
             pip {
                 install "pip"
                 install "setuptools"
@@ -47,7 +47,6 @@ android {
                 install "urllib3"
                 install "chardet"
                 // 数据处理
-                install "ujson"
                 install "marshmallow"
                 install "python-dateutil"
                 install "pytz"
@@ -56,7 +55,6 @@ android {
                 install "cffi"
                 install "six"
                 install "cryptography"
-                install "pyDes"
                 install "rsa"
                 // 数据库
                 install "tinydb"
@@ -80,11 +78,8 @@ android {
                 // YAML
                 install "PyYAML"
                 install "ruamel.yaml"
-                // 科学计算（较大）
-                install "scipy"
+                // 科学计算
                 install "matplotlib"
-                install "scikit-learn"
-                install "opencv-python"
             }
         }
     }

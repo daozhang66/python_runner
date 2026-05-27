@@ -2,6 +2,7 @@ package com.daozhang.py
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -23,6 +24,11 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
+    companion object {
+        private const val FLOATING_BALL_PREFS_NAME = "floating_ball_prefs"
+        private const val KEY_PENDING_RUN_SCRIPT = "pending_run_script"
+    }
+
     private val METHOD_CHANNEL = "com.daozhang.py/native_bridge"
     private val LOG_STREAM_CHANNEL = "com.daozhang.py/log_stream"
     private val INSTALL_PROGRESS_CHANNEL = "com.daozhang.py/install_progress"
@@ -41,6 +47,34 @@ class MainActivity : FlutterActivity() {
     private var currentExecutionThread: Thread? = null
     private var currentExecutionId: String? = null
     private var batteryOptRequested = false
+
+    private var pendingRunScript: String? = null
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleRunScriptIntent(intent)
+    }
+
+    private fun handleRunScriptIntent(intent: Intent?) {
+        val name = intent?.getStringExtra("run_script")
+        if (!name.isNullOrBlank()) {
+            pendingRunScript = name
+            getSharedPreferences(FLOATING_BALL_PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_PENDING_RUN_SCRIPT, name)
+                .apply()
+            intent.removeExtra("run_script")
+        }
+    }
+
+    fun consumePendingRunScript(): String? {
+        val prefs = getSharedPreferences(FLOATING_BALL_PREFS_NAME, MODE_PRIVATE)
+        val name = pendingRunScript ?: prefs.getString(KEY_PENDING_RUN_SCRIPT, null)
+        pendingRunScript = null
+        prefs.edit().remove(KEY_PENDING_RUN_SCRIPT).apply()
+        return name
+    }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         // Register native crash handler ASAP — before Flutter engine init
@@ -66,6 +100,7 @@ class MainActivity : FlutterActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        handleRunScriptIntent(intent)
     }
 
     private fun scriptsDir(): File {
@@ -190,7 +225,8 @@ class MainActivity : FlutterActivity() {
                     "exportLog" -> {
                         val content = call.argument<String>("content") ?: ""
                         val fileName = call.argument<String>("fileName") ?: "log.txt"
-                        handleExportLog(content, fileName, result)
+                        val destDir = call.argument<String>("destDir")
+                        handleExportLog(content, fileName, destDir, result)
                     }
                     "exportScript" -> {
                         val name = call.argument<String>("name") ?: ""
@@ -211,6 +247,39 @@ class MainActivity : FlutterActivity() {
                     "moveToBackground" -> {
                         moveTaskToBack(true)
                         result.success(null)
+                    }
+                    "checkOverlayPermission" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            result.success(android.provider.Settings.canDrawOverlays(this))
+                        } else {
+                            result.success(true)
+                        }
+                    }
+                    "requestOverlayPermission" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            if (!android.provider.Settings.canDrawOverlays(this)) {
+                                startActivity(
+                                    android.content.Intent(
+                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        android.net.Uri.parse("package:$packageName")
+                                    ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                )
+                            }
+                        }
+                        result.success(null)
+                    }
+                    "showFloatingBall" -> handleShowFloatingBall(call.argument<String>("scriptName"), result)
+                    "hideFloatingBall" -> handleHideFloatingBall(result)
+                    "updateFloatingBallStatus" -> {
+                        val status = call.argument<String>("status") ?: "running"
+                        handleUpdateFloatingBallStatus(status, result)
+                    }
+                    "pushFloatingBallOutput" -> {
+                        val output = call.argument<String>("output") ?: ""
+                        handlePushFloatingBallOutput(output, result)
+                    }
+                    "consumePendingRunScript" -> {
+                        result.success(consumePendingRunScript())
                     }
                     else -> result.notImplemented()
                 }
@@ -346,6 +415,7 @@ class MainActivity : FlutterActivity() {
         result.success(mapOf("executionId" to executionId, "status" to "started"))
 
         val code = file.readText()
+        val scriptFilePath = file.absolutePath
         val scriptDone = java.util.concurrent.atomic.AtomicBoolean(false)
 
         // Serialize hookEnv to JSON string for passing to Python
@@ -410,7 +480,7 @@ class MainActivity : FlutterActivity() {
             try {
                 val py = Python.getInstance()
                 val runner = py.getModule("script_runner")
-                val result2 = runner.callAttr("run_script", code, workingDir ?: "", hookEnvJson)
+                val result2 = runner.callAttr("run_script", code, workingDir ?: "", hookEnvJson, scriptFilePath)
                 exitCode = result2.callAttr("get", "exit_code").toInt()
             } catch (e: Exception) {
                 sendLog("stderr", "执行错误: ${e.message}")
@@ -607,13 +677,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleExportLog(content: String, fileName: String, result: MethodChannel.Result) {
+    private fun handleExportLog(content: String, fileName: String, destDir: String?, result: MethodChannel.Result) {
         try {
-            // Save to public Downloads directory so user can find the file
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val appDir = File(downloadsDir, "PythonRunner")
+            val appDir = if (!destDir.isNullOrBlank()) {
+                File(destDir)
+            } else {
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                File(downloadsDir, "PythonRunner")
+            }
             if (!appDir.exists()) appDir.mkdirs()
-            val file = File(appDir, fileName)
+            val safeName = if (fileName.isBlank()) "log.txt" else fileName
+            val file = File(appDir, safeName)
             file.writeText(content)
             result.success(file.absolutePath)
         } catch (e: Exception) {
@@ -842,9 +916,62 @@ class MainActivity : FlutterActivity() {
 
     private fun stopServiceSafely() {
         try {
-            val intent = Intent(this, PythonForegroundService::class.java)
-            stopService(intent)
+            stopService(Intent(this, PythonForegroundService::class.java))
         } catch (_: Exception) {}
+        // FloatingBallService lifecycle is managed by Flutter-side execution_provider
+    }
+
+    // --- Floating Ball ---
+
+    private fun handleShowFloatingBall(scriptName: String?, result: MethodChannel.Result) {
+        try {
+            val intent = Intent(this, FloatingBallService::class.java).apply {
+                action = FloatingBallService.ACTION_SHOW
+                putExtra(FloatingBallService.EXTRA_SCRIPT_NAME, scriptName ?: "")
+            }
+            startService(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1020", "显示悬浮球失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleHideFloatingBall(result: MethodChannel.Result) {
+        try {
+            val intent = Intent(this, FloatingBallService::class.java).apply {
+                action = FloatingBallService.ACTION_HIDE
+            }
+            startService(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1021", "隐藏悬浮球失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleUpdateFloatingBallStatus(status: String, result: MethodChannel.Result) {
+        try {
+            val intent = Intent(this, FloatingBallService::class.java).apply {
+                action = FloatingBallService.ACTION_UPDATE_STATUS
+                putExtra(FloatingBallService.EXTRA_STATUS, status)
+            }
+            startService(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1022", "更新悬浮球状态失败: ${e.message}", null)
+        }
+    }
+
+    private fun handlePushFloatingBallOutput(output: String, result: MethodChannel.Result) {
+        try {
+            val intent = Intent(this, FloatingBallService::class.java).apply {
+                action = FloatingBallService.ACTION_PUSH_OUTPUT
+                putExtra(FloatingBallService.EXTRA_OUTPUT, output)
+            }
+            startService(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1023", "推送输出失败: ${e.message}", null)
+        }
     }
 
     private fun _writeScriptErrorLog(scriptName: String, errorMessage: String, stackTrace: String?) {
