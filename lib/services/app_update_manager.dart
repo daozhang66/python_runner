@@ -199,6 +199,13 @@ class AppUpdateManager {
 
     await HttpInspectorStore.instance.flush();
 
+    // Apply GitHub mirror prefix if configured
+    final prefs = await SharedPreferences.getInstance();
+    final mirrorPrefix = prefs.getString('github_mirror_prefix') ?? '';
+    final downloadUrl = mirrorPrefix.isNotEmpty
+        ? '$mirrorPrefix${asset.downloadUrl}'
+        : asset.downloadUrl;
+
     final progressNotifier = ValueNotifier<double>(0.0);
     final progressTextNotifier = ValueNotifier<String>('准备下载...');
     StreamSubscription? progressSub;
@@ -250,7 +257,7 @@ class AppUpdateManager {
 
     try {
       await _bridge.downloadAndInstallApk(
-        asset.downloadUrl,
+        downloadUrl,
         fileName: asset.name,
       );
       if (!context.mounted) return;

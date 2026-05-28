@@ -16,19 +16,30 @@ class DatabaseService {
     final path = join(dbPath, 'python_runner.db');
     return openDatabase(
       path,
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE scripts (
-            name TEXT PRIMARY KEY,
-            path TEXT NOT NULL,
-            createdAt INTEGER NOT NULL,
-            modifiedAt INTEGER NOT NULL,
-            runCount INTEGER DEFAULT 0
-          )
-        ''');
-      },
+      version: 2,
+      onCreate: (db, version) async => _createTables(db),
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _createTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE scripts (
+        name TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        modifiedAt INTEGER NOT NULL,
+        runCount INTEGER DEFAULT 0,
+        isPinned INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db
+          .execute('ALTER TABLE scripts ADD COLUMN isPinned INTEGER DEFAULT 0');
+    }
   }
 
   Future<void> upsertScript(ScriptFile script) async {
@@ -42,13 +53,15 @@ class DatabaseService {
 
   Future<List<ScriptFile>> getAllScripts() async {
     final db = await database;
-    final maps = await db.query('scripts', orderBy: 'modifiedAt DESC');
+    final maps =
+        await db.query('scripts', orderBy: 'isPinned DESC, modifiedAt DESC');
     return maps.map((m) => ScriptFile.fromMap(m)).toList();
   }
 
   Future<ScriptFile?> getScript(String name) async {
     final db = await database;
-    final maps = await db.query('scripts', where: 'name = ?', whereArgs: [name]);
+    final maps =
+        await db.query('scripts', where: 'name = ?', whereArgs: [name]);
     if (maps.isEmpty) return null;
     return ScriptFile.fromMap(maps.first);
   }
@@ -58,7 +71,8 @@ class DatabaseService {
     await db.delete('scripts', where: 'name = ?', whereArgs: [name]);
   }
 
-  Future<void> renameScript(String oldName, String newName, String newPath) async {
+  Future<void> renameScript(
+      String oldName, String newName, String newPath) async {
     final db = await database;
     await db.update(
       'scripts',

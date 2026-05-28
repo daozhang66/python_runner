@@ -202,10 +202,6 @@ class MainActivity : FlutterActivity() {
                         val input = call.argument<String>("input") ?: ""
                         handleSendStdin(input, result)
                     }
-                    "sendSceneTouch" -> {
-                        val touchJson = call.argument<String>("touchJson") ?: ""
-                        handleSendSceneTouch(touchJson, result)
-                    }
                     "installPackage" -> {
                         val packageName = call.argument<String>("packageName") ?: ""
                         val version = call.argument<String>("version")
@@ -539,19 +535,6 @@ class MainActivity : FlutterActivity() {
                 mainHandler.post { result.error("1007", "发送输入失败: ${e.message}", null) }
             }
         }.also { it.name = "stdin-send"; it.start() }
-    }
-
-    private fun handleSendSceneTouch(touchJson: String, result: MethodChannel.Result) {
-        Thread {
-            try {
-                val py = Python.getInstance()
-                val runner = py.getModule("script_runner")
-                runner.callAttr("provide_touch", touchJson)
-                mainHandler.post { result.success(true) }
-            } catch (e: Exception) {
-                mainHandler.post { result.error("1009", "发送触摸事件失败: ${e.message}", null) }
-            }
-        }.also { it.name = "touch-send"; it.start() }
     }
 
     private fun handleStopExecution(result: MethodChannel.Result) {

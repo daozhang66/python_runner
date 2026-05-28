@@ -81,10 +81,6 @@ class NativeBridge {
     await _invoke('sendStdin', {'input': input});
   }
 
-  Future<void> sendSceneTouch(String touchJson) async {
-    await _invoke('sendSceneTouch', {'touchJson': touchJson});
-  }
-
   Future<void> installPackage(String packageName, {String? version, String? indexUrl}) async {
     await _invoke('installPackage', {
       'packageName': packageName,

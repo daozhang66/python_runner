@@ -53,10 +53,6 @@ _stdin_queue = _queue_mod.Queue()
 _STDIN_STOP = object()  # sentinel to unblock a waiting readline()
 _waiting_for_input = False
 
-# Touch/scene support: queue for touch events from Flutter to Python scene module.
-_touch_queue = _queue_mod.Queue()
-_TOUCH_STOP = object()  # sentinel to stop scene loop
-
 # Persistent stop flag: stays True until the script actually exits.
 # Checked in every write() and readline() call so that bare `except:`
 # clauses in user code cannot swallow the KeyboardInterrupt forever.
@@ -180,14 +176,8 @@ def provide_stdin(value):
     _stdin_queue.put(value + "\n")
 
 
-def provide_touch(data_json):
-    """Called from Kotlin when a touch event or size info arrives for the scene module."""
-    import json
-    _touch_queue.put(json.loads(data_json))
-
-
 def stop_running():
-    """Called from Kotlin to force-stop a running script (including scene loops).
+    """Called from Kotlin to force-stop a running script.
 
     Sets a persistent _stop_requested flag so that even if user code has
     bare `except:` clauses that swallow KeyboardInterrupt, the next
@@ -195,16 +185,8 @@ def stop_running():
     """
     # Set persistent flag FIRST — checked in write() and readline()
     _stop_requested.set()
-    # Stop any scene game loop
-    try:
-        import scene as _scene_mod
-        _scene_mod._scene_running = False
-    except Exception:
-        pass
     # Unblock stdin
     _stdin_queue.put(_STDIN_STOP)
-    # Stop scene via touch queue
-    _touch_queue.put(_TOUCH_STOP)
 
 
 def _build_inline_hook():
@@ -541,7 +523,7 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
     os.chdir(workspace)
     os.environ["HOME"] = workspace
 
-    # Drain any stale stdin/output/touch from a previous run
+    # Drain any stale stdin/output from a previous run
     while not _stdin_queue.empty():
         try:
             _stdin_queue.get_nowait()
@@ -552,12 +534,6 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
             _output_queue.get_nowait()
         except _queue_mod.Empty:
             break
-    while not _touch_queue.empty():
-        try:
-            _touch_queue.get_nowait()
-        except _queue_mod.Empty:
-            break
-
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     old_stdin = sys.stdin
@@ -702,8 +678,6 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
         # Unblock any readline() still waiting (e.g. script killed mid-input)
         _stdin_queue.put(_STDIN_STOP)
         _waiting_for_input = False
-        # Stop any running scene game loop
-        _touch_queue.put(_TOUCH_STOP)
 
         # Suppress ResourceWarning during cleanup
         warnings.filterwarnings("ignore", category=ResourceWarning)

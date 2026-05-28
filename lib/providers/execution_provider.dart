@@ -48,13 +48,6 @@ class ExecutionProvider extends ChangeNotifier {
   /// History of all script execution logs
   final List<ScriptLogRecord> _logHistory = [];
 
-  /// Scene/graphics state — updated at ~60fps during scene execution.
-  /// These fields updated internally; UI reads via getters.
-  bool _sceneActive = false;
-  int _sceneOrientation = 0;
-  List<dynamic>? _currentSceneFrame;
-  int _frameCount = 0;
-  bool _graphicsEnabled = false;
   bool _floatingBallEnabled = false;
 
   /// Callback for navigating to the console page when script is triggered from floating ball.
@@ -83,13 +76,8 @@ class ExecutionProvider extends ChangeNotifier {
   bool get waitingForInput => _waitingForInput;
   List<ScriptLogRecord> get logHistory => List.unmodifiable(_logHistory);
 
-  bool get sceneActive => _sceneActive;
-  int get sceneOrientation => _sceneOrientation;
-  List<dynamic>? get currentSceneFrame => _currentSceneFrame;
-  int get frameCount => _frameCount;
-
   ExecutionProvider(this._bridge) {
-    _loadGraphicsSetting();
+    _loadFloatingBallSetting();
     _listenStreams();
     syncFloatingBallVisibility();
     _pollPendingRunScript();
@@ -97,10 +85,9 @@ class ExecutionProvider extends ChangeNotifier {
 
   final _logger = AppLogger.instance;
 
-  Future<void> _loadGraphicsSetting() async {
+  Future<void> _loadFloatingBallSetting() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? false;
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
     } catch (_) {}
   }
@@ -108,47 +95,6 @@ class ExecutionProvider extends ChangeNotifier {
   void _listenStreams() {
     try {
       _logSub = _bridge.logStream.listen((data) {
-        final typeStr = data['type'] as String? ?? 'info';
-        final content = data['content'] as String? ?? '';
-
-        // Handle scene messages — always intercept, never show as text logs
-        if (typeStr == '__scene_init__') {
-          if (_graphicsEnabled) {
-            try {
-              final initData = jsonDecode(content) as Map<String, dynamic>;
-              _sceneActive = true;
-              _sceneOrientation = (initData['orientation'] as int?) ?? 0;
-              _frameCount = 0;
-              _currentSceneFrame = null;
-            } catch (e) {
-              _logger.warn('scene init parse error: $e', source: 'Execution');
-            }
-            _scheduleNotify();
-          }
-          return;
-        }
-
-        if (typeStr == '__scene_frame__') {
-          if (_sceneActive) {
-            try {
-              _currentSceneFrame = jsonDecode(content) as List<dynamic>;
-              _frameCount++;
-            } catch (e) {
-              _logger.warn('scene frame parse error: $e', source: 'Execution');
-            }
-            // Scene frames fire at ~60fps — throttle notifications to avoid UI rebuild storms
-            _scheduleNotify();
-          }
-          return;
-        }
-
-        if (typeStr == '__scene_end__') {
-          _sceneActive = false;
-          _currentSceneFrame = null;
-          _scheduleNotify();
-          return;
-        }
-
         // Normal log entry
         final entry = LogEntry.fromMap(data);
 
@@ -194,8 +140,6 @@ class ExecutionProvider extends ChangeNotifier {
         }
         if (isTerminal) {
           _waitingForInput = false;
-          _sceneActive = false;
-          _currentSceneFrame = null;
           unawaited(HttpInspectorStore.instance.flush());
           // Update floating ball status and hide after delay
           _updateFloatingBallOnTerminal(_state.status);
@@ -250,26 +194,20 @@ class ExecutionProvider extends ChangeNotifier {
     _currentScriptName = name;
     _logs.clear();
     _waitingForInput = false;
-    _sceneActive = false;
-    _currentSceneFrame = null;
-    _frameCount = 0;
     _state = ExecutionState(
       executionId: executionId,
       status: ExecutionStatus.running,
     );
 
-    // Load graphics setting and working directory
+    // Load working directory, timeout, and floating ball setting
     String? workingDir;
     int? timeoutSeconds;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? false;
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
       workingDir = prefs.getString('working_dir');
       timeoutSeconds = prefs.getInt('execution_timeout');
-    } catch (_) {
-      _graphicsEnabled = false;
-    }
+    } catch (_) {}
 
     // Create a new log history record
     _logHistory.add(ScriptLogRecord(
@@ -336,14 +274,6 @@ class ExecutionProvider extends ChangeNotifier {
       _scheduleNotify();
     } catch (e) {
       _logger.error('sendStdin error: $e', source: 'Execution');
-    }
-  }
-
-  Future<void> sendSceneTouch(String touchJson) async {
-    try {
-      await _bridge.sendSceneTouch(touchJson);
-    } catch (e) {
-      _logger.error('sendSceneTouch error: $e', source: 'Execution');
     }
   }
 

@@ -16,7 +16,11 @@ class ScriptProvider extends ChangeNotifier {
   ScriptProvider(this._bridge, this._db);
 
   void _sortScripts() {
-    _scripts.sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    _scripts.sort((a, b) {
+      final pinCompare = (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0);
+      if (pinCompare != 0) return pinCompare;
+      return b.modifiedAt.compareTo(a.modifiedAt);
+    });
   }
 
   Future<void> loadScripts() async {
@@ -63,6 +67,7 @@ class ScriptProvider extends ChangeNotifier {
       );
       await _db.upsertScript(script);
       _scripts.insert(0, script);
+      _sortScripts();
       notifyListeners();
       return true;
     } catch (e) {
@@ -90,7 +95,8 @@ class ScriptProvider extends ChangeNotifier {
       await _db.renameScript(oldName, newName, newName);
       final idx = _scripts.indexWhere((s) => s.name == oldName);
       if (idx >= 0) {
-        _scripts[idx] = _scripts[idx].copyWith(name: newName, path: newName, modifiedAt: DateTime.now());
+        _scripts[idx] = _scripts[idx]
+            .copyWith(name: newName, path: newName, modifiedAt: DateTime.now());
         _sortScripts();
       }
       notifyListeners();
@@ -146,6 +152,7 @@ class ScriptProvider extends ChangeNotifier {
       );
       await _db.upsertScript(script);
       _scripts.insert(0, script);
+      _sortScripts();
       notifyListeners();
       return path;
     } catch (e) {
@@ -158,8 +165,21 @@ class ScriptProvider extends ChangeNotifier {
     await _db.incrementRunCount(name);
     final idx = _scripts.indexWhere((s) => s.name == name);
     if (idx >= 0) {
-      _scripts[idx] = _scripts[idx].copyWith(runCount: _scripts[idx].runCount + 1);
+      _scripts[idx] =
+          _scripts[idx].copyWith(runCount: _scripts[idx].runCount + 1);
       notifyListeners();
     }
+  }
+
+  Future<void> togglePinned(String name) async {
+    final idx = _scripts.indexWhere((s) => s.name == name);
+    if (idx < 0) return;
+
+    final current = _scripts[idx];
+    final updated = current.copyWith(isPinned: !current.isPinned);
+    await _db.upsertScript(updated);
+    _scripts[idx] = updated;
+    _sortScripts();
+    notifyListeners();
   }
 }

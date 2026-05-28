@@ -13,6 +13,8 @@ void main() {
         home: SettingsPage(
           onThemeChanged: (_) {},
           currentThemeMode: ThemeMode.system,
+          onMaterialYouChanged: (_) {},
+          currentMaterialYouEnabled: true,
         ),
       ),
     );
