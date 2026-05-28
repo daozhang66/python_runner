@@ -1,0 +1,9 @@
+{
+  "runtimeFlavor": "debian-python-dev-aarch64",
+  "version": "v1",
+  "url": "https://github.com/daozhang66/python_runner/releases/download/linux-like-v1/debian-python-dev-aarch64-v1.tar.xz",
+  "sha256": "6aff99533bd40baa77f372d93068b6cf01701b0f7f950d4086ead7ed397d80a0",
+  "size": 108478940,
+  "python": "3.11.2",
+  "pip": "23.0.1"
+}
