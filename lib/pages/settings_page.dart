@@ -13,11 +13,15 @@ import '../services/request_override_config.dart';
 class SettingsPage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
   final ThemeMode currentThemeMode;
+  final ValueChanged<bool> onMaterialYouChanged;
+  final bool currentMaterialYouEnabled;
 
   const SettingsPage({
     super.key,
     required this.onThemeChanged,
     required this.currentThemeMode,
+    required this.onMaterialYouChanged,
+    required this.currentMaterialYouEnabled,
   });
 
   @override
@@ -33,8 +37,8 @@ class _SettingsPageState extends State<SettingsPage> {
   final _globalUaController = TextEditingController();
   final _globalHeadersController = TextEditingController();
   final _globalCookieController = TextEditingController();
+  final _githubMirrorController = TextEditingController();
   int _timeout = 60;
-  bool _graphicsEnabled = false;
   bool _netDebugMode = false;
   bool _netAllowInsecure = false;
   bool _overrideEnabled = false;
@@ -63,7 +67,6 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _mirrorController.text = prefs.getString('pypi_index_url') ?? '';
       _timeout = prefs.getInt('execution_timeout') ?? 60;
-      _graphicsEnabled = prefs.getBool('graphics_engine_enabled') ?? true;
       _exportDirController.text = prefs.getString('export_dir') ?? '';
       _workingDirController.text = prefs.getString('working_dir') ?? '';
       _netDebugMode = prefs.getBool('net_debug_mode') ?? false;
@@ -83,6 +86,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _forceProxy = overrideCfg.forceProxy;
       _autoCheckUpdates = autoCheckUpdates;
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
+      _githubMirrorController.text = prefs.getString('github_mirror_prefix') ?? '';
     });
   }
 
@@ -99,6 +103,65 @@ class _SettingsPageState extends State<SettingsPage> {
         const SnackBar(content: Text('镜像源已保存'), duration: Duration(seconds: 1)),
       );
     }
+  }
+
+  Future<void> _saveGithubMirror() async {
+    final prefs = await SharedPreferences.getInstance();
+    var prefix = _githubMirrorController.text.trim();
+    if (prefix.isNotEmpty && !prefix.endsWith('/')) prefix = '$prefix/';
+    _githubMirrorController.text = prefix;
+    if (prefix.isEmpty) {
+      await prefs.remove('github_mirror_prefix');
+    } else {
+      await prefs.setString('github_mirror_prefix', prefix);
+    }
+    setState(() {});
+  }
+
+  void _showGithubMirrorDialog() {
+    final dialogCtrl = TextEditingController(text: _githubMirrorController.text);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('下载加速镜像'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('填写 GitHub 代理前缀，加速 APK 下载', style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: dialogCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'https://ghfast.top/',
+                isDense: true,
+                border: OutlineInputBorder(gapPadding: 0),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '留空则直接使用 GitHub 原始地址',
+              style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              _githubMirrorController.text = dialogCtrl.text;
+              _saveGithubMirror();
+              Navigator.pop(ctx);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveTimeout(int value) async {
@@ -259,85 +322,8 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _showSimpleAboutDialog() async {
-    Map<String, String> appInfo = {};
-    Map<String, String> pythonInfo = {};
-    try {
-      appInfo = await _bridge.getAppInfo();
-    } catch (_) {}
-    try {
-      pythonInfo = await _bridge.getPythonInfo();
-    } catch (_) {}
-    if (!mounted) return;
-
-    final appName = appInfo['appName']?.trim().isNotEmpty == true
-        ? appInfo['appName']!
-        : 'Python Runner';
-    final version = appInfo['version']?.trim().isNotEmpty == true
-        ? appInfo['version']!
-        : '1.3.4';
-    final buildNumber = appInfo['buildNumber']?.trim().isNotEmpty == true
-        ? appInfo['buildNumber']!
-        : '8';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('关于应用'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                appName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '版本 $version ($buildNumber)',
-                style: const TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                '本地 Python 脚本运行环境，支持脚本编辑、运行、终端输入和网络调试。',
-              ),
-              const Divider(height: 20),
-              const Text('Python 环境', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              _infoRow('Python 版本', pythonInfo['pythonVersion'] ?? '获取失败'),
-              _infoRow('库安装目录', pythonInfo['sitePackages'] ?? '获取失败'),
-              _infoRow('Python 路径', pythonInfo['pythonPath'] ?? '获取失败'),
-              const Divider(height: 20),
-              const Text('开发者', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              const Text('道长'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('确定')),
-        ],
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ),
-          Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
+  void _openAboutPage() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const _AboutPage()));
   }
 
   Future<void> _checkForUpdates() async {
@@ -383,15 +369,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               SwitchListTile(
-                secondary: const Icon(Icons.videogame_asset_outlined),
-                title: const Text('图形引擎'),
-                subtitle: const Text('启用 scene 模块（游戏/动画支持）', style: TextStyle(fontSize: 12)),
-                value: _graphicsEnabled,
-                onChanged: (v) async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('graphics_engine_enabled', v);
-                  setState(() => _graphicsEnabled = v);
-                },
+                secondary: const Icon(Icons.color_lens_outlined),
+                title: const Text('Material You'),
+                subtitle: const Text('Android 12+ 跟随系统壁纸动态取色，不支持时使用默认蓝色', style: TextStyle(fontSize: 12)),
+                value: widget.currentMaterialYouEnabled,
+                onChanged: widget.onMaterialYouChanged,
               ),
               SwitchListTile(
                 secondary: const Icon(Icons.bubble_chart),
@@ -979,10 +961,24 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: _setAutoCheckUpdates,
               ),
               ListTile(
+                leading: const Icon(Icons.speed_outlined),
+                title: const Text('下载加速镜像'),
+                subtitle: Text(
+                  _githubMirrorController.text.isEmpty
+                      ? '未设置（点击配置）'
+                      : _githubMirrorController.text,
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _showGithubMirrorDialog,
+              ),
+              ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('关于应用'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: _showSimpleAboutDialog,
+                onTap: _openAboutPage,
               ),
             ],
           ),
@@ -1270,7 +1266,7 @@ class _UserManualPage extends StatelessWidget {
             title: '设置',
             items: const [
               _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
-              _ManualItem(Icons.videogame_asset_outlined, '图形引擎', '开启后支持 scene 模块游戏/动画'),
+              _ManualItem(Icons.color_lens_outlined, 'Material You', 'Android 12+ 可跟随系统壁纸动态取色'),
               _ManualItem(Icons.bubble_chart, '悬浮球', '开启后悬浮球常驻屏幕，支持贴边收起、快捷运行最近脚本、拖拽停止等'),
               _ManualItem(Icons.inventory_2_outlined, 'PyPI 镜像源', 'pip 安装镜像地址，留空用官方源'),
               _ManualItem(Icons.timer_outlined, '执行超时', '脚本最长运行时间（可设为无限制）'),
@@ -1348,3 +1344,191 @@ class _ManualItem {
   final String description;
   const _ManualItem(this.icon, this.label, this.description);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// About Page
+// ═══════════════════════════════════════════════════════════════
+
+class _AboutPage extends StatefulWidget {
+  const _AboutPage();
+  @override
+  State<_AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<_AboutPage> {
+  final _bridge = NativeBridge();
+  String _appVersion = '';
+  String _buildNumber = '';
+  String _pyVersion = '';
+  String _sitePackages = '';
+  String _pythonPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    Map<String, String> appInfo = {};
+    Map<String, String> pyInfo = {};
+    try { appInfo = await _bridge.getAppInfo(); } catch (_) {}
+    try { pyInfo = await _bridge.getPythonInfo(); } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _appVersion = appInfo['version'] ?? '';
+      _buildNumber = appInfo['buildNumber'] ?? '';
+      _pyVersion = pyInfo['pythonVersion'] ?? '';
+      _sitePackages = pyInfo['sitePackages'] ?? '';
+      _pythonPath = pyInfo['pythonPath'] ?? '';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('关于')),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        children: [
+          // ── 标题区 ──
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'Python 运行器',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: c.onSurface),
+                ),
+                if (_appVersion.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'v$_appVersion · build $_buildNumber',
+                    style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  '本地 Python 脚本运行环境',
+                  style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // ── Python 环境 ──
+          _AboutCard(
+            icon: Icons.code_rounded,
+            title: 'Python 环境',
+            children: [
+              if (_pyVersion.isNotEmpty) _AboutItem(label: '版本', value: _pyVersion),
+              if (_sitePackages.isNotEmpty) _AboutItem(label: '安装目录', value: _sitePackages, mono: true),
+              if (_pythonPath.isNotEmpty) _AboutItem(label: '路径', value: _pythonPath, mono: true),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ── 关于 ──
+          _AboutCard(
+            icon: Icons.info_outline_rounded,
+            title: '关于',
+            children: [
+              const _AboutItem(label: '开发者', value: '道长'),
+              _AboutItem(
+                label: 'GitHub',
+                value: 'github.com/daozhang66/python_runner',
+                onTap: () => _bridge.openUrl('https://github.com/daozhang66/python_runner'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ── 技术架构 ──
+          _AboutCard(
+            icon: Icons.architecture_rounded,
+            title: '技术架构',
+            children: [
+              const _AboutItem(label: '框架', value: 'Flutter + Dart · Material 3 · Provider'),
+              const _AboutItem(label: 'Python', value: 'Chaquopy 嵌入式 Python 3.11，内置 40+ 常用库'),
+              const _AboutItem(label: '原生层', value: 'Kotlin · MethodChannel + EventChannel 通信'),
+              const _AboutItem(label: '存储', value: 'SharedPreferences + SQLite + 文件系统'),
+              const _AboutItem(label: '运行要求', value: 'Android 8.0+ · arm64-v8a / armeabi-v7a'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AboutCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+  const _AboutCard({required this.icon, required this.title, required this.children});
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: c.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: c.primary),
+                const SizedBox(width: 8),
+                Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.onSurface)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AboutItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool mono;
+  final VoidCallback? onTap;
+  const _AboutItem({required this.label, required this.value, this.mono = false, this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 70,
+              child: Text(label, style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: c.onSurface,
+                  fontFamily: mono ? 'monospace' : null,
+                ),
+              ),
+            ),
+            if (onTap != null) Icon(Icons.chevron_right, size: 16, color: c.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

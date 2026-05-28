@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'services/native_bridge.dart';
 import 'services/database_service.dart';
 import 'services/app_logger.dart';
@@ -102,6 +103,7 @@ class PythonRunnerApp extends StatefulWidget {
 class _PythonRunnerAppState extends State<PythonRunnerApp>
     with WidgetsBindingObserver {
   ThemeMode _themeMode = ThemeMode.system;
+  bool _materialYouEnabled = true;
 
   @override
   void initState() {
@@ -132,6 +134,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final mode = prefs.getString('theme_mode') ?? 'system';
     setState(() {
       _themeMode = ThemeMode.values.firstWhere((e) => e.name == mode, orElse: () => ThemeMode.system);
+      _materialYouEnabled = prefs.getBool('material_you_enabled') ?? true;
     });
   }
 
@@ -141,101 +144,99 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     setState(() => _themeMode = mode);
   }
 
+  Future<void> _setMaterialYouEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('material_you_enabled', enabled);
+    setState(() => _materialYouEnabled = enabled);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  ThemeData _buildTheme(ColorScheme colorScheme) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.grey.shade200,
+          ),
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        elevation: 0,
+        height: 60,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: appNavigatorKey,
-      title: 'Python运行器',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('zh', 'CN'),
-        Locale('en', 'US'),
-      ],
-      locale: const Locale('zh', 'CN'),
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8),
-          brightness: Brightness.light,
-        ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        final lightScheme = _materialYouEnabled && lightDynamic != null
+            ? lightDynamic
+            : ColorScheme.fromSeed(
+                seedColor: const Color(0xFF1A73E8),
+                brightness: Brightness.light,
+              );
+        final darkScheme = _materialYouEnabled && darkDynamic != null
+            ? darkDynamic
+            : ColorScheme.fromSeed(
+                seedColor: const Color(0xFF1A73E8),
+                brightness: Brightness.dark,
+              );
+        return MaterialApp(
+          navigatorKey: appNavigatorKey,
+          title: 'Python运行器',
+          debugShowCheckedModeBanner: false,
+          themeMode: _themeMode,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('zh', 'CN'),
+            Locale('en', 'US'),
+          ],
+          locale: const Locale('zh', 'CN'),
+          theme: _buildTheme(lightScheme),
+          darkTheme: _buildTheme(darkScheme),
+          home: SplashGate(
+            child: HomePage(
+              onThemeChanged: _setTheme,
+              currentThemeMode: _themeMode,
+              onMaterialYouChanged: _setMaterialYouEnabled,
+              currentMaterialYouEnabled: _materialYouEnabled,
+            ),
           ),
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-          scrolledUnderElevation: 0.5,
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          elevation: 0,
-          height: 60,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8),
-          brightness: Brightness.dark,
-        ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-          scrolledUnderElevation: 0.5,
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          elevation: 0,
-          height: 60,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
-      home: SplashGate(
-        child: HomePage(
-          onThemeChanged: _setTheme,
-          currentThemeMode: _themeMode,
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -393,8 +394,16 @@ class _SplashGateState extends State<SplashGate> with SingleTickerProviderStateM
 class HomePage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
   final ThemeMode currentThemeMode;
+  final ValueChanged<bool> onMaterialYouChanged;
+  final bool currentMaterialYouEnabled;
 
-  const HomePage({super.key, required this.onThemeChanged, required this.currentThemeMode});
+  const HomePage({
+    super.key,
+    required this.onThemeChanged,
+    required this.currentThemeMode,
+    required this.onMaterialYouChanged,
+    required this.currentMaterialYouEnabled,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -450,24 +459,7 @@ class _HomePageState extends State<HomePage> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Python', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SettingsPage(
-                  onThemeChanged: widget.onThemeChanged,
-                  currentThemeMode: widget.currentThemeMode,
-                ),
-                fullscreenDialog: true,
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: null,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         switchInCurve: Curves.easeOutCubic,
@@ -484,7 +476,24 @@ class _HomePageState extends State<HomePage> {
         ),
         child: KeyedSubtree(
           key: ValueKey(_currentIndex),
-          child: [const ScriptListPage(), const NetworkInspectorPage(), const PackageManagerPage()][_currentIndex],
+          child: [
+            ScriptListPage(
+              onSettingsTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SettingsPage(
+                    onThemeChanged: widget.onThemeChanged,
+                    currentThemeMode: widget.currentThemeMode,
+                    onMaterialYouChanged: widget.onMaterialYouChanged,
+                    currentMaterialYouEnabled: widget.currentMaterialYouEnabled,
+                  ),
+                  fullscreenDialog: true,
+                ),
+              ),
+            ),
+            const NetworkInspectorPage(),
+            const PackageManagerPage(),
+          ][_currentIndex],
         ),
       ),
       bottomNavigationBar: NavigationBar(

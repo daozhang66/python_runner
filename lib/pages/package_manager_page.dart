@@ -86,6 +86,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         .toList();
 
     return Scaffold(
+      appBar: AppBar(title: const Text('库管理', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
       body: Column(
         children: [
           // Install input area

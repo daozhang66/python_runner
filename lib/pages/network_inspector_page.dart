@@ -41,6 +41,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     final stats = _computeStats();
 
     return Scaffold(
+      appBar: AppBar(title: const Text('网络请求', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
       body: Column(
         children: [
           // --- Search bar ---
@@ -253,6 +254,9 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
           left: 16, right: 16, top: 16,
@@ -360,6 +364,9 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   void _showExportOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1277,6 +1284,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: '更多',
             position: PopupMenuPosition.under,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             itemBuilder: (_) => [
               const PopupMenuItem<String>(
                 value: 'font',

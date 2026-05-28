@@ -4,6 +4,7 @@ class ScriptFile {
   final DateTime createdAt;
   final DateTime modifiedAt;
   final int runCount;
+  final bool isPinned;
 
   ScriptFile({
     required this.name,
@@ -11,6 +12,7 @@ class ScriptFile {
     required this.createdAt,
     required this.modifiedAt,
     this.runCount = 0,
+    this.isPinned = false,
   });
 
   ScriptFile copyWith({
@@ -19,6 +21,7 @@ class ScriptFile {
     DateTime? createdAt,
     DateTime? modifiedAt,
     int? runCount,
+    bool? isPinned,
   }) {
     return ScriptFile(
       name: name ?? this.name,
@@ -26,6 +29,7 @@ class ScriptFile {
       createdAt: createdAt ?? this.createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
       runCount: runCount ?? this.runCount,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 
@@ -36,6 +40,7 @@ class ScriptFile {
       'createdAt': createdAt.millisecondsSinceEpoch,
       'modifiedAt': modifiedAt.millisecondsSinceEpoch,
       'runCount': runCount,
+      'isPinned': isPinned ? 1 : 0,
     };
   }
 
@@ -46,6 +51,7 @@ class ScriptFile {
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
       modifiedAt: DateTime.fromMillisecondsSinceEpoch(map['modifiedAt'] as int),
       runCount: map['runCount'] as int? ?? 0,
+      isPinned: (map['isPinned'] as int? ?? 0) == 1,
     );
   }
 }
