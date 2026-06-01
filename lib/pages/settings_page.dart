@@ -1706,6 +1706,7 @@ class _AboutPage extends StatefulWidget {
 
 class _AboutPageState extends State<_AboutPage> {
   final _bridge = NativeBridge();
+  String _runtimeBackend = RuntimeManager.chaquopyBackendId;
   String _appVersion = '';
   String _buildNumber = '';
   String _pyVersion = '';
@@ -1719,12 +1720,28 @@ class _AboutPageState extends State<_AboutPage> {
   }
 
   Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final runtimeBackend = RuntimeManager.normalizePreferredBackendId(
+      prefs.getString(RuntimeManager.prefsKey),
+    );
     Map<String, String> appInfo = {};
     Map<String, String> pyInfo = {};
     try { appInfo = await _bridge.getAppInfo(); } catch (_) {}
-    try { pyInfo = await _bridge.getPythonInfo(); } catch (_) {}
+    if (runtimeBackend == RuntimeManager.linuxLikeBackendId) {
+      try {
+        final linuxInfo = await _bridge.getLinuxLikeRuntimeInfo();
+        pyInfo = {
+          'pythonVersion': linuxInfo['runtimeFlavor'] ?? 'Linux-like',
+          'sitePackages': linuxInfo['userSitePackagesDir'] ?? '',
+          'pythonPath': linuxInfo['pythonPath'] ?? '',
+        };
+      } catch (_) {}
+    } else {
+      try { pyInfo = await _bridge.getPythonInfo(); } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
+      _runtimeBackend = runtimeBackend;
       _appVersion = appInfo['version'] ?? '';
       _buildNumber = appInfo['buildNumber'] ?? '';
       _pyVersion = pyInfo['pythonVersion'] ?? '';
@@ -1770,6 +1787,12 @@ class _AboutPageState extends State<_AboutPage> {
             icon: Icons.code_rounded,
             title: 'Python 环境',
             children: [
+              _AboutItem(
+                label: '引擎',
+                value: _runtimeBackend == RuntimeManager.linuxLikeBackendId
+                    ? 'Linux-like'
+                    : 'Chaquopy',
+              ),
               if (_pyVersion.isNotEmpty) _AboutItem(label: '版本', value: _pyVersion),
               if (_sitePackages.isNotEmpty) _AboutItem(label: '安装目录', value: _sitePackages, mono: true),
               if (_pythonPath.isNotEmpty) _AboutItem(label: '路径', value: _pythonPath, mono: true),
