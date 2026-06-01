@@ -1,43 +1,53 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/package_info.dart';
+import '../runtime/runtime_manager.dart';
+import '../runtime/runtime_package.dart';
 import '../services/native_bridge.dart';
 
 class PackageProvider extends ChangeNotifier {
   final NativeBridge _bridge;
+  RuntimeManager _runtimeManager;
+  final bool _runtimeManagerLocked;
 
   List<PackageInfo> _packages = [];
   bool _installing = false;
   final List<String> _installLog = [];
-  StreamSubscription? _installSub;
+  StreamSubscription<PackageInstallProgress>? _installSub;
 
   List<PackageInfo> get packages => _packages;
   bool get installing => _installing;
   List<String> get installLog => List.unmodifiable(_installLog);
+  String get activeBackendId => _runtimeManager.activeBackendId;
 
-  PackageProvider(this._bridge) {
+  PackageProvider(NativeBridge bridge, {RuntimeManager? runtimeManager})
+      : _bridge = bridge,
+        _runtimeManager = runtimeManager ??
+            RuntimeManager.fromPreferredBackend(
+              bridge,
+              RuntimeManager.chaquopyBackendId,
+            ),
+        _runtimeManagerLocked = runtimeManager != null {
     _listenInstallProgress();
   }
 
   void _listenInstallProgress() {
-    _installSub = _bridge.installProgressStream.listen((data) {
-      final status = data['status'] as String? ?? '';
-      final message = data['message'] as String? ?? '';
-      _installLog.add(message);
+    _installSub?.cancel();
+    _installSub = _runtimeManager.packageInstallProgressStream.listen((data) {
+      final status = data.status;
+      final message = data.message;
+      if (message.isNotEmpty) {
+        _installLog.add(message);
+      }
 
       if (status == 'success') {
         _installing = false;
         loadPackages();
-        // Auto-clear install log after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
-          clearInstallLog();
-        });
+        _scheduleInstallLogClear();
       } else if (status == 'error') {
         _installing = false;
-        // Auto-clear install log after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
-          clearInstallLog();
-        });
+        _scheduleInstallLogClear();
       }
 
       notifyListeners();
@@ -46,16 +56,34 @@ class PackageProvider extends ChangeNotifier {
     });
   }
 
-  static String _norm(String n) => n.toLowerCase().replaceAll('-', '_');
+  Future<void> _syncRuntimeManagerFromSettings() async {
+    if (_runtimeManagerLocked) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final backendId = RuntimeManager.resolveBackendId(
+        RuntimeManager.normalizePreferredBackendId(
+          prefs.getString(RuntimeManager.prefsKey),
+        ),
+      );
+      if (backendId == _runtimeManager.activeBackendId) return;
+      _runtimeManager = RuntimeManager.fromPreferredBackend(_bridge, backendId);
+      _listenInstallProgress();
+    } catch (e) {
+      debugPrint('sync package runtime backend error: $e');
+    }
+  }
 
   Future<void> loadPackages() async {
     try {
-      final result = await _bridge.listInstalledPackages();
-      _packages = result.map((m) => PackageInfo(
-        name: m['name'] ?? '',
-        version: m['version'] ?? '',
-        isUserPackage: m['source'] == 'user',
-      )).toList();
+      await _syncRuntimeManagerFromSettings();
+      final result = await _runtimeManager.listPackages();
+      _packages = result
+          .map((item) => PackageInfo(
+                name: item.name,
+                version: item.version,
+                isUserPackage: item.isUserPackage,
+              ))
+          .toList();
       _packages.sort((a, b) => a.name.compareTo(b.name));
       notifyListeners();
     } catch (e) {
@@ -63,14 +91,41 @@ class PackageProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> installPackage(String name, {String? version, String? indexUrl}) async {
+  Future<void> installPackage(
+    String name, {
+    String? version,
+    String? indexUrl,
+  }) async {
+    await _syncRuntimeManagerFromSettings();
     _installing = true;
     _installLog.clear();
-    _installLog.add('Installing $name${version != null ? "==$version" : ""}...');
+    _installLog
+        .add('Installing $name${version != null ? "==$version" : ""}...');
     notifyListeners();
 
     try {
-      await _bridge.installPackage(name, version: version, indexUrl: indexUrl);
+      final result = await _runtimeManager.installPackage(
+        PackageInstallRequest(
+          packageName: name,
+          version: version,
+          indexUrl: indexUrl,
+        ),
+      );
+      if (_installing) {
+        _installing = false;
+        _installLog.add(
+          result.message.isNotEmpty
+              ? result.message
+              : result.success
+                  ? '安装成功: $name'
+                  : '安装失败: $name',
+        );
+        if (result.success) {
+          await loadPackages();
+        }
+        _scheduleInstallLogClear();
+        notifyListeners();
+      }
     } catch (e) {
       _installing = false;
       _installLog.add('Error: $e');
@@ -78,26 +133,41 @@ class PackageProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> uninstallPackage(String name) async {
+  Future<PackageUninstallResult> uninstallPackage(String name) async {
+    await _syncRuntimeManagerFromSettings();
     // Immediately remove from local list for responsive UI
     _packages.removeWhere((p) => p.name == name);
     notifyListeners();
 
     try {
-      await _bridge.uninstallPackage(name);
+      final result = await _runtimeManager.uninstallPackage(name);
+      if (!result.success) {
+        await loadPackages();
+        return result;
+      }
       // Native uninstall done, no need to reload — already removed from list
-      return true;
+      await loadPackages();
+      return result;
     } catch (e) {
       debugPrint('uninstallPackage error: $e');
       // Restore actual state on error
       await loadPackages();
-      return false;
+      return PackageUninstallResult(
+        success: false,
+        message: e.toString(),
+      );
     }
   }
 
   void clearInstallLog() {
     _installLog.clear();
     notifyListeners();
+  }
+
+  void _scheduleInstallLogClear() {
+    Future.delayed(const Duration(seconds: 5), () {
+      clearInstallLog();
+    });
   }
 
   @override

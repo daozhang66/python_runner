@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +41,7 @@ class TerminalViewState extends State<TerminalView> {
   final _stdinFocusNode = FocusNode();
   bool _autoScroll = true;
   double _fontSize = 10.0;
+  double? _scaleStartFontSize;
   bool _showLineNumbers = false;
   bool _searchVisible = false;
   String _searchQuery = '';
@@ -75,6 +76,29 @@ class TerminalViewState extends State<TerminalView> {
     await prefs.setDouble(_fontSizePrefsKey, _fontSize);
   }
 
+  void _handleScaleStart(ScaleStartDetails details) {
+    if (details.pointerCount >= 2) {
+      _scaleStartFontSize = _fontSize;
+    }
+  }
+
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    final startSize = _scaleStartFontSize;
+    if (startSize == null || details.pointerCount < 2) return;
+    final nextSize = (startSize * details.scale)
+        .clamp(_fontSizeMin, _fontSizeMax)
+        .toDouble();
+    if ((nextSize - _fontSize).abs() < 0.1) return;
+    setState(() => _fontSize = nextSize);
+  }
+
+  void _handleScaleEnd(ScaleEndDetails details) {
+    if (_scaleStartFontSize != null) {
+      _scaleStartFontSize = null;
+      unawaited(_persistFontSize());
+    }
+  }
+
   void _showFontSizeSlider() {
     double tempSize = _fontSize;
     showDialog(
@@ -85,7 +109,9 @@ class TerminalViewState extends State<TerminalView> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('${tempSize.round()} px',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -102,7 +128,9 @@ class TerminalViewState extends State<TerminalView> {
                       },
                     ),
                   ),
-                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const Text('A',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 ],
               ),
             ],
@@ -138,7 +166,9 @@ class TerminalViewState extends State<TerminalView> {
     _lastLogCount = widget.logs.length;
     if (widget.waitingForInput) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _stdinFocusNode.canRequestFocus && !_stdinFocusNode.hasFocus) {
+        if (mounted &&
+            _stdinFocusNode.canRequestFocus &&
+            !_stdinFocusNode.hasFocus) {
           _stdinFocusNode.requestFocus();
         }
       });
@@ -161,7 +191,10 @@ class TerminalViewState extends State<TerminalView> {
     });
   }
 
-  void forceAutoScroll() { _autoScroll = true; _scrollToBottom(); }
+  void forceAutoScroll() {
+    _autoScroll = true;
+    _scrollToBottom();
+  }
 
   void _submitStdin() {
     if (widget.onStdin == null) return;
@@ -170,7 +203,8 @@ class TerminalViewState extends State<TerminalView> {
     widget.onStdin!(input);
     _autoScroll = true;
     _scrollToBottom();
-    if (mounted && _stdinFocusNode.canRequestFocus) _stdinFocusNode.requestFocus();
+    if (mounted && _stdinFocusNode.canRequestFocus)
+      _stdinFocusNode.requestFocus();
   }
 
   // --- Colors ---
@@ -197,11 +231,14 @@ class TerminalViewState extends State<TerminalView> {
   List<LogEntry> _filteredLogs() {
     var result = widget.logs;
     if (_filterErrors) {
-      result = result.where((l) => l.type == LogType.stderr || l.type == LogType.error).toList();
+      result = result
+          .where((l) => l.type == LogType.stderr || l.type == LogType.error)
+          .toList();
     }
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      result = result.where((l) => l.content.toLowerCase().contains(q)).toList();
+      result =
+          result.where((l) => l.content.toLowerCase().contains(q)).toList();
     }
     return result;
   }
@@ -249,7 +286,8 @@ class TerminalViewState extends State<TerminalView> {
 
       // Newline between lines (but not after the last one)
       if (i < widget.logs.length - 1) {
-        all.add(TextSpan(text: '\n', style: TextStyle(fontSize: _fontSize, height: 1.5)));
+        all.add(TextSpan(
+            text: '\n', style: TextStyle(fontSize: _fontSize, height: 1.5)));
       }
     }
     return all;
@@ -297,7 +335,9 @@ class TerminalViewState extends State<TerminalView> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Container(width: 36, height: 4,
+              child: Container(
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
                   color: colors.onSurfaceVariant.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
@@ -306,11 +346,16 @@ class TerminalViewState extends State<TerminalView> {
             ),
             if (log.content.length > 60)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(
                   AnsiParser.strip(log.content).substring(0, 60) + '...',
-                  style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: colors.onSurfaceVariant),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ListTile(
@@ -319,7 +364,8 @@ class TerminalViewState extends State<TerminalView> {
               title: const Text('复制此行'),
               onTap: () {
                 Navigator.pop(ctx);
-                Clipboard.setData(ClipboardData(text: AnsiParser.strip(log.content)));
+                Clipboard.setData(
+                    ClipboardData(text: AnsiParser.strip(log.content)));
                 _showToast('已复制');
               },
             ),
@@ -328,20 +374,29 @@ class TerminalViewState extends State<TerminalView> {
                 dense: true,
                 leading: const Icon(Icons.content_copy, size: 20),
                 title: Text('复制第 1-${index + 1} 行'),
-                onTap: () { Navigator.pop(ctx); _copyRange(0, index); },
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _copyRange(0, index);
+                },
               ),
             if (index < widget.logs.length - 1)
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.content_copy, size: 20),
                 title: Text('复制第 ${index + 1}-${widget.logs.length} 行'),
-                onTap: () { Navigator.pop(ctx); _copyRange(index, widget.logs.length - 1); },
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _copyRange(index, widget.logs.length - 1);
+                },
               ),
             ListTile(
               dense: true,
               leading: const Icon(Icons.select_all, size: 20),
               title: Text('复制全部（${widget.logs.length} 行）'),
-              onTap: () { Navigator.pop(ctx); _copyAll(); },
+              onTap: () {
+                Navigator.pop(ctx);
+                _copyAll();
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -352,7 +407,8 @@ class TerminalViewState extends State<TerminalView> {
 
   bool _looksLikeJson(String text) {
     final s = AnsiParser.strip(text).trim();
-    return (s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'));
+    return (s.startsWith('{') && s.endsWith('}')) ||
+        (s.startsWith('[') && s.endsWith(']'));
   }
 
   // --- Build ---
@@ -364,139 +420,172 @@ class TerminalViewState extends State<TerminalView> {
     final logs = widget.logs;
     final displayLogs = _filteredLogs();
     final bgColor = isDark ? const Color(0xFF0D1117) : const Color(0xFFFAFAFA);
-    final inputBarColor = isDark ? const Color(0xFF161B22) : const Color(0xFFF0F0F0);
-    final barColor = isDark ? const Color(0xFF161B22) : colors.surfaceContainerHighest;
+    final inputBarColor =
+        isDark ? const Color(0xFF161B22) : const Color(0xFFF0F0F0);
+    final barColor =
+        isDark ? const Color(0xFF161B22) : colors.surfaceContainerHighest;
 
-    return Column(
-      children: [
-        // Toolbar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          decoration: BoxDecoration(
-            color: barColor,
-            border: Border(bottom: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.3))),
-          ),
-          child: Row(
-            children: [
-              if (widget.showLineNumberToggle)
-                IconButton(
-                  icon: Icon(Icons.format_list_numbered,
-                      size: 18, color: _showLineNumbers ? colors.primary : colors.onSurfaceVariant),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _showLineNumbers = !_showLineNumbers),
-                  tooltip: _showLineNumbers ? '隐藏行号' : '显示行号',
-                ),
-              IconButton(
-                icon: Icon(Icons.search, size: 18,
-                    color: _searchVisible || _filterErrors ? colors.primary : colors.onSurfaceVariant),
-                visualDensity: VisualDensity.compact,
-                onPressed: () => setState(() {
-                  _searchVisible = !_searchVisible;
-                  if (!_searchVisible) { _searchQuery = ''; _searchController.clear(); }
-                }),
-                tooltip: '搜索',
-              ),
-              if (_filterErrors)
-                IconButton(
-                  icon: Icon(Icons.error_outline, size: 18, color: colors.error),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _filterErrors = false),
-                  tooltip: '显示全部',
-                ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.format_size, size: 18),
-                visualDensity: VisualDensity.compact,
-                onPressed: _showFontSizeSlider,
-                tooltip: '字体大小',
-              ),
-              if (logs.isNotEmpty)
-                TextButton.icon(
-                  onPressed: _copyAll,
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('全部复制', style: TextStyle(fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
-              if (widget.onClear != null && logs.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: widget.onClear,
-                  tooltip: '清空',
-                ),
-            ],
-          ),
-        ),
-
-        // Search bar
-        if (_searchVisible)
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onScaleStart: _handleScaleStart,
+      onScaleUpdate: _handleScaleUpdate,
+      onScaleEnd: _handleScaleEnd,
+      child: Column(
+        children: [
+          // Toolbar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            color: barColor,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: barColor,
+              border: Border(
+                  bottom: BorderSide(
+                      color: colors.outlineVariant.withValues(alpha: 0.3))),
+            ),
             child: Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      hintText: '搜索日志...',
-                      border: InputBorder.none, isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    ),
-                    onChanged: (v) => setState(() => _searchQuery = v),
+                if (widget.showLineNumberToggle)
+                  IconButton(
+                    icon: Icon(Icons.format_list_numbered,
+                        size: 18,
+                        color: _showLineNumbers
+                            ? colors.primary
+                            : colors.onSurfaceVariant),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        setState(() => _showLineNumbers = !_showLineNumbers),
+                    tooltip: _showLineNumbers ? '隐藏行号' : '显示行号',
                   ),
-                ),
                 IconButton(
-                  icon: Icon(Icons.error_outline, size: 18,
-                      color: _filterErrors ? colors.error : colors.onSurfaceVariant),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _filterErrors = !_filterErrors),
-                  tooltip: _filterErrors ? '显示全部' : '仅看错误',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: Icon(Icons.search,
+                      size: 18,
+                      color: _searchVisible || _filterErrors
+                          ? colors.primary
+                          : colors.onSurfaceVariant),
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() {
-                    _searchVisible = false; _searchQuery = ''; _searchController.clear();
+                    _searchVisible = !_searchVisible;
+                    if (!_searchVisible) {
+                      _searchQuery = '';
+                      _searchController.clear();
+                    }
                   }),
-                  tooltip: '关闭搜索',
+                  tooltip: '搜索',
                 ),
+                if (_filterErrors)
+                  IconButton(
+                    icon: Icon(Icons.error_outline,
+                        size: 18, color: colors.error),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _filterErrors = false),
+                    tooltip: '显示全部',
+                  ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.format_size, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _showFontSizeSlider,
+                  tooltip: '字体大小',
+                ),
+                if (logs.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _copyAll,
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('全部复制', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                if (widget.onClear != null && logs.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: widget.onClear,
+                    tooltip: '清空',
+                  ),
               ],
             ),
           ),
 
-        // Terminal output —single SelectableText for multi-line drag select
-        Expanded(
-          child: Container(
+          // Search bar
+          if (_searchVisible)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: barColor,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        hintText: '搜索日志...',
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                      ),
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.error_outline,
+                        size: 18,
+                        color: _filterErrors
+                            ? colors.error
+                            : colors.onSurfaceVariant),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        setState(() => _filterErrors = !_filterErrors),
+                    tooltip: _filterErrors ? '显示全部' : '仅看错误',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() {
+                      _searchVisible = false;
+                      _searchQuery = '';
+                      _searchController.clear();
+                    }),
+                    tooltip: '关闭搜索',
+                  ),
+                ],
+              ),
+            ),
+
+          // Terminal output —single SelectableText for multi-line drag select
+          Expanded(
+            child: Container(
               color: bgColor,
               child: displayLogs.isEmpty
                   ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          widget.emptyIcon ?? (widget.isRunning ? Icons.terminal : Icons.code_off),
-                          size: 48,
-                          color: isDark ? Colors.white12 : Colors.black12,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          (_searchQuery.isNotEmpty || _filterErrors)
-                              ? '无匹配输出'
-                              : (widget.emptyMessage ?? (widget.isRunning ? '等待输出...' : '暂无输出')),
-
-                          style: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  )
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            widget.emptyIcon ??
+                                (widget.isRunning
+                                    ? Icons.terminal
+                                    : Icons.code_off),
+                            size: 48,
+                            color: isDark ? Colors.white12 : Colors.black12,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            (_searchQuery.isNotEmpty || _filterErrors)
+                                ? '无匹配输出'
+                                : (widget.emptyMessage ??
+                                    (widget.isRunning ? '等待输出...' : '暂无输出')),
+                            style: TextStyle(
+                                color: isDark ? Colors.white24 : Colors.black26,
+                                fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    )
                   : Scrollbar(
                       controller: _scrollController,
                       thumbVisibility: true,
@@ -509,116 +598,134 @@ class TerminalViewState extends State<TerminalView> {
                                 ? MediaQuery.sizeOf(context).width - 20
                                 : MediaQuery.sizeOf(context).width,
                           ),
-                          child: SelectionArea(
-                            child: Text.rich(
-                              TextSpan(children: _buildAllSpans(colors)),
-                              softWrap: true,
-                            ),
+                          child: SelectableText.rich(
+                            TextSpan(children: _buildAllSpans(colors)),
                           ),
                         ),
                       ),
                     ),
-          ),
-        ),
-
-        // Scroll-to-bottom hint
-        if (!_autoScroll && displayLogs.isNotEmpty)
-          GestureDetector(
-            onTap: () { setState(() => _autoScroll = true); _scrollToBottom(); },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              color: colors.primary.withValues(alpha: 0.2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.arrow_downward, size: 14, color: colors.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text('有新输出，点击跳转到底部',
-                      style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
-                ],
-              ),
             ),
           ),
 
-        // Stdin input area
-        if (widget.waitingForInput || widget.isRunning)
-          Container(
-            decoration: BoxDecoration(
-              color: inputBarColor,
-              border: Border(
-                top: BorderSide(
-                  color: widget.waitingForInput
-                      ? colors.primary.withValues(alpha: 0.6)
-                      : colors.outlineVariant.withValues(alpha: 0.3),
-                  width: widget.waitingForInput ? 2 : 1,
-                ),
-              ),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+          // Scroll-to-bottom hint
+          if (!_autoScroll && displayLogs.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                setState(() => _autoScroll = true);
+                _scrollToBottom();
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                color: colors.primary.withValues(alpha: 0.2),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: widget.waitingForInput
-                            ? colors.primary.withValues(alpha: 0.15)
-                            : colors.onSurface.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text('>',
+                    Icon(Icons.arrow_downward,
+                        size: 14, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text('有新输出，点击跳转到底部',
                         style: TextStyle(
-                          fontFamily: 'monospace', fontSize: 16, fontWeight: FontWeight.bold,
-                          color: widget.waitingForInput
-                              ? colors.primary
-                              : colors.onSurface.withValues(alpha: 0.2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _stdinController,
-                        focusNode: _stdinFocusNode,
-                        enabled: widget.waitingForInput,
-                        style: TextStyle(
-                          fontFamily: 'monospace', fontSize: 14,
-                          color: isDark ? Colors.white : colors.onSurface,
-                        ),
-                        cursorColor: colors.primary,
-                        decoration: InputDecoration(
-                          hintText: widget.waitingForInput ? '输入内容...' : '等待脚本请求输入...',
-                          hintStyle: TextStyle(
-                            color: isDark ? Colors.white30 : colors.onSurfaceVariant.withValues(alpha: 0.4),
-                            fontSize: 13,
-                          ),
-                          border: InputBorder.none, isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                        ),
-                        onSubmitted: widget.waitingForInput ? (_) => _submitStdin() : null,
-                      ),
-                    ),
-                    if (widget.waitingForInput)
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _submitStdin,
-                          borderRadius: BorderRadius.circular(20),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Icon(Icons.send_rounded, size: 20, color: colors.primary),
-                          ),
-                        ),
-                      ),
+                            color: colors.onSurfaceVariant, fontSize: 12)),
                   ],
                 ),
               ),
             ),
-          ),
-      ],
+
+          // Stdin input area
+          if (widget.waitingForInput || widget.isRunning)
+            Container(
+              decoration: BoxDecoration(
+                color: inputBarColor,
+                border: Border(
+                  top: BorderSide(
+                    color: widget.waitingForInput
+                        ? colors.primary.withValues(alpha: 0.6)
+                        : colors.outlineVariant.withValues(alpha: 0.3),
+                    width: widget.waitingForInput ? 2 : 1,
+                  ),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: widget.waitingForInput
+                              ? colors.primary.withValues(alpha: 0.15)
+                              : colors.onSurface.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '>',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: widget.waitingForInput
+                                ? colors.primary
+                                : colors.onSurface.withValues(alpha: 0.2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _stdinController,
+                          focusNode: _stdinFocusNode,
+                          enabled: widget.waitingForInput,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                            color: isDark ? Colors.white : colors.onSurface,
+                          ),
+                          cursorColor: colors.primary,
+                          decoration: InputDecoration(
+                            hintText: widget.waitingForInput
+                                ? '输入内容...'
+                                : '等待脚本请求输入...',
+                            hintStyle: TextStyle(
+                              color: isDark
+                                  ? Colors.white30
+                                  : colors.onSurfaceVariant
+                                      .withValues(alpha: 0.4),
+                              fontSize: 13,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 8),
+                          ),
+                          onSubmitted: widget.waitingForInput
+                              ? (_) => _submitStdin()
+                              : null,
+                        ),
+                      ),
+                      if (widget.waitingForInput)
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _submitStdin,
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(Icons.send_rounded,
+                                  size: 20, color: colors.primary),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -633,6 +740,3 @@ class TerminalViewState extends State<TerminalView> {
     super.dispose();
   }
 }
-
-
-

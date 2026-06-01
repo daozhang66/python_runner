@@ -89,8 +89,9 @@ class NativeBridge {
     });
   }
 
-  Future<void> uninstallPackage(String packageName) async {
-    await _invoke('uninstallPackage', {'packageName': packageName});
+  Future<Map<String, dynamic>> uninstallPackage(String packageName) async {
+    final result = await _invoke('uninstallPackage', {'packageName': packageName});
+    return _dynamicMap(result);
   }
 
   Future<List<Map<String, String>>> listInstalledPackages() async {
@@ -122,14 +123,74 @@ class NativeBridge {
 
   Future<Map<String, String>> getPythonInfo() async {
     final result = await _invoke('getPythonInfo', {});
-    final map = result as Map;
-    return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    return _stringMap(result);
   }
 
   Future<Map<String, String>> getAppInfo() async {
     final result = await _invoke('getAppInfo', {});
-    final map = result as Map;
-    return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    return _stringMap(result);
+  }
+
+  Future<Map<String, String>> getLinuxLikeRuntimeInfo() async {
+    final result = await _invoke('getLinuxLikeRuntimeInfo', {});
+    return _stringMap(result);
+  }
+
+  Future<Map<String, String>> prepareLinuxLikeRuntime() async {
+    final result = await _invoke('prepareLinuxLikeRuntime', {});
+    return _stringMap(result);
+  }
+
+  Future<Map<String, String>> installLinuxLikeRuntime({
+    String? manifestUrl,
+  }) async {
+    final result = await _invoke('installLinuxLikeRuntime', {
+      'manifestUrl': manifestUrl,
+    });
+    return _stringMap(result);
+  }
+
+  Future<void> executeLinuxLikeScript(String name, String executionId,
+      {String? workingDir,
+      Map<String, String>? environment,
+      int? timeoutSeconds}) async {
+    await _invoke('executeLinuxLikeScript', {
+      'name': name,
+      'executionId': executionId,
+      'workingDir': workingDir,
+      'environment': environment,
+      'timeoutSeconds': timeoutSeconds,
+    });
+  }
+
+  Future<void> sendLinuxLikeStdin(String input) async {
+    await _invoke('sendLinuxLikeStdin', {'input': input});
+  }
+
+  Future<void> stopLinuxLikeExecution() async {
+    await _invoke('stopLinuxLikeExecution', {});
+  }
+
+  Future<void> installLinuxLikePackage(String packageName,
+      {String? version, String? indexUrl}) async {
+    await _invoke('installLinuxLikePackage', {
+      'packageName': packageName,
+      'version': version,
+      'indexUrl': indexUrl,
+    });
+  }
+
+  Future<Map<String, dynamic>> uninstallLinuxLikePackage(String packageName) async {
+    final result = await _invoke('uninstallLinuxLikePackage', {'packageName': packageName});
+    return _dynamicMap(result);
+  }
+
+  Future<List<Map<String, String>>> listLinuxLikePackages() async {
+    final result = await _invoke('listLinuxLikePackages', {});
+    return (result as List).map((e) {
+      final map = e as Map;
+      return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }).toList();
   }
 
   Future<void> openUrl(String url) async {
@@ -172,6 +233,16 @@ class NativeBridge {
       'fileName': fileName,
     });
     return result as String;
+  }
+
+  Map<String, String> _stringMap(dynamic result) {
+    final map = result as Map;
+    return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+  }
+
+  Map<String, dynamic> _dynamicMap(dynamic result) {
+    final map = result as Map;
+    return map.map((k, v) => MapEntry(k.toString(), v));
   }
 
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {

@@ -1,6 +1,8 @@
 import sys
 import os
 import io
+import json
+import re
 import traceback
 import threading
 import queue as _queue_mod
@@ -523,6 +525,12 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
     os.chdir(workspace)
     os.environ["HOME"] = workspace
 
+    # Add scripts directory to sys.path so user libraries can be imported
+    if script_file_path:
+        _scripts_dir = os.path.dirname(os.path.abspath(script_file_path))
+        if _scripts_dir not in sys.path:
+            sys.path.insert(0, _scripts_dir)
+
     # Drain any stale stdin/output from a previous run
     while not _stdin_queue.empty():
         try:
@@ -760,6 +768,8 @@ def install_package(args):
 
     full_args = list(args) + ["--target", site_dir]
     pip_result = pip.main(full_args)
+    if pip_result != 0:
+        return pip_result
 
     # Record which dist-infos were added by this install
     after = _snap()
@@ -768,7 +778,7 @@ def install_package(args):
 
     _DEPS_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/install_deps.json')
     _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
-    if pkg_name and new_entries:
+    if pkg_name and pip_result == 0 and new_entries:
         try:
             deps = {}
             if os.path.exists(_DEPS_FILE):
@@ -780,7 +790,7 @@ def install_package(args):
         except Exception:
             pass
     # Record user-initiated install with version
-    if pkg_name:
+    if pkg_name and pip_result == 0:
         try:
             user_pkgs = {}
             if os.path.exists(_USER_FILE):
@@ -873,56 +883,61 @@ def verify_package(package_name):
         }
 
 
-def uninstall_package(package_name):
-    """Uninstall a package by removing its files from site-packages and clearing all caches.
-    Works reliably for both build-time and runtime packages."""
-    site_dir = _ensure_site_packages()
-    import shutil
+def _normalize_package_name(name):
+    return re.sub(r"[-_.]+", "_", (name or "").strip().lower())
+
+
+def _load_user_package_map():
+    user_file = os.path.join(
+        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        "chaquopy/user_packages.json",
+    )
+    if not os.path.exists(user_file):
+        return {}
+    try:
+        with open(user_file) as f:
+            data = json.load(f)
+        return {
+            _normalize_package_name(name): str(version or "")
+            for name, version in data.items()
+        }
+    except Exception:
+        return {}
+
+
+def _save_user_package_map(user_pkgs):
+    user_file = os.path.join(
+        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        "chaquopy/user_packages.json",
+    )
+    os.makedirs(os.path.dirname(user_file), exist_ok=True)
+    with open(user_file, "w") as f:
+        json.dump(user_pkgs, f)
+
+
+def _iter_site_distributions(site_dir):
+    import importlib.metadata
+
+    try:
+        return list(importlib.metadata.distributions(path=[site_dir]))
+    except TypeError:
+        return list(importlib.metadata.distributions())
+
+
+def _extract_requirement_name(requirement):
+    if not requirement:
+        return ""
+    head = requirement.split(";", 1)[0].strip()
+    if not head:
+        return ""
+    match = re.match(r"[A-Za-z0-9_.-]+", head)
+    return _normalize_package_name(match.group(0)) if match else ""
+
+
+def _clear_package_import_state(pkg_lower):
     import importlib
     import sys
 
-    pkg_lower = package_name.lower().replace("-", "_")
-    removed = False
-
-    if not os.path.exists(site_dir):
-        return False
-
-    # 1. 删除匹配的文件和目录
-    for entry in os.listdir(site_dir):
-        entry_lower = entry.lower().replace("-", "_")
-        is_match = (
-            entry_lower == pkg_lower
-            or entry_lower == pkg_lower + ".py"
-            or (entry_lower.startswith(pkg_lower + "-")
-                and (
-                    entry_lower.endswith(".dist-info")
-                    or entry_lower.endswith(".data")
-                    or entry_lower.endswith(".egg-info")
-                ))
-        )
-        if is_match:
-            path = os.path.join(site_dir, entry)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.remove(path)
-            removed = True
-
-    # 2. 再次扫描更宽松的模式，确保无残留
-    if os.path.exists(site_dir):
-        for entry in os.listdir(site_dir):
-            entry_lower = entry.lower().replace("-", "_")
-            if (entry_lower.startswith(pkg_lower + "-") or entry_lower.startswith(pkg_lower + ".")) and (
-                entry.endswith(".dist-info") or entry.endswith(".egg-info") or entry.endswith(".data")
-            ):
-                path = os.path.join(site_dir, entry)
-                if os.path.isdir(path):
-                    shutil.rmtree(path)
-                else:
-                    os.remove(path)
-                removed = True
-
-    # 3. 清理所有相关的 sys.modules 条目
     modules_to_remove = [
         key for key in list(sys.modules.keys())
         if key == pkg_lower or key.startswith(pkg_lower + ".")
@@ -930,69 +945,170 @@ def uninstall_package(package_name):
     for key in modules_to_remove:
         del sys.modules[key]
 
-    # 4. 清理 importlib 缓存
     importlib.invalidate_caches()
 
-    # 5. 强制重建 pkg_resources.working_set（如果它在缓存中）
     try:
         import pkg_resources
         pkg_resources._initialize_master_working_set()
-        # 清理 working_set 中可能的残留
-        if hasattr(pkg_resources, 'working_set'):
-            pkg_resources.working_set.entries = [e for e in pkg_resources.working_set.entries
-                                                 if not (hasattr(e, 'name') and e.name.lower().replace('-', '_') == pkg_lower)]
     except Exception:
         pass
 
-    # Remove from user_packages record
-    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
-    try:
-        import json as _json
-        if os.path.exists(_USER_FILE):
-            with open(_USER_FILE) as f:
-                user_pkgs = _json.load(f)
-            user_pkgs.pop(pkg_lower, None)
-            with open(_USER_FILE, 'w') as f:
-                _json.dump(user_pkgs, f)
-    except Exception:
-        pass
 
-    # Also remove dependency dist-infos recorded during install
-    import json
-    _DEPS_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/install_deps.json')
-    if os.path.exists(_DEPS_FILE):
-        try:
-            with open(_DEPS_FILE) as f:
-                deps = json.load(f)
-            if pkg_lower in deps:
-                import shutil as _shutil
-                for entry in deps[pkg_lower]:
-                    path = os.path.join(site_dir, entry)
-                    if os.path.isdir(path):
-                        _shutil.rmtree(path, ignore_errors=True)
-                    elif os.path.exists(path):
-                        os.remove(path)
-                del deps[pkg_lower]
-                with open(_DEPS_FILE, 'w') as f:
-                    json.dump(deps, f)
-        except Exception:
-            pass
+def _remove_package_files(site_dir, package_name):
+    import shutil
 
-    # Record uninstalled package to exclusion file (survives metadata cache)
-    _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
-    try:
-        existing = set()
-        if os.path.exists(_UNINSTALLED_FILE):
-            with open(_UNINSTALLED_FILE) as f:
-                existing = set(l.strip() for l in f if l.strip())
-        existing.add(pkg_lower)
-        with open(_UNINSTALLED_FILE, 'w') as f:
-            f.write('\n'.join(sorted(existing)) + '\n')
-    except Exception:
-        pass
+    pkg_lower = _normalize_package_name(package_name)
+    removed = False
+    if not os.path.exists(site_dir):
+        return False
 
+    for entry in os.listdir(site_dir):
+        entry_lower = _normalize_package_name(entry)
+        is_match = (
+            entry_lower == pkg_lower
+            or entry_lower == pkg_lower + ".py"
+            or (
+                entry_lower.startswith(pkg_lower + "-")
+                and (
+                    entry.endswith(".dist-info")
+                    or entry.endswith(".data")
+                    or entry.endswith(".egg-info")
+                )
+            )
+        )
+        if is_match:
+            path = os.path.join(site_dir, entry)
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            elif os.path.exists(path):
+                os.remove(path)
+            removed = True
+
+    if os.path.exists(site_dir):
+        for entry in os.listdir(site_dir):
+            entry_lower = _normalize_package_name(entry)
+            if (
+                entry_lower.startswith(pkg_lower + "-")
+                or entry_lower.startswith(pkg_lower + ".")
+            ) and (
+                entry.endswith(".dist-info")
+                or entry.endswith(".egg-info")
+                or entry.endswith(".data")
+            ):
+                path = os.path.join(site_dir, entry)
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                elif os.path.exists(path):
+                    os.remove(path)
+                removed = True
+
+    _clear_package_import_state(pkg_lower)
     return removed
 
+
+def _cleanup_install_metadata(package_names):
+    deps_file = os.path.join(
+        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        "chaquopy/install_deps.json",
+    )
+    if not os.path.exists(deps_file):
+        return
+    try:
+        with open(deps_file) as f:
+            deps = json.load(f)
+        for package_name in package_names:
+            deps.pop(_normalize_package_name(package_name), None)
+        with open(deps_file, "w") as f:
+            json.dump(deps, f)
+    except Exception:
+        pass
+
+
+def _record_uninstalled_packages(package_names):
+    uninstalled_file = os.path.join(
+        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        "chaquopy/uninstalled.txt",
+    )
+    try:
+        existing = set()
+        if os.path.exists(uninstalled_file):
+            with open(uninstalled_file) as f:
+                existing = set(line.strip() for line in f if line.strip())
+        for package_name in package_names:
+            existing.add(_normalize_package_name(package_name))
+        with open(uninstalled_file, "w") as f:
+            f.write("\n".join(sorted(existing)) + ("\n" if existing else ""))
+    except Exception:
+        pass
+
+
+def _compute_orphan_dependencies(site_dir, explicit_packages):
+    installed = {}
+    required = set()
+    for dist in _iter_site_distributions(site_dir):
+        name = dist.metadata.get("Name") or getattr(dist, "name", "")
+        if not name:
+            continue
+        normalized = _normalize_package_name(name)
+        installed[normalized] = name
+        for requirement in dist.metadata.get_all("Requires-Dist") or []:
+            dependency = _extract_requirement_name(requirement)
+            if dependency:
+                required.add(dependency)
+    return [
+        installed[name]
+        for name in sorted(installed)
+        if name not in explicit_packages and name not in required
+    ]
+
+
+def _cleanup_orphan_dependencies(site_dir, explicit_packages):
+    removed_dependencies = []
+    while True:
+        orphan_packages = _compute_orphan_dependencies(site_dir, explicit_packages)
+        if not orphan_packages:
+            break
+        removed_this_round = []
+        for orphan_name in orphan_packages:
+            if _remove_package_files(site_dir, orphan_name):
+                removed_this_round.append(orphan_name)
+        if not removed_this_round:
+            break
+        removed_dependencies.extend(removed_this_round)
+    return removed_dependencies
+
+
+def uninstall_package(package_name):
+    """Uninstall a runtime package and clean orphan dependencies."""
+    site_dir = _ensure_site_packages()
+    pkg_lower = _normalize_package_name(package_name)
+
+    if not os.path.exists(site_dir):
+        return {
+            "success": False,
+            "message": "%s 未安装" % package_name,
+            "removedDependencies": [],
+        }
+
+    removed = _remove_package_files(site_dir, package_name)
+
+    user_pkgs = _load_user_package_map()
+    user_pkgs.pop(pkg_lower, None)
+    _save_user_package_map(user_pkgs)
+
+    removed_dependencies = _cleanup_orphan_dependencies(
+        site_dir,
+        set(user_pkgs.keys()),
+    )
+
+    _cleanup_install_metadata([package_name] + removed_dependencies)
+    _record_uninstalled_packages([package_name] + removed_dependencies)
+
+    return {
+        "success": removed,
+        "message": "%s 已卸载" % package_name if removed else "%s 未安装" % package_name,
+        "removedDependencies": removed_dependencies,
+    }
 
 def list_packages():
     """List top-level installed packages only (no transitive dependencies).

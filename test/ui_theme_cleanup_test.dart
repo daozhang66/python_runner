@@ -10,9 +10,10 @@ void main() {
     expect(
         source, contains('title: _buildScriptTitleBadge(allScripts.length)'));
     expect(source, contains('Widget _buildScriptTitleBadge(int count)'));
+    expect(source, contains("const Text('Python'"));
     expect(source, contains('count.toString()'));
     expect(source, contains('BorderRadius.circular(999)'));
-    expect(source, contains('actions: [_buildScriptMenu()]'));
+    expect(source, contains('_buildScriptMenu()'));
     expect(source, contains('PopupMenuButton<String>'));
     expect(source, contains("case 'add':"));
     expect(source, contains("case 'search':"));
@@ -28,6 +29,31 @@ void main() {
     expect(
         source, isNot(contains('floatingActionButton: FloatingActionButton')));
     expect(source, isNot(contains('_searchVisible')));
+  });
+
+  test('app uses edge-to-edge transparent system bars to avoid Android 16 top black strip', () {
+    final source = File('lib/main.dart').readAsStringSync();
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+    final styles = File(
+      'android/app/src/main/res/values/styles.xml',
+    ).readAsStringSync();
+    final nightStyles = File(
+      'android/app/src/main/res/values-night/styles.xml',
+    ).readAsStringSync();
+
+    expect(source,
+        contains('SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)'));
+    expect(source, contains('AnnotatedRegion<SystemUiOverlayStyle>'));
+    expect(source, contains('statusBarColor: Colors.transparent'));
+    expect(source, contains('systemNavigationBarColor: Colors.transparent'));
+    expect(activity, contains('WindowCompat.setDecorFitsSystemWindows(window, false)'));
+    expect(styles, contains('<item name="android:statusBarColor">@android:color/transparent</item>'));
+    expect(styles, contains('<item name="android:navigationBarColor">@android:color/transparent</item>'));
+    expect(styles, contains('<item name="android:windowDrawsSystemBarBackgrounds">true</item>'));
+    expect(nightStyles, contains('<item name="android:statusBarColor">@android:color/transparent</item>'));
+    expect(nightStyles, contains('<item name="android:navigationBarColor">@android:color/transparent</item>'));
   });
 
   test('scripts support pinning with persistent order and highlighted cards',

@@ -6,6 +6,32 @@ plugins {
 
 apply plugin: "com.chaquo.python"
 
+def keystoreProperties = new java.util.Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def releaseStoreFilePath = (
+    project.findProperty("PYRUNNER_RELEASE_STORE_FILE")
+        ?: System.getenv("PYRUNNER_RELEASE_STORE_FILE")
+        ?: keystoreProperties.getProperty("storeFile", "daozhang.jks")
+).toString()
+def releaseStorePassword = (
+    project.findProperty("PYRUNNER_RELEASE_STORE_PASSWORD")
+        ?: System.getenv("PYRUNNER_RELEASE_STORE_PASSWORD")
+        ?: keystoreProperties.getProperty("storePassword", "")
+).toString()
+def releaseKeyAlias = (
+    project.findProperty("PYRUNNER_RELEASE_KEY_ALIAS")
+        ?: System.getenv("PYRUNNER_RELEASE_KEY_ALIAS")
+        ?: keystoreProperties.getProperty("keyAlias", "daozhang")
+).toString()
+def releaseKeyPassword = (
+    project.findProperty("PYRUNNER_RELEASE_KEY_PASSWORD")
+        ?: System.getenv("PYRUNNER_RELEASE_KEY_PASSWORD")
+        ?: keystoreProperties.getProperty("keyPassword", "")
+).toString()
+
 android {
     namespace = "com.daozhang.py"
     compileSdk = 36
@@ -20,10 +46,17 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    lint {
+        disable 'ExpiredTargetSdkVersion'
+    }
+
     defaultConfig {
         applicationId = "com.daozhang.py"
         minSdk = 26
-        targetSdk = 35
+        // Linux-like direct proot mode executes Debian rootfs ELF files from
+        // the app data directory. Android targetSdk 29+ blocks that execve
+        // path, which makes proot report guest binaries as "No such file".
+        targetSdk = 28
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -86,10 +119,10 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("/root/Projects/python_runner/android/daozhang.jks")
-            storePassword "daozhang"
-            keyAlias "daozhang"
-            keyPassword "daozhang"
+            storeFile rootProject.file(releaseStoreFilePath)
+            storePassword releaseStorePassword
+            keyAlias releaseKeyAlias
+            keyPassword releaseKeyPassword
             v1SigningEnabled true
             v2SigningEnabled true
             enableV3Signing true
@@ -103,14 +136,104 @@ android {
             minifyEnabled = false
         }
     }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {
     implementation "androidx.core:core-ktx:1.13.1"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
     implementation "androidx.lifecycle:lifecycle-service:2.8.4"
+    implementation "org.apache.commons:commons-compress:1.26.2"
+    implementation "org.tukaani:xz:1.9"
 }
 
 flutter {
     source = "../.."
+}
+
+// Force proot .so files to be stored uncompressed so Android extracts them
+// to nativeLibraryDir with execute permission, then re-sign the APK.
+tasks.whenTaskAdded { task ->
+    if (task.name == "packageRelease") {
+        task.doLast {
+            def apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            def apk = new File(apkDir, "app-release.apk")
+            if (!apk.exists()) return
+            def targets = ["lib/arm64-v8a/libproot.so", "lib/arm64-v8a/liblinuxlike_loader.so", "lib/arm64-v8a/libtalloc2.so"] as Set
+
+            // Step 1: rewrite zip with target .so entries stored uncompressed
+            def unsignedApk = new File(apkDir, "app-release-unsigned.apk")
+            def zin = new java.util.zip.ZipFile(apk)
+            def zout = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(unsignedApk))
+            zin.entries().each { entry ->
+                def data = zin.getInputStream(entry).bytes
+                if (targets.contains(entry.name)) {
+                    def crc = new java.util.zip.CRC32()
+                    crc.update(data)
+                    def newEntry = new java.util.zip.ZipEntry(entry.name)
+                    newEntry.method = java.util.zip.ZipEntry.STORED
+                    newEntry.size = data.length
+                    newEntry.compressedSize = data.length
+                    newEntry.crc = crc.value
+                    zout.putNextEntry(newEntry)
+                } else {
+                    // skip existing META-INF signature files — apksigner will add new ones
+                    if (entry.name.startsWith("META-INF/") &&
+                        (entry.name.endsWith(".SF") || entry.name.endsWith(".RSA") ||
+                         entry.name.endsWith(".DSA") || entry.name == "META-INF/MANIFEST.MF")) {
+                        return
+                    }
+                    def newEntry = new java.util.zip.ZipEntry(entry.name)
+                    newEntry.method = entry.method
+                    if (entry.method == java.util.zip.ZipEntry.STORED) {
+                        newEntry.size = entry.size
+                        newEntry.compressedSize = entry.compressedSize
+                        newEntry.crc = entry.crc
+                    }
+                    zout.putNextEntry(newEntry)
+                }
+                zout.write(data)
+                zout.closeEntry()
+            }
+            zin.close()
+            zout.close()
+
+            // Step 2: re-sign with apksigner
+            if (!releaseStorePassword || !releaseKeyPassword || !releaseKeyAlias) {
+                throw new GradleException("Release signing config missing. Set android/key.properties or PYRUNNER_RELEASE_* environment variables.")
+            }
+            def keystorePath = rootProject.file(releaseStoreFilePath).absolutePath
+            def apksignerExt = System.getProperty("os.name").toLowerCase().contains("windows") ? ".bat" : ""
+            def buildToolsDir = new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}")
+            def apksignerFile = new File(buildToolsDir, "apksigner${apksignerExt}")
+            if (!apksignerFile.exists()) {
+                def buildToolsRoot = new File(android.sdkDirectory, "build-tools")
+                def candidates = buildToolsRoot.listFiles()
+                    ?.sort { a, b -> b.name <=> a.name }
+                    ?.collect { new File(it, "apksigner${apksignerExt}") }
+                    ?: []
+                apksignerFile = candidates.find { it.exists() } ?: apksignerFile
+            }
+            if (!apksignerFile.exists()) {
+                throw new GradleException("apksigner not found under ${android.sdkDirectory}/build-tools")
+            }
+            exec {
+                commandLine apksignerFile.absolutePath, "sign",
+                    "--ks", keystorePath,
+                    "--ks-pass", "pass:${releaseStorePassword}",
+                    "--key-pass", "pass:${releaseKeyPassword}",
+                    "--ks-key-alias", releaseKeyAlias,
+                    "--v1-signing-enabled", "true",
+                    "--v2-signing-enabled", "true",
+                    "--out", apk.absolutePath,
+                    unsignedApk.absolutePath
+            }
+            unsignedApk.delete()
+        }
+    }
 }

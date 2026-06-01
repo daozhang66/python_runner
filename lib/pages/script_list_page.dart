@@ -428,23 +428,31 @@ class _ScriptListPageState extends State<ScriptListPage> {
     if (confirmed && mounted) context.read<ScriptProvider>().deleteScript(name);
   }
 
-  Widget _buildScriptCountBadge(int count) {
+  Widget _buildScriptTitleBadge(int count) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: colors.primaryContainer.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        count.toString(),
-        style: TextStyle(
-          fontSize: 12,
-          height: 1.1,
-          fontWeight: FontWeight.w700,
-          color: colors.onPrimaryContainer,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Python',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: colors.primaryContainer.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              color: colors.onPrimaryContainer,
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -567,14 +575,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
                   ],
                 )
               : AppBar(
-                  title: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Python', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 10),
-                      _buildScriptCountBadge(allScripts.length),
-                    ],
-                  ),
+                  title: _buildScriptTitleBadge(allScripts.length),
                   actions: [
                     IconButton(
                       icon: const Icon(Icons.settings_outlined),

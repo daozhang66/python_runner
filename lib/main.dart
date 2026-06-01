@@ -28,6 +28,7 @@ final appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Initialize the unified logger
   final logger = AppLogger.instance;
@@ -133,8 +134,9 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final prefs = await SharedPreferences.getInstance();
     final mode = prefs.getString('theme_mode') ?? 'system';
     setState(() {
-      _themeMode = ThemeMode.values.firstWhere((e) => e.name == mode, orElse: () => ThemeMode.system);
-      _materialYouEnabled = prefs.getBool('material_you_enabled') ?? true;
+      _themeMode = ThemeMode.values
+          .firstWhere((e) => e.name == mode, orElse: () => ThemeMode.system);
+      _materialYouEnabled = prefs.getBool('material_you_enabled') ?? false;
     });
   }
 
@@ -185,7 +187,8 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
@@ -215,6 +218,23 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
           title: 'Python运行器',
           debugShowCheckedModeBanner: false,
           themeMode: _themeMode,
+          builder: (context, child) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                systemNavigationBarColor: Colors.transparent,
+                statusBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                statusBarBrightness:
+                    isDark ? Brightness.dark : Brightness.light,
+                systemNavigationBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                systemNavigationBarContrastEnforced: false,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -249,7 +269,8 @@ class SplashGate extends StatefulWidget {
   State<SplashGate> createState() => _SplashGateState();
 }
 
-class _SplashGateState extends State<SplashGate> with SingleTickerProviderStateMixin {
+class _SplashGateState extends State<SplashGate>
+    with SingleTickerProviderStateMixin {
   bool _ready = false;
   late AnimationController _animController;
   late Animation<double> _fadeIn;
@@ -274,36 +295,67 @@ class _SplashGateState extends State<SplashGate> with SingleTickerProviderStateM
 
   Future<void> _initialize() async {
     await Future.delayed(const Duration(milliseconds: 1200));
-    await _requestPermissions();
-    if (mounted) setState(() => _ready = true);
+    if (mounted) {
+      setState(() => _ready = true);
+    }
+    unawaited(_requestPermissions());
   }
 
   Future<void> _requestPermissions() async {
     if (!Platform.isAndroid) return;
 
     try {
-      // Request MANAGE_EXTERNAL_STORAGE for file read/write access
-      if (!await Permission.manageExternalStorage.isGranted) {
-        await Permission.manageExternalStorage.request();
+      if (Platform.isAndroid) {
+        final androidInfo = await _safeAndroidVersion();
+
+        // Never block startup on permission dialogs. Some ROMs may hold the
+        // Future until the settings page fully returns, which caused the splash
+        // screen to spin forever on certain devices.
+        if (androidInfo >= 33) {
+          await [
+            Permission.photos,
+            Permission.videos,
+            Permission.audio,
+          ].request().timeout(
+                const Duration(seconds: 5),
+                onTimeout: () => <Permission, PermissionStatus>{},
+              );
+          await Permission.notification
+              .request()
+              .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied);
+        } else {
+          await Permission.storage
+              .request()
+              .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied);
+        }
+
+        // MANAGE_EXTERNAL_STORAGE is only relevant on Android 11+ and can jump
+        // into vendor-specific settings UIs. Keep it non-blocking here.
+        if (androidInfo >= 30 && !await Permission.manageExternalStorage.isGranted) {
+          unawaited(
+            Permission.manageExternalStorage
+                .request()
+                .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied),
+          );
+        }
       }
-
-      final mediaStatuses = await [
-        Permission.photos,
-        Permission.videos,
-        Permission.audio,
-      ].request();
-
-      final allGranted = mediaStatuses.values.every(
-        (s) => s.isGranted || s.isLimited,
-      );
-
-      if (!allGranted) {
-        await Permission.storage.request();
-      }
-
-      await Permission.notification.request();
     } catch (e) {
-      AppLogger.instance.warn('Permission request error: $e', source: 'SplashGate');
+      AppLogger.instance
+          .warn('Permission request error: $e', source: 'SplashGate');
+    }
+  }
+
+  Future<int> _safeAndroidVersion() async {
+    try {
+      return int.parse(Platform.operatingSystemVersion
+          .split('Android ')
+          .last
+          .split(' ')
+          .first
+          .split('.')
+          .first);
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -426,7 +478,8 @@ class _HomePageState extends State<HomePage> {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (!mounted) return;
           appNavigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => RunConsolePage(scriptName: scriptName)),
+            MaterialPageRoute(
+                builder: (_) => RunConsolePage(scriptName: scriptName)),
           );
         });
       });
@@ -459,53 +512,55 @@ class _HomePageState extends State<HomePage> {
         }
       },
       child: Scaffold(
-      appBar: null,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.04),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
+        appBar: null,
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
           ),
-        ),
-        child: KeyedSubtree(
-          key: ValueKey(_currentIndex),
-          child: [
-            ScriptListPage(
-              onSettingsTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SettingsPage(
-                    onThemeChanged: widget.onThemeChanged,
-                    currentThemeMode: widget.currentThemeMode,
-                    onMaterialYouChanged: widget.onMaterialYouChanged,
-                    currentMaterialYouEnabled: widget.currentMaterialYouEnabled,
+          child: KeyedSubtree(
+            key: ValueKey(_currentIndex),
+            child: [
+              ScriptListPage(
+                onSettingsTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SettingsPage(
+                      onThemeChanged: widget.onThemeChanged,
+                      currentThemeMode: widget.currentThemeMode,
+                      onMaterialYouChanged: widget.onMaterialYouChanged,
+                      currentMaterialYouEnabled:
+                          widget.currentMaterialYouEnabled,
+                    ),
+                    fullscreenDialog: true,
                   ),
-                  fullscreenDialog: true,
                 ),
               ),
-            ),
-            const NetworkInspectorPage(),
-            const PackageManagerPage(),
-          ][_currentIndex],
+              const NetworkInspectorPage(),
+              const PackageManagerPage(),
+            ][_currentIndex],
+          ),
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.code), label: '脚本'),
+            NavigationDestination(icon: Icon(Icons.http), label: '网络'),
+            NavigationDestination(
+                icon: Icon(Icons.inventory_2_outlined), label: '库管理'),
+          ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.code), label: '脚本'),
-          NavigationDestination(icon: Icon(Icons.http), label: '网络'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: '库管理'),
-        ],
-      ),
-    ),
     );
   }
 }

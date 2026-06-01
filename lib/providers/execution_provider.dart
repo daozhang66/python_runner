@@ -9,6 +9,8 @@ import '../services/app_logger.dart';
 import '../services/http_inspector_store.dart';
 import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
+import '../runtime/runtime_manager.dart';
+import '../runtime/runtime_request.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
@@ -35,6 +37,8 @@ class ScriptLogRecord {
 
 class ExecutionProvider extends ChangeNotifier {
   final NativeBridge _bridge;
+  RuntimeManager _runtimeManager;
+  final bool _runtimeManagerLocked;
   final _uuid = const Uuid();
 
   ExecutionState _state = const ExecutionState();
@@ -54,7 +58,8 @@ class ExecutionProvider extends ChangeNotifier {
   static void Function(String scriptName)? onNavigateToConsole;
   static String? _pendingNavigateScriptName;
 
-  static void setNavigateToConsoleHandler(void Function(String scriptName)? handler) {
+  static void setNavigateToConsoleHandler(
+      void Function(String scriptName)? handler) {
     onNavigateToConsole = handler;
     if (handler != null && _pendingNavigateScriptName != null) {
       final pending = _pendingNavigateScriptName!;
@@ -66,17 +71,26 @@ class ExecutionProvider extends ChangeNotifier {
   /// Throttled notification timer — batches rapid updates into a single
   /// notifyListeners() call after a short delay (100ms).
   Timer? _notifyTimer;
+  Timer? _pendingRunPollTimer;
   bool _disposed = false;
   static const _notifyDelay = Duration(milliseconds: 100);
 
   ExecutionState get state => _state;
   List<LogEntry> get logs => List.unmodifiable(_logs);
   String? get currentScriptName => _currentScriptName;
-  bool get isRunning => _state.status == ExecutionStatus.running || _state.status == ExecutionStatus.stopping;
+  bool get isRunning =>
+      _state.status == ExecutionStatus.running ||
+      _state.status == ExecutionStatus.stopping;
   bool get waitingForInput => _waitingForInput;
   List<ScriptLogRecord> get logHistory => List.unmodifiable(_logHistory);
 
-  ExecutionProvider(this._bridge) {
+  ExecutionProvider(this._bridge, {RuntimeManager? runtimeManager})
+      : _runtimeManager = runtimeManager ??
+            RuntimeManager.fromPreferredBackend(
+              _bridge,
+              RuntimeManager.chaquopyBackendId,
+            ),
+        _runtimeManagerLocked = runtimeManager != null {
     _loadFloatingBallSetting();
     _listenStreams();
     syncFloatingBallVisibility();
@@ -93,10 +107,14 @@ class ExecutionProvider extends ChangeNotifier {
   }
 
   void _listenStreams() {
+    _logSub?.cancel();
+    _statusSub?.cancel();
+    _stdinSub?.cancel();
+
     try {
-      _logSub = _bridge.logStream.listen((data) {
+      _logSub = _runtimeManager.outputStream.listen((output) {
         // Normal log entry
-        final entry = LogEntry.fromMap(data);
+        final entry = output.toLogEntry();
 
         // Intercept HTTP record messages from Python hook
         if (entry.content.startsWith('__HTTP_RECORD__')) {
@@ -130,8 +148,8 @@ class ExecutionProvider extends ChangeNotifier {
     }
 
     try {
-      _statusSub = _bridge.executionStatusStream.listen((data) {
-        _state = ExecutionState.fromMap(data);
+      _statusSub = _runtimeManager.stateStream.listen((state) {
+        _state = state;
         final isTerminal = _state.status != ExecutionStatus.running &&
             _state.status != ExecutionStatus.stopping;
         if (_logHistory.isNotEmpty && isTerminal) {
@@ -149,11 +167,12 @@ class ExecutionProvider extends ChangeNotifier {
         _logger.error('statusStream error: $e', source: 'Execution');
       });
     } catch (e) {
-      _logger.error('Failed to listen executionStatusStream: $e', source: 'Execution');
+      _logger.error('Failed to listen executionStatusStream: $e',
+          source: 'Execution');
     }
 
     try {
-      _stdinSub = _bridge.stdinRequestStream.listen((data) {
+      _stdinSub = _runtimeManager.stdinRequestStream.listen((request) {
         _waitingForInput = true;
         // Update floating ball to show waiting state
         _updateFloatingBallStatus('waiting_input');
@@ -162,8 +181,19 @@ class ExecutionProvider extends ChangeNotifier {
         _logger.error('stdinRequestStream error: $e', source: 'Execution');
       });
     } catch (e) {
-      _logger.error('Failed to listen stdinRequestStream: $e', source: 'Execution');
+      _logger.error('Failed to listen stdinRequestStream: $e',
+          source: 'Execution');
     }
+  }
+
+  void _selectRuntimeManager(String backendId) {
+    if (_runtimeManagerLocked) return;
+    final nextManager = RuntimeManager.fromPreferredBackend(_bridge, backendId);
+    if (nextManager.activeBackendId == _runtimeManager.activeBackendId) {
+      return;
+    }
+    _runtimeManager = nextManager;
+    _listenStreams();
   }
 
   /// Schedule a throttled notifyListeners() call.
@@ -182,7 +212,7 @@ class ExecutionProvider extends ChangeNotifier {
     // If a previous execution is still marked as running, clean it up
     if (_state.status == ExecutionStatus.running) {
       try {
-        await _bridge.stopExecution();
+        await _runtimeManager.stopExecution();
       } catch (_) {}
       if (_logHistory.isNotEmpty) {
         _logHistory.last.status = ExecutionStatus.error;
@@ -202,12 +232,20 @@ class ExecutionProvider extends ChangeNotifier {
     // Load working directory, timeout, and floating ball setting
     String? workingDir;
     int? timeoutSeconds;
+    String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
+    String runtimeBackendId = RuntimeManager.chaquopyBackendId;
     try {
       final prefs = await SharedPreferences.getInstance();
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
       workingDir = prefs.getString('working_dir');
       timeoutSeconds = prefs.getInt('execution_timeout');
+      preferredRuntimeBackendId = RuntimeManager.normalizePreferredBackendId(
+        prefs.getString(RuntimeManager.prefsKey),
+      );
+      runtimeBackendId =
+          RuntimeManager.resolveBackendId(preferredRuntimeBackendId);
     } catch (_) {}
+    _selectRuntimeManager(runtimeBackendId);
 
     // Create a new log history record
     _logHistory.add(ScriptLogRecord(
@@ -218,24 +256,46 @@ class ExecutionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final environment = <String, String>{
+        'PYRUNNER_RUNTIME_BACKEND': runtimeBackendId,
+        'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
+        // Pass device timezone to Linux-like so Python sees the correct local time
+        'TZ': 'UTC${-DateTime.now().timeZoneOffset.inHours}',
+      };
+      if (preferredRuntimeBackendId != runtimeBackendId) {
+        _logger.warn(
+          '运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId',
+          source: 'Execution',
+        );
+      }
+
       // Build HTTP hook environment config
       final overrideConfig = RequestOverrideConfig.instance;
       final netDebugConfig = NetworkDebugConfig.instance;
-      Map<String, String>? hookEnv;
       if (overrideConfig.recordRequests || overrideConfig.overrideEnabled) {
-        hookEnv = {
+        environment.addAll({
           'PYRUNNER_HTTP_HOOK_CONFIG': overrideConfig.toJsonString(),
           'PYRUNNER_PROXY_HOST': netDebugConfig.proxyHost,
           'PYRUNNER_PROXY_PORT': netDebugConfig.proxyPort > 0
               ? netDebugConfig.proxyPort.toString()
               : '',
           'PYRUNNER_SSL_VERIFY': netDebugConfig.allowInsecureCerts ? '0' : '1',
-        };
+        });
       }
 
-      await _bridge.executeScript(name, executionId,
-          workingDir: workingDir, hookEnv: hookEnv, timeoutSeconds: timeoutSeconds);
-      _logger.info('脚本开始执行: $name (id: $executionId)', source: 'Execution');
+      await _runtimeManager.startScript(RuntimeRequest(
+        scriptName: name,
+        executionId: executionId,
+        workingDirectory: workingDir,
+        environment: environment,
+        timeout: timeoutSeconds != null && timeoutSeconds > 0
+            ? Duration(seconds: timeoutSeconds)
+            : null,
+      ));
+      _logger.info(
+        '脚本开始执行: $name (id: $executionId, runtime: $runtimeBackendId)',
+        source: 'Execution',
+      );
 
       // Show floating ball if enabled and permitted
       _showFloatingBallIfNeeded(name);
@@ -261,7 +321,7 @@ class ExecutionProvider extends ChangeNotifier {
 
   Future<void> sendStdin(String input) async {
     try {
-      await _bridge.sendStdin(input);
+      await _runtimeManager.sendStdin(input);
       _logs.add(LogEntry(
         type: LogType.info,
         content: '> $input',
@@ -283,7 +343,7 @@ class ExecutionProvider extends ChangeNotifier {
         _state = _state.copyWith(status: ExecutionStatus.stopping);
         notifyListeners();
       }
-      await _bridge.stopExecution();
+      await _runtimeManager.stopExecution();
       _logger.info('脚本执行已停止', source: 'Execution');
     } catch (e) {
       _logger.error('stopExecution error: $e', source: 'Execution');
@@ -315,7 +375,8 @@ class ExecutionProvider extends ChangeNotifier {
     final buf = StringBuffer();
     final dateFmt = DateFormat('yyyy-MM-dd HH:mm:ss');
     for (final record in _logHistory) {
-      buf.writeln('=== ${record.scriptName} [${dateFmt.format(record.startTime)}] ===');
+      buf.writeln(
+          '=== ${record.scriptName} [${dateFmt.format(record.startTime)}] ===');
       buf.writeln(record.logsAsText);
       buf.writeln();
     }
@@ -326,6 +387,7 @@ class ExecutionProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _notifyTimer?.cancel();
+    _pendingRunPollTimer?.cancel();
     _logSub?.cancel();
     _statusSub?.cancel();
     _stdinSub?.cancel();
@@ -359,15 +421,20 @@ class ExecutionProvider extends ChangeNotifier {
       final hasPermission = await _bridge.checkOverlayPermission();
       if (hasPermission) {
         // Show with empty name → idle state
-        await _bridge.showFloatingBall(isRunning ? (_currentScriptName ?? '') : '');
+        await _bridge
+            .showFloatingBall(isRunning ? (_currentScriptName ?? '') : '');
       }
     } catch (_) {}
   }
 
   void _pollPendingRunScript() {
     // Poll every 500ms to check if floating ball triggered a script run
-    Timer.periodic(const Duration(milliseconds: 500), (timer) async {
-      if (_disposed) { timer.cancel(); return; }
+    _pendingRunPollTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
       if (isRunning) return;
       try {
         final name = await _bridge.consumePendingRunScript();

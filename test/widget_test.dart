@@ -37,4 +37,32 @@ void main() {
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.text('启动时自动检查更新'), findsOneWidget);
   });
+  testWidgets('settings page uses official PyPI source wording',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues(const {});
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsPage(
+          onThemeChanged: (_) {},
+          currentThemeMode: ThemeMode.system,
+          onMaterialYouChanged: (_) {},
+          currentMaterialYouEnabled: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('PyPI 源'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PyPI 源'), findsOneWidget);
+    expect(find.text('留空使用官方源'), findsOneWidget);
+    expect(find.text('恢复官方源'), findsOneWidget);
+    expect(find.text('https://pypi.org/simple'), findsOneWidget);
+  });
 }
