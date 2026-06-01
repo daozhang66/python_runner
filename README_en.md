@@ -1,97 +1,160 @@
-[中文文档](./README_zh.md) | [English](#readme)
+[中文](./README.md) | [English](./README_en.md)
 
 # Python Runner
 
-> Developed with **Claude Code** (Anthropic's AI coding assistant)
+> Developed with **Claude Code/Codex** (AI coding assistant)
 
-A Flutter-based Python script runner with real-time console, package management, and network debugging capabilities.
+Python Runner is a Flutter-based Android app for running Python scripts with script management, full-screen terminal output, package management, network request inspection, and dual runtime support.
 
 ## Features
 
-- **Code Editor**: Syntax highlighting, search, indentation support
-- **Run Locally**: On-device Python execution via Chaquopy
-- **Interactive Input**: Full `input()` support
-- **Graphics Engine**: `scene` module for games and animations (CustomPaint)
-- **Package Manager**: Install/uninstall pip packages
-- **50+ Built-in Python Libraries**: Comprehensive standard library coverage
-- **Execution History**: Log persistence and export
-- **Script Management**: Import/export/batch operations
+- **Script management**
+  - Create, edit, rename, copy, import, export, and delete scripts
+  - List / grid view
+  - Long-press actions and multi-select batch operations
+  - Pinned scripts support
 
-## Network Debugging
+- **Code editor**
+  - Syntax highlighting
+  - Search and match navigation
+  - Read-only / edit mode toggle
+  - Font size adjustment
+  - Save and run directly
 
-Three-layer network debugging:
+- **Full-screen terminal**
+  - Real-time stdout / stderr
+  - `input()` support
+  - Log search, error-only filter, copy, clear
+  - Execution timeout control
 
-### 1. Proxy / SSL Debugging (External)
-- Configure proxy host/port to export requests to Charles/Fiddler/Proxyman/Mitmproxy
-- Allow insecure certificates for MITM tools
-- Settings → Network Debug Mode
+- **Floating ball**
+  - Runtime status indicator
+  - Edge snapping and auto-collapse
+  - Quick rerun for recent scripts
+  - Drag to stop in the bottom stop zone
 
-### 2. Network Request Viewer (Internal)
-- Bottom "Network" tab for real-time HTTP request monitoring
-- Shows: method, URL, headers, body, status, response headers/preview, latency, errors
-- Filter by domain/method/status code
-- Copy/export request records
-- Auto-hooked libraries: `requests`, `httpx`, `urllib3`
+- **Package manager**
+  - Install / uninstall Python packages
+  - Optional version pinning
+  - Custom PyPI index support, leave empty to use the official source
+  - Separate user-installed and built-in package lists
+  - User-installed list shows top-level packages only
+  - Uninstall can clean orphan dependencies
 
-### 3. Global Request Override (Internal Control)
-- Global User-Agent override (bypass python-requests/2.x.x blocking)
-- Global extra headers injection (JSON)
-- Global Cookie injection
-- Default HTTP timeout
-- Follow redirects toggle
-- Force proxy toggle
-- Settings → Enable Request Override
+- **Dual runtime**
+  - **Chaquopy**
+    - Lightweight and stable
+    - Good for standard Python scripts
+  - **Linux-like**
+    - Debian + proot environment
+    - Better compatibility with packages needing system dependencies
+    - Runtime installation required before first use
 
-## Tech Stack
+- **Network debugging**
+  - Python HTTP request viewer
+  - URL / domain search
+  - Domain / method / status filtering
+  - Request detail and JSON tree viewer
+  - Global UA / header / cookie / timeout / redirect overrides
 
-- **Flutter** + Material 3
-- **Chaquopy** (Python runtime for Android)
-- **CustomPaint** (graphics rendering)
-- **Python Monkey Patch** (HTTP hooking)
+- **Logs and diagnostics**
+  - System log viewer, export, and clear
+  - Crash log and script error log capture
+  - Diagnostic export
 
-## Getting Started
+## Runtime notes
 
-### Prerequisites
+### Chaquopy
 
-- Flutter SDK (>=3.0)
-- Android Studio / VS Code with Flutter extension
-- Android device or emulator (API 21+)
+- Bundled inside the APK
+- Best for lightweight scripts and common Python packages
+- Some native-extension or system-level packages may not be supported
 
-### Installation
+### Linux-like
+
+- Based on Debian rootfs + proot
+- Runtime files are installed under:
+
+```text
+/data/user/0/com.daozhang.py/files/linux_like/
+```
+
+- User-installed package directory:
+
+```text
+/data/user/0/com.daozhang.py/files/linux_like/user_site_packages
+```
+
+- The package manager only shows top-level user packages there, not auto-installed dependencies such as `certifi` or `urllib3`
+
+## Package management
+
+- **PyPI source**
+  - You can set a custom pip index URL
+  - Leave it empty to use the official source
+  - The settings page can restore the official source with one tap
+
+- **Install**
+  - Install by package name
+  - Optional version pinning
+  - Chaquopy and Linux-like package environments are isolated from each other
+
+- **Uninstall**
+  - Removing a top-level package can also remove orphaned dependencies
+
+## Network debugging
+
+The request inspector automatically records common Python HTTP libraries:
+
+- `requests`
+- `httpx`
+- `urllib`
+
+It supports:
+
+- Request summary
+- URL search
+- Request detail view
+- JSON tree viewer
+- Request override configuration
+
+## Project structure
+
+```text
+lib/
+├─ main.dart
+├─ models/
+├─ pages/
+├─ providers/
+├─ runtime/
+├─ services/
+├─ utils/
+└─ widgets/
+
+android/
+assets/
+test/
+```
+
+## Development
+
+- Flutter SDK
+- Android Studio or VS Code
+- Android device or emulator
+
+## Run
 
 ```bash
-git clone https://github.com/daozhang66/python_runner.git
-cd python_runner
 flutter pub get
 flutter run
 ```
 
-### Build APK
+## Build release APK
 
 ```bash
 flutter build apk --release
 ```
 
-## Project Structure
+## Repository
 
-```
-lib/
-├── main.dart                    # App entry point
-├── models/                      # Data models (execution_state, log_entry, etc.)
-├── pages/                       # UI pages (console, editor, settings, etc.)
-├── providers/                   # State management (Provider pattern)
-├── services/                    # Core services (logger, database, bridge, etc.)
-├── utils/                       # Utilities (ANSI parser, etc.)
-└── widgets/                     # Reusable widgets
-android/                         # Android native configuration
-assets/                          # Static assets
-test/                            # Unit tests
-```
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## Contact
-
-Project Link: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
+- GitHub: https://github.com/daozhang66/python_runner
