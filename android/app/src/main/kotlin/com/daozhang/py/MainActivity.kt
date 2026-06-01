@@ -1516,7 +1516,8 @@ class MainActivity : FlutterActivity() {
                     result.success(mapOf<String, String>(
                         "pythonVersion" to versionLine,
                         "sitePackages" to sitePackages,
-                        "pythonPath" to executable
+                        "pythonPath" to executable,
+                        "chaquopyPipDir" to File(filesDir, "chaquopy/pip").absolutePath,
                     ))
                 }
             } catch (e: Exception) {
