@@ -43,6 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+debian-python-dev-aarch64-v1.tar.xz
+backdrop/
 
 # Flutter repo-specific
 /bin/cache/
