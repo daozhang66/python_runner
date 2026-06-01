@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +27,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   bool _modified = false;
   bool _readOnly = true;
   double _fontSize = 10.0;
+  double? _scaleStartFontSize;
   String _savedText = '';
 
   static const _minFontSize = 6.0;
@@ -116,12 +117,14 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
 
   Future<void> _loadContent() async {
     final prefs = await SharedPreferences.getInstance();
-    final content = await context.read<ScriptProvider>().readScript(widget.scriptName);
+    final content =
+        await context.read<ScriptProvider>().readScript(widget.scriptName);
     _savedText = content;
     _controller.text = content;
     _controller.addListener(_onTextChanged);
     setState(() {
-      _fontSize = prefs.getDouble('editor_font_size_${widget.scriptName}') ?? 10.0;
+      _fontSize =
+          prefs.getDouble('editor_font_size_${widget.scriptName}') ?? 10.0;
       _modified = false;
       _loading = false;
     });
@@ -130,6 +133,29 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   Future<void> _persistFontSize() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('editor_font_size_${widget.scriptName}', _fontSize);
+  }
+
+  void _handleScaleStart(ScaleStartDetails details) {
+    if (details.pointerCount >= 2) {
+      _scaleStartFontSize = _fontSize;
+    }
+  }
+
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    final startSize = _scaleStartFontSize;
+    if (startSize == null || details.pointerCount < 2) return;
+    final nextSize = (startSize * details.scale)
+        .clamp(_minFontSize, _maxFontSize)
+        .toDouble();
+    if ((nextSize - _fontSize).abs() < 0.1) return;
+    setState(() => _fontSize = nextSize);
+  }
+
+  void _handleScaleEnd(ScaleEndDetails details) {
+    if (_scaleStartFontSize != null) {
+      _scaleStartFontSize = null;
+      unawaited(_persistFontSize());
+    }
   }
 
   void _showFontSizeSlider() {
@@ -143,7 +169,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('${tempSize.round()} px',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -160,7 +188,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                       },
                     ),
                   ),
-                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const Text('A',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 ],
               ),
             ],
@@ -199,8 +229,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   }
 
   Future<void> _save() async {
-    final success = await context.read<ScriptProvider>().saveScript(
-        widget.scriptName, _controller.text);
+    final success = await context
+        .read<ScriptProvider>()
+        .saveScript(widget.scriptName, _controller.text);
     if (success && mounted) {
       _savedText = _controller.text;
       setState(() => _modified = false);
@@ -210,8 +241,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   }
 
   Future<bool> _saveSilently() async {
-    final success = await context.read<ScriptProvider>().saveScript(
-        widget.scriptName, _controller.text);
+    final success = await context
+        .read<ScriptProvider>()
+        .saveScript(widget.scriptName, _controller.text);
     if (success && mounted) {
       _savedText = _controller.text;
       setState(() => _modified = false);
@@ -239,8 +271,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
         );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('运行失败: $e'), duration: Duration(seconds: 3)));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('运行失败: $e'), duration: Duration(seconds: 3)));
     }
   }
 
@@ -288,11 +321,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
             onPressed: () => _findController?.findMode(),
             tooltip: '搜索',
           ),
-          IconButton(
-            icon: const Icon(Icons.format_size, size: 20),
-            onPressed: _showFontSizeSlider,
-            tooltip: '字体大小',
-          ),
           if (_modified)
             IconButton(
                 icon: const Icon(Icons.save), onPressed: _save, tooltip: '保存'),
@@ -321,37 +349,46 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
               children: [
                 _buildToolbar(),
                 Expanded(
-                  child: CodeEditor(
-                    controller: _controller,
-                    findController: _findController,
-                    toolbarController: _toolbarController,
-                    readOnly: _readOnly,
-                    showCursorWhenReadOnly: false,
-                    style: CodeEditorStyle(
-                      fontFamily: 'monospace',
-                      fontSize: _fontSize,
-                      codeTheme: CodeHighlightTheme(
-                        languages: {'python': CodeHighlightThemeMode(mode: langPython)},
-                        theme: isDark ? vs2015Theme : vsTheme,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onScaleStart: _handleScaleStart,
+                    onScaleUpdate: _handleScaleUpdate,
+                    onScaleEnd: _handleScaleEnd,
+                    child: CodeEditor(
+                      controller: _controller,
+                      findController: _findController,
+                      toolbarController: _toolbarController,
+                      readOnly: _readOnly,
+                      showCursorWhenReadOnly: false,
+                      style: CodeEditorStyle(
+                        fontFamily: 'monospace',
+                        fontSize: _fontSize,
+                        codeTheme: CodeHighlightTheme(
+                          languages: {
+                            'python': CodeHighlightThemeMode(mode: langPython)
+                          },
+                          theme: isDark ? vs2015Theme : vsTheme,
+                        ),
                       ),
+                      wordWrap: false,
+                      indicatorBuilder: (context, editingController,
+                          chunkController, notifier) {
+                        return Row(
+                          children: [
+                            DefaultCodeLineNumber(
+                              controller: editingController,
+                              notifier: notifier,
+                            ),
+                          ],
+                        );
+                      },
+                      findBuilder: (context, controller, readOnly) {
+                        return CodeFindPanelView(
+                          controller: controller,
+                          readOnly: readOnly,
+                        );
+                      },
                     ),
-                    wordWrap: false,
-                    indicatorBuilder: (context, editingController, chunkController, notifier) {
-                      return Row(
-                        children: [
-                          DefaultCodeLineNumber(
-                            controller: editingController,
-                            notifier: notifier,
-                          ),
-                        ],
-                      );
-                    },
-                    findBuilder: (context, controller, readOnly) {
-                      return CodeFindPanelView(
-                        controller: controller,
-                        readOnly: readOnly,
-                      );
-                    },
                   ),
                 ),
               ],
@@ -382,10 +419,12 @@ class _ToolbarBtn extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(label, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        child: Text(label,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
       ),
     );
   }
@@ -404,9 +443,9 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => Size(
-    double.infinity,
-    controller.value == null ? 0 : 40,
-  );
+        double.infinity,
+        controller.value == null ? 0 : 40,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +476,8 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
                   hintText: 'Search...',
                   filled: true,
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   border: OutlineInputBorder(gapPadding: 0),
                 ),
               ),
@@ -446,14 +486,17 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
             Text(result, style: const TextStyle(fontSize: 11)),
             const Spacer(),
             IconButton(
-              onPressed: value.result == null ? null : () => controller.previousMatch(),
+              onPressed: value.result == null
+                  ? null
+                  : () => controller.previousMatch(),
               icon: const Icon(Icons.arrow_upward, size: 14),
               constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
               splashRadius: 14,
               tooltip: 'Previous',
             ),
             IconButton(
-              onPressed: value.result == null ? null : () => controller.nextMatch(),
+              onPressed:
+                  value.result == null ? null : () => controller.nextMatch(),
               icon: const Icon(Icons.arrow_downward, size: 14),
               constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
               splashRadius: 14,
@@ -472,5 +515,3 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
-
-

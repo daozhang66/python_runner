@@ -1,4 +1,4 @@
-package com.daozhang.py
+﻿package com.daozhang.py
 
 import android.content.Intent
 import android.net.Uri
@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -20,6 +21,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
@@ -43,9 +46,22 @@ class MainActivity : FlutterActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val linuxLikeRuntimeManager by lazy { LinuxLikeRuntimeManager(this) }
+    private val linuxLikeBootstrapPackages = setOf("pip", "setuptools", "wheel")
+    private val linuxLikeImplicitDependencyPackages = setOf(
+        "certifi",
+        "charset_normalizer",
+        "idna",
+        "urllib3",
+        "typing_extensions",
+        "six",
+        "pycparser"
+    )
     private var currentExecutionJob: Job? = null
     private var currentExecutionThread: Thread? = null
+    private var currentExecutionProcess: Process? = null
     private var currentExecutionId: String? = null
+    @Volatile private var currentExecutionStopRequested = false
     private var batteryOptRequested = false
 
     private var pendingRunScript: String? = null
@@ -77,7 +93,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        // Register native crash handler ASAP — before Flutter engine init
+        // Register native crash handler ASAP 鈥?before Flutter engine init
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
@@ -100,6 +116,7 @@ class MainActivity : FlutterActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         handleRunScriptIntent(intent)
     }
 
@@ -240,6 +257,37 @@ class MainActivity : FlutterActivity() {
                     }
                     "getAppInfo" -> handleGetAppInfo(result)
                     "getPythonInfo" -> handleGetPythonInfo(result)
+                    "getLinuxLikeRuntimeInfo" -> handleGetLinuxLikeRuntimeInfo(result)
+                    "prepareLinuxLikeRuntime" -> handlePrepareLinuxLikeRuntime(result)
+                    "installLinuxLikeRuntime" -> {
+                        val manifestUrl = call.argument<String>("manifestUrl")
+                        handleInstallLinuxLikeRuntime(manifestUrl, result)
+                    }
+                    "executeLinuxLikeScript" -> {
+                        val name = call.argument<String>("name") ?: ""
+                        val executionId = call.argument<String>("executionId") ?: ""
+                        val workingDir = call.argument<String>("workingDir")
+                        val timeoutSeconds = call.argument<Int>("timeoutSeconds") ?: 0
+                        @Suppress("UNCHECKED_CAST")
+                        val environment = call.argument<Map<String, String>>("environment")
+                        handleExecuteLinuxLikeScript(name, executionId, workingDir, environment, timeoutSeconds, result)
+                    }
+                    "sendLinuxLikeStdin" -> {
+                        val input = call.argument<String>("input") ?: ""
+                        handleSendLinuxLikeStdin(input, result)
+                    }
+                    "stopLinuxLikeExecution" -> handleStopLinuxLikeExecution(result)
+                    "installLinuxLikePackage" -> {
+                        val packageName = call.argument<String>("packageName") ?: ""
+                        val version = call.argument<String>("version")
+                        val indexUrl = call.argument<String>("indexUrl")
+                        handleInstallLinuxLikePackage(packageName, version, indexUrl, result)
+                    }
+                    "uninstallLinuxLikePackage" -> {
+                        val packageName = call.argument<String>("packageName") ?: ""
+                        handleUninstallLinuxLikePackage(packageName, result)
+                    }
+                    "listLinuxLikePackages" -> handleListLinuxLikePackages(result)
                     "moveToBackground" -> {
                         moveTaskToBack(true)
                         result.success(null)
@@ -288,7 +336,7 @@ class MainActivity : FlutterActivity() {
         try {
             val file = File(scriptsDir(), name)
             if (file.exists()) {
-                result.error("1001", "脚本已存在: $name", null)
+                result.error("1001", "脚本已存在 $name", null)
                 return
             }
             file.writeText(content)
@@ -302,7 +350,7 @@ class MainActivity : FlutterActivity() {
         try {
             val file = File(scriptsDir(), name)
             if (!file.exists()) {
-                result.error("1001", "脚本不存在: $name", null)
+                result.error("1001", "脚本不存在 $name", null)
                 return
             }
             file.delete()
@@ -317,11 +365,11 @@ class MainActivity : FlutterActivity() {
             val oldFile = File(scriptsDir(), oldName)
             val newFile = File(scriptsDir(), newName)
             if (!oldFile.exists()) {
-                result.error("1001", "脚本不存在: $oldName", null)
+                result.error("1001", "脚本不存在 $oldName", null)
                 return
             }
             if (newFile.exists()) {
-                result.error("1001", "目标名称已存在: $newName", null)
+                result.error("1001", "目标名称已存在 $newName", null)
                 return
             }
             oldFile.renameTo(newFile)
@@ -352,7 +400,7 @@ class MainActivity : FlutterActivity() {
         try {
             val file = File(scriptsDir(), name)
             if (!file.exists()) {
-                result.error("1001", "脚本不存在: $name", null)
+                result.error("1001", "脚本不存在 $name", null)
                 return
             }
             result.success(file.readText())
@@ -398,7 +446,7 @@ class MainActivity : FlutterActivity() {
 
         val file = File(scriptsDir(), name)
         if (!file.exists()) {
-            result.error("1001", "脚本不存在: $name", null)
+            result.error("1001", "脚本不存在 $name", null)
             return
         }
 
@@ -450,7 +498,7 @@ class MainActivity : FlutterActivity() {
                     }
                     Thread.sleep(50)
                 } catch (e: Exception) {
-                    // Don't silently die — check if script is still running
+                    // Don't silently die 鈥?check if script is still running
                     if (scriptDone.get()) break
                     Thread.sleep(200)
                 }
@@ -502,7 +550,7 @@ class MainActivity : FlutterActivity() {
                     val timeoutMs = timeoutSeconds * 1000L
                     Thread.sleep(timeoutMs)
                     if (!scriptDone.get()) {
-                        // Script is still running — kill it
+                        // Script is still running 鈥?kill it
                         try {
                             val py = Python.getInstance()
                             val runner = py.getModule("script_runner")
@@ -556,6 +604,720 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun handleExecuteLinuxLikeScript(
+        name: String,
+        executionId: String,
+        workingDir: String?,
+        environment: Map<String, String>?,
+        timeoutSeconds: Int,
+        result: MethodChannel.Result
+    ) {
+        val info = linuxLikeRuntimeManager.getInfo()
+        if (info["available"] != "true") {
+            result.error("1017", info["message"] ?: "Linux-like runtime unavailable", null)
+            return
+        }
+
+        val oldProcess = currentExecutionProcess
+        if (oldProcess != null && oldProcess.isAlive) {
+            currentExecutionStopRequested = true
+            oldProcess.destroy()
+            try {
+                oldProcess.waitFor()
+            } catch (_: Exception) {}
+        }
+
+        val file = File(scriptsDir(), name)
+        if (!file.exists()) {
+            result.error("1001", "脚本不存在 $name", null)
+            return
+        }
+
+        currentExecutionId = executionId
+        currentExecutionStopRequested = false
+        startForegroundServiceSafely(PythonForegroundService.TASK_EXECUTE, scriptName = name)
+
+        sendStatus(executionId, "running", null)
+        result.success(mapOf("executionId" to executionId, "status" to "started"))
+
+        val command = linuxLikeRuntimeManager.buildPythonCommand(
+            file.absolutePath,
+            workingDir,
+            environment
+        )
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        currentExecutionThread = Thread {
+            var exitCode = 1
+            var status = "error"
+            val stdout = StringBuilder()
+            val stderr = StringBuilder()
+            var executionTempDir: String? = null
+            try {
+                val processBuilder = ProcessBuilder(command)
+                processBuilder.redirectErrorStream(false)
+                linuxLikeRuntimeManager.applyHostEnvironment(processBuilder.environment(), environment)
+                executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
+                val process = processBuilder.start()
+                currentExecutionProcess = process
+
+                val stdoutThread =
+                    collectProcessOutput(process.inputStream, "stdout", stdout, true)
+                val stderrThread =
+                    collectProcessOutput(process.errorStream, "stderr", stderr, true)
+
+                if (timeoutSeconds > 0) {
+                    Thread {
+                        try {
+                            Thread.sleep(timeoutSeconds * 1000L)
+                            if (process.isAlive) {
+                                timedOut.set(true)
+                                currentExecutionStopRequested = true
+                                sendLog("stderr", "脚本执行超时（${timeoutSeconds}秒），已强制停止")
+                                process.destroy()
+                                Thread.sleep(1000)
+                                if (process.isAlive) process.destroyForcibly()
+                            }
+                        } catch (_: InterruptedException) {}
+                    }.also { it.name = "linux-like-timeout-watchdog"; it.isDaemon = true; it.start() }
+                }
+
+                exitCode = process.waitFor()
+                stdoutThread.join(500)
+                stderrThread.join(500)
+                status = when {
+                    timedOut.get() -> "timeout"
+                    currentExecutionStopRequested -> "stopped"
+                    exitCode == 0 -> "completed"
+                    else -> "error"
+                }
+                if (status == "error" || status == "timeout") {
+                    _writeScriptErrorLog(
+                        name,
+                        "Linux-like process exited with code $exitCode",
+                        "stdout:\n${stdout.takeLast(4000)}\n\nstderr:\n${stderr.takeLast(4000)}"
+                    )
+                }
+            } catch (e: Throwable) {
+                sendLog("stderr", "Linux-like执行错误: ${e.message}")
+                status = if (currentExecutionStopRequested) "stopped" else "error"
+                exitCode = 1
+                _writeScriptErrorLog(name, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
+            } finally {
+                currentExecutionProcess = null
+                currentExecutionThread = null
+                currentExecutionId = null
+                linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+                sendStatus(executionId, status, exitCode)
+                stopServiceSafely()
+            }
+        }.also { it.name = "linux-like-exec"; it.start() }
+    }
+
+    private fun handleSendLinuxLikeStdin(input: String, result: MethodChannel.Result) {
+        try {
+            val process = currentExecutionProcess
+            if (process == null || !process.isAlive) {
+                result.success(false)
+                return
+            }
+            process.outputStream.write((input + "\n").toByteArray(Charsets.UTF_8))
+            process.outputStream.flush()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1018", "发送Linux-like输入失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleStopLinuxLikeExecution(result: MethodChannel.Result) {
+        val process = currentExecutionProcess
+        if (process != null && process.isAlive) {
+            currentExecutionStopRequested = true
+            val execId = currentExecutionId
+            if (execId != null) sendStatus(execId, "stopping", null)
+            process.destroy()
+            Thread {
+                try {
+                    Thread.sleep(1000)
+                    if (process.isAlive) process.destroyForcibly()
+                } catch (_: InterruptedException) {}
+            }.also { it.name = "linux-like-stop"; it.isDaemon = true; it.start() }
+            result.success(true)
+        } else {
+            result.success(false)
+        }
+    }
+
+    private fun handleInstallLinuxLikePackage(
+        packageName: String,
+        version: String?,
+        indexUrl: String?,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val info = linuxLikeRuntimeManager.getInfo()
+                if (info["available"] != "true") {
+                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                }
+                val packageSpec = if (!version.isNullOrBlank()) "$packageName==$version" else packageName
+                val args = mutableListOf(
+                    "--disable-pip-version-check",
+                    "install",
+                    "--target",
+                    linuxLikeRuntimeManager.userSitePackagesGuestPath
+                )
+                if (!indexUrl.isNullOrBlank()) {
+                    args.add("-i")
+                    args.add(indexUrl)
+                }
+                args.add(packageSpec)
+                sendInstallProgress(packageName, "installing", "开始安装 $packageSpec...")
+                val command = linuxLikeRuntimeManager.buildPythonModuleCommand("pip", args)
+                val commandResult = runLinuxLikeCommandBlocking(command)
+                if (commandResult.exitCode == 0) {
+                    sendInstallProgress(packageName, "正在校验 $packageName 是否已安装...", "正在校验 $packageName 是否已安装...")
+                    val verifyResult = verifyLinuxLikePackageInstalled(packageName)
+                    if (verifyResult.exitCode == 0 && verifyResult.stdout.isNotBlank()) {
+                        recordLinuxLikeExplicitPackage(packageName, version)
+                        sendInstallProgress(packageName, "$packageSpec 安装成功", "安装成功")
+                        mainHandler.post { result.success(true) }
+                    } else {
+                        val verifyMessage = listOf(verifyResult.stderr, verifyResult.stdout)
+                            .firstOrNull { it.isNotBlank() }
+                            ?.trim()
+                            ?: "pip show did not find $packageName after install"
+                        sendInstallProgress(packageName, "error", "$packageSpec 安装后校验失败")
+                        mainHandler.post {
+                            result.error("1019", "Linux-like安装包校验失败: $verifyMessage", null)
+                        }
+                    }
+                } else {
+                    sendInstallProgress(packageName, "error", "$packageSpec 安装失败")
+                    mainHandler.post {
+                        result.error("1019", "Linux-like安装包失败: ${commandResult.stderr}", null)
+                    }
+                }
+            } catch (e: Exception) {
+                sendInstallProgress(packageName, "error", "安装失败: ${e.message}")
+                mainHandler.post {
+                    result.error("1019", "Linux-like安装包失败: ${e.message}", null)
+                }
+            }
+        }.also { it.name = "linux-like-pip-install"; it.start() }
+    }
+
+    private fun verifyLinuxLikePackageInstalled(packageName: String): LinuxLikeCommandResult {
+        val distributionName = normalizePackageNameForPipShow(packageName)
+        if (distributionName.isBlank()) {
+            return LinuxLikeCommandResult(
+                exitCode = 1,
+                stdout = "",
+                stderr = "invalid package name: $packageName"
+            )
+        }
+        val command = linuxLikeRuntimeManager.buildPythonModuleCommand(
+            "pip",
+            listOf("--disable-pip-version-check", "show", distributionName)
+        )
+        return runLinuxLikeCommandBlocking(command, emitLogs = false)
+    }
+
+    private fun normalizePackageNameForPipShow(packageName: String): String {
+        return packageName
+            .trim()
+            .substringBefore("[")
+            .substringBefore("==")
+            .substringBefore("~=")
+            .substringBefore(">=")
+            .substringBefore("<=")
+            .substringBefore("!=")
+            .substringBefore(">")
+            .substringBefore("<")
+            .trim()
+    }
+
+    private fun handleUninstallLinuxLikePackage(packageName: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val info = linuxLikeRuntimeManager.getInfo()
+                if (info["available"] != "true") {
+                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                }
+                sendInstallProgress(packageName, "uninstalling", "开始卸载 $packageName...")
+                val removedPackages = removeLinuxLikePackagesFromOverlay(listOf(packageName))
+                if (removedPackages.isNotEmpty()) {
+                    removeLinuxLikeExplicitPackage(packageName)
+                    val removedDependencies = cleanupLinuxLikeOrphanDependencies()
+                    sendInstallProgress(packageName, "success", "$packageName 卸载成功")
+                    mainHandler.post {
+                        result.success(
+                            mapOf(
+                                "success" to true,
+                                "message" to "$packageName 卸载成功",
+                                "removedDependencies" to removedDependencies
+                            )
+                        )
+                    }
+                } else {
+                    sendInstallProgress(packageName, "error", "$packageName 卸载失败")
+                    mainHandler.post {
+                        result.error("1024", "Linux-like卸载包失败: $packageName 未安装", null)
+                    }
+                }
+            } catch (e: Exception) {
+                sendInstallProgress(packageName, "error", "卸载失败: ${e.message}")
+                mainHandler.post {
+                    result.error("1024", "Linux-like卸载包失败: ${e.message}", null)
+                }
+            }
+        }.also { it.name = "linux-like-pip-uninstall"; it.start() }
+    }
+
+    private fun normalizePythonPackageName(packageName: String): String {
+        return packageName.trim().lowercase(Locale.US).replace(Regex("[-_.]+"), "_")
+    }
+
+    private fun loadLinuxLikeExplicitPackages(): MutableMap<String, String> {
+        val file = linuxLikeRuntimeManager.explicitUserPackagesFile
+        if (!file.exists()) return mutableMapOf()
+        return try {
+            val json = JSONObject(file.readText())
+            val packages = mutableMapOf<String, String>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                packages[normalizePythonPackageName(key)] = json.optString(key, "")
+            }
+            packages
+        } catch (_: Exception) {
+            mutableMapOf()
+        }
+    }
+
+    private fun saveLinuxLikeExplicitPackages(packages: Map<String, String>) {
+        val file = linuxLikeRuntimeManager.explicitUserPackagesFile
+        if (packages.isEmpty()) {
+            if (file.exists()) {
+                file.delete()
+            }
+            return
+        }
+        file.parentFile?.mkdirs()
+        val json = JSONObject()
+        packages.toSortedMap().forEach { (name, version) ->
+            json.put(name, version)
+        }
+        file.writeText(json.toString())
+    }
+
+    private fun recordLinuxLikeExplicitPackage(packageName: String, version: String?) {
+        val packages = loadLinuxLikeExplicitPackages()
+        packages[normalizePythonPackageName(packageName)] = version?.trim().orEmpty()
+        saveLinuxLikeExplicitPackages(packages)
+    }
+
+    private fun removeLinuxLikeExplicitPackage(packageName: String) {
+        val packages = loadLinuxLikeExplicitPackages()
+        packages.remove(normalizePythonPackageName(packageName))
+        saveLinuxLikeExplicitPackages(packages)
+    }
+
+    private fun removeMissingLinuxLikeExplicitPackages(installedPackageNames: Set<String>) {
+        val packages = loadLinuxLikeExplicitPackages()
+        val stalePackages = packages.keys - installedPackageNames
+        if (stalePackages.isEmpty()) {
+            return
+        }
+        stalePackages.forEach { packages.remove(it) }
+        saveLinuxLikeExplicitPackages(packages)
+    }
+
+    private data class LinuxLikeDistribution(
+        val name: String,
+        val version: String,
+        val normalizedName: String,
+        val metadataDir: File,
+        val topLevelEntries: List<String>,
+        val recordEntries: List<String>,
+        val requires: List<String>
+    )
+
+    private fun linuxLikeDistributions(): List<LinuxLikeDistribution> {
+        val siteDir = linuxLikeRuntimeManager.userSitePackagesDir
+        if (!siteDir.isDirectory) {
+            return emptyList()
+        }
+        val metadataDistributions = siteDir.listFiles()
+            ?.filter { it.isDirectory && (it.name.endsWith(".dist-info") || it.name.endsWith(".egg-info")) }
+            ?.mapNotNull { metadataDir ->
+                val metadata = readLinuxLikeMetadata(metadataDir)
+                val guessedName = metadataDir.name
+                    .substringBefore(".dist-info")
+                    .substringBefore(".egg-info")
+                    .substringBeforeLast("-")
+                    .takeIf { it.isNotBlank() }
+                val name = metadata["Name"]?.firstOrNull()?.takeIf { it.isNotBlank() }
+                    ?: guessedName
+                    ?: return@mapNotNull null
+                LinuxLikeDistribution(
+                    name = name,
+                    version = metadata["Version"]?.firstOrNull().orEmpty(),
+                    normalizedName = normalizePythonPackageName(name),
+                    metadataDir = metadataDir,
+                    topLevelEntries = metadataDir.resolve("top_level.txt")
+                        .takeIf { it.isFile }
+                        ?.readLines()
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?: emptyList(),
+                    recordEntries = metadataDir.resolve("RECORD")
+                        .takeIf { it.isFile }
+                        ?.readLines()
+                        ?.mapNotNull(::recordPathFromCsvLine)
+                        ?: emptyList(),
+                    requires = metadata["Requires-Dist"]
+                        ?.mapNotNull(::requirementName)
+                        ?: emptyList()
+                )
+            }
+            ?.distinctBy { it.normalizedName }
+            ?: emptyList()
+        val knownNames = metadataDistributions.map { it.normalizedName }.toSet()
+        val metadataOwnedTopLevels = metadataDistributions
+            .flatMap { distribution ->
+                distribution.topLevelEntries.map(::normalizePythonPackageName)
+            }
+            .toSet()
+        val importPackageDistributions = siteDir.listFiles()
+            ?.filter { file ->
+                file.isDirectory &&
+                    !file.name.startsWith(".") &&
+                    !file.name.endsWith(".dist-info") &&
+                    !file.name.endsWith(".egg-info") &&
+                    !file.name.endsWith(".data") &&
+                    File(file, "__init__.py").isFile &&
+                    !knownNames.contains(normalizePythonPackageName(file.name)) &&
+                    !metadataOwnedTopLevels.contains(normalizePythonPackageName(file.name))
+            }
+            ?.map { packageDir ->
+                val name = packageDir.name
+                LinuxLikeDistribution(
+                    name = name,
+                    version = readPythonPackageVersion(packageDir),
+                    normalizedName = normalizePythonPackageName(name),
+                    metadataDir = packageDir,
+                    topLevelEntries = listOf(name),
+                    recordEntries = emptyList(),
+                    requires = emptyList()
+                )
+            }
+            ?: emptyList()
+        return (metadataDistributions + importPackageDistributions)
+            .distinctBy { it.normalizedName }
+    }
+
+    private fun readPythonPackageVersion(packageDir: File): String {
+        return try {
+            val initFile = File(packageDir, "__init__.py")
+            val text = initFile.takeIf { it.isFile }?.readText() ?: return ""
+            Regex("""__version__\s*=\s*['"]([^'"]+)['"]""")
+                .find(text)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun readLinuxLikeMetadata(metadataDir: File): Map<String, List<String>> {
+        val file = listOf("METADATA", "PKG-INFO")
+            .map { metadataDir.resolve(it) }
+            .firstOrNull { it.isFile }
+            ?: return emptyMap()
+        val result = linkedMapOf<String, MutableList<String>>()
+        var activeKey: String? = null
+        file.forEachLine { rawLine ->
+            if (rawLine.startsWith(" ") || rawLine.startsWith("\t")) {
+                activeKey?.let { key ->
+                    val values = result[key]
+                    if (!values.isNullOrEmpty()) {
+                        values[values.lastIndex] = values.last() + "\n" + rawLine.trim()
+                    }
+                }
+                return@forEachLine
+            }
+            val delimiter = rawLine.indexOf(':')
+            if (delimiter <= 0) {
+                activeKey = null
+                return@forEachLine
+            }
+            val key = rawLine.substring(0, delimiter)
+            val value = rawLine.substring(delimiter + 1).trim()
+            result.getOrPut(key) { mutableListOf() }.add(value)
+            activeKey = key
+        }
+        return result
+    }
+
+    private fun requirementName(requirement: String): String? {
+        val head = requirement.substringBefore(";").trim()
+        val match = Regex("[A-Za-z0-9_.-]+").find(head) ?: return null
+        return match.value.takeIf { it.isNotBlank() }
+    }
+
+    private fun recordPathFromCsvLine(line: String): String? {
+        if (line.isBlank()) return null
+        if (!line.startsWith("\"")) {
+            return line.substringBefore(",").trim().takeIf { it.isNotBlank() }
+        }
+        val builder = StringBuilder()
+        var index = 1
+        while (index < line.length) {
+            val ch = line[index]
+            if (ch == '"') {
+                if (index + 1 < line.length && line[index + 1] == '"') {
+                    builder.append('"')
+                    index += 2
+                    continue
+                }
+                break
+            }
+            builder.append(ch)
+            index++
+        }
+        return builder.toString().takeIf { it.isNotBlank() }
+    }
+
+    private fun removeLinuxLikeDistributionFiles(distribution: LinuxLikeDistribution) {
+        distribution.recordEntries.forEach { relativePath ->
+            deleteLinuxLikeSitePath(relativePath)
+        }
+        distribution.topLevelEntries.forEach { entry ->
+            deleteLinuxLikeSitePath(entry)
+            deleteLinuxLikeSitePath("$entry.py")
+        }
+        deleteLinuxLikeSiteFile(distribution.metadataDir)
+
+        val prefix = distribution.normalizedName
+        linuxLikeRuntimeManager.userSitePackagesDir.listFiles()?.forEach { file ->
+            val baseName = if (file.name.endsWith(".py")) file.name.dropLast(3) else file.name
+            val normalized = normalizePythonPackageName(baseName)
+            val isMetadata = file.name.endsWith(".dist-info") ||
+                file.name.endsWith(".egg-info") ||
+                file.name.endsWith(".data")
+            if (normalized == prefix || (isMetadata && normalized.startsWith("${prefix}_"))) {
+                deleteLinuxLikeSiteFile(file)
+            }
+        }
+    }
+
+    private fun deleteLinuxLikeSitePath(relativePath: String) {
+        val siteDir = linuxLikeRuntimeManager.userSitePackagesDir
+        val target = File(siteDir, relativePath)
+        deleteLinuxLikeSiteFile(target)
+    }
+
+    private fun deleteLinuxLikeSiteFile(target: File) {
+        try {
+            val siteRoot = linuxLikeRuntimeManager.userSitePackagesDir.canonicalFile.toPath()
+            val targetPath = target.canonicalFile.toPath()
+            if (!targetPath.startsWith(siteRoot)) {
+                return
+            }
+            if (target.isDirectory) {
+                target.deleteRecursively()
+            } else if (target.exists()) {
+                target.delete()
+            }
+            pruneEmptyLinuxLikeSiteParents(target.parentFile)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun pruneEmptyLinuxLikeSiteParents(start: File?) {
+        if (start == null) return
+        try {
+            val siteRoot = linuxLikeRuntimeManager.userSitePackagesDir.canonicalFile
+            var current: File? = start.canonicalFile
+            while (current != null && current != siteRoot && current.toPath().startsWith(siteRoot.toPath())) {
+                if (!current.isDirectory || current.listFiles()?.isEmpty() != true) {
+                    break
+                }
+                current.delete()
+                current = current.parentFile?.canonicalFile
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun removeLinuxLikePackagesFromOverlay(packageNames: List<String>): List<String> {
+        if (packageNames.isEmpty()) {
+            return emptyList()
+        }
+        val targets = packageNames.map(::normalizePythonPackageName).toSet()
+        val removed = linkedSetOf<String>()
+        linuxLikeDistributions().forEach { distribution ->
+            if (!targets.contains(distribution.normalizedName)) {
+                return@forEach
+            }
+            removeLinuxLikeDistributionFiles(distribution)
+            removed.add(distribution.name)
+        }
+        val remainingTargets = targets - removed.map(::normalizePythonPackageName).toSet()
+        if (remainingTargets.isNotEmpty()) {
+            linuxLikeRuntimeManager.userSitePackagesDir.listFiles()?.forEach { file ->
+                val baseName = if (file.name.endsWith(".py")) file.name.dropLast(3) else file.name
+                val normalized = normalizePythonPackageName(baseName)
+                val metadataPrefix = remainingTargets.firstOrNull { target ->
+                    normalized.startsWith("${target}_")
+                }
+                val directMatch = remainingTargets.firstOrNull { target -> normalized == target }
+                val matchedTarget = directMatch ?: metadataPrefix
+                if (matchedTarget != null) {
+                    deleteLinuxLikeSiteFile(file)
+                    removed.add(packageNames.firstOrNull {
+                        normalizePythonPackageName(it) == matchedTarget
+                    } ?: matchedTarget)
+                }
+            }
+        }
+        return removed.toList()
+    }
+
+    private fun queryLinuxLikeOrphanDependencies(explicitPackages: Set<String>): List<String> {
+        val explicit = explicitPackages.map(::normalizePythonPackageName).toSet()
+        val distributions = linuxLikeDistributions()
+        val installed = distributions.associateBy { it.normalizedName }
+        val required = distributions
+            .flatMap { it.requires }
+            .map(::normalizePythonPackageName)
+            .toSet()
+        return installed.keys
+            .filter { name ->
+                !linuxLikeBootstrapPackages.contains(name) &&
+                    !explicit.contains(name) &&
+                    !required.contains(name)
+            }
+            .sorted()
+            .mapNotNull { installed[it]?.name }
+    }
+
+    private fun cleanupLinuxLikeOrphanDependencies(): List<String> {
+        val removedDependencies = linkedSetOf<String>()
+        val explicitPackages = loadLinuxLikeExplicitPackages().keys.toMutableSet()
+        while (true) {
+            val orphanDependencies = queryLinuxLikeOrphanDependencies(explicitPackages)
+            if (orphanDependencies.isEmpty()) {
+                break
+            }
+            val removedThisRound = removeLinuxLikePackagesFromOverlay(orphanDependencies)
+            if (removedThisRound.isEmpty()) {
+                break
+            }
+            removedThisRound.forEach { removedDependencies.add(it) }
+        }
+        return removedDependencies.toList()
+    }
+
+    private fun migrateLinuxLikeExplicitPackagesIfMissing(
+        distributions: List<LinuxLikeDistribution>
+    ): MutableMap<String, String> {
+        val explicitPackages = loadLinuxLikeExplicitPackages()
+        if (distributions.isEmpty()) {
+            return explicitPackages
+        }
+        var changed = false
+        distributions.forEach { distribution ->
+            val name = distribution.normalizedName
+            if (
+                !explicitPackages.containsKey(name) &&
+                !linuxLikeBootstrapPackages.contains(name) &&
+                !linuxLikeImplicitDependencyPackages.contains(name)
+            ) {
+                explicitPackages[name] = distribution.version
+                changed = true
+            }
+        }
+        if (changed) {
+            saveLinuxLikeExplicitPackages(explicitPackages)
+        }
+        return explicitPackages
+    }
+
+    private fun handleListLinuxLikePackages(result: MethodChannel.Result) {
+        Thread {
+            try {
+                val info = linuxLikeRuntimeManager.getInfo()
+                if (info["available"] != "true") {
+                    mainHandler.post { result.success(emptyList<Map<String, String>>()) }
+                    return@Thread
+                }
+                val command = linuxLikeRuntimeManager.buildPythonModuleCommand(
+                    "pip",
+                    listOf("--disable-pip-version-check", "list", "--format=json")
+                )
+                val commandResult = runLinuxLikeCommandBlocking(command, emitLogs = false)
+                if (commandResult.exitCode != 0) {
+                    throw IllegalStateException(commandResult.stderr)
+                }
+                val json = org.json.JSONArray(commandResult.stdout)
+                val hostDistributions = linuxLikeDistributions()
+                val explicitPackages =
+                    migrateLinuxLikeExplicitPackagesIfMissing(hostDistributions).keys
+                val packages = mutableListOf<Map<String, String>>()
+                val installedPackageNames = mutableSetOf<String>()
+                val listedPackageNames = mutableSetOf<String>()
+
+                hostDistributions
+                    .filter { explicitPackages.contains(it.normalizedName) }
+                    .sortedBy { it.name.lowercase(Locale.US) }
+                    .forEach { distribution ->
+                        installedPackageNames.add(distribution.normalizedName)
+                        listedPackageNames.add(distribution.normalizedName)
+                        packages.add(
+                            mapOf(
+                                "name" to distribution.name,
+                                "version" to distribution.version,
+                                "source" to "user"
+                            )
+                        )
+                    }
+
+                for (i in 0 until json.length()) {
+                    val item = json.getJSONObject(i)
+                    val packageName = item.optString("name")
+                    val normalizedPackageName = normalizePythonPackageName(packageName)
+                    installedPackageNames.add(normalizedPackageName)
+                    val isBootstrapPackage =
+                        linuxLikeBootstrapPackages.contains(normalizedPackageName)
+                    val isExplicitUserPackage = explicitPackages.contains(normalizedPackageName)
+                    if (!isBootstrapPackage && !isExplicitUserPackage) {
+                        continue
+                    }
+                    if (listedPackageNames.contains(normalizedPackageName)) {
+                        continue
+                    }
+                    listedPackageNames.add(normalizedPackageName)
+                    packages.add(
+                        mapOf(
+                            "name" to packageName,
+                            "version" to item.optString("version"),
+                            "source" to if (isExplicitUserPackage) "user" else "runtime"
+                        )
+                    )
+                }
+                removeMissingLinuxLikeExplicitPackages(installedPackageNames)
+                mainHandler.post { result.success(packages) }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    result.error("1025", "Linux-like列出包失败: ${e.message}", null)
+                }
+            }
+        }.also { it.name = "linux-like-pip-list"; it.start() }
+    }
+
     // --- Package Management ---
 
     private fun handleInstallPackage(
@@ -577,7 +1339,14 @@ class MainActivity : FlutterActivity() {
                 val pkg = if (version != null) "$packageName==$version" else packageName
                 pyList.callAttr("append", pkg)
 
-                runner.callAttr("install_package", pyList)
+                val pipResult = runner.callAttr("install_package", pyList).toInt()
+                if (pipResult != 0) {
+                    mainHandler.post {
+                        sendInstallProgress(packageName, "$packageName 安装失败: pip 退出码 $pipResult", "安装失败: pip 退出码 $pipResult")
+                        result.error("1004", "安装失败: pip 退出码 $pipResult", null)
+                    }
+                    return@Thread
+                }
 
                 // Verify the package can actually be imported
                 val verifyResult = runner.callAttr("verify_package", packageName)
@@ -586,13 +1355,13 @@ class MainActivity : FlutterActivity() {
 
                 if (verifySuccess) {
                     mainHandler.post {
-                        sendInstallProgress(packageName, "success", "$packageName 安装成功 - $verifyMessage")
+                        sendInstallProgress(packageName, "$packageName 安装成功 - $verifyMessage", "$packageName 安装成功 - $verifyMessage")
                         result.success(true)
                     }
                 } else {
                     mainHandler.post {
-                        sendInstallProgress(packageName, "success", "$packageName 安装完成，但: $verifyMessage")
-                        result.success(true)
+                        sendInstallProgress(packageName, "$packageName 安装后无法导入: $verifyMessage", "$packageName 安装后无法导入: $verifyMessage")
+                        result.error("1004", "$packageName 安装后无法导入: $verifyMessage", null)
                     }
                 }
             } catch (e: Exception) {
@@ -609,8 +1378,24 @@ class MainActivity : FlutterActivity() {
             try {
                 val py = Python.getInstance()
                 val runner = py.getModule("script_runner")
-                runner.callAttr("uninstall_package", packageName)
-                mainHandler.post { result.success(true) }
+                val uninstallResult = runner.callAttr("uninstall_package", packageName)
+                val removedDependenciesValue = uninstallResult.callAttr("get", "removedDependencies")
+                val removedDependencies = mutableListOf<String>()
+                val removedCount = removedDependenciesValue.callAttr("__len__").toInt()
+                for (i in 0 until removedCount) {
+                    removedDependencies.add(
+                        removedDependenciesValue.callAttr("__getitem__", i).toString()
+                    )
+                }
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "success" to uninstallResult.callAttr("get", "success").toBoolean(),
+                            "message" to uninstallResult.callAttr("get", "message").toString(),
+                            "removedDependencies" to removedDependencies
+                        )
+                    )
+                }
             } catch (e: Exception) {
                 mainHandler.post { result.error("1005", "卸载失败: ${e.message}", null) }
             }
@@ -630,7 +1415,8 @@ class MainActivity : FlutterActivity() {
                     val item = pyPackages.callAttr("__getitem__", i)
                     packages.add(mapOf(
                         "name" to item.callAttr("get", "name").toString(),
-                        "version" to item.callAttr("get", "version").toString()
+                        "version" to item.callAttr("get", "version").toString(),
+                        "source" to item.callAttr("get", "source").toString()
                     ))
                 }
 
@@ -691,7 +1477,7 @@ class MainActivity : FlutterActivity() {
         try {
             val srcFile = File(scriptsDir(), name)
             if (!srcFile.exists()) {
-                result.error("1001", "脚本不存在: $name", null)
+                result.error("1001", "脚本不存在 $name", null)
                 return
             }
             val targetDir = if (!destDir.isNullOrBlank()) {
@@ -716,7 +1502,13 @@ class MainActivity : FlutterActivity() {
                 val version = sys.get("version")?.toString() ?: "未知"
                 val siteModule = py.getModule("site")
                 val sitePackages = try {
-                    siteModule.callAttr("getusersitepackages")?.toString() ?: "未知"
+                    val value = siteModule.callAttr("getsitepackages")
+                    val first = try {
+                        value.callAttr("__getitem__", 0)?.toString()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    first ?: value?.toString() ?: "未知"
                 } catch (_: Exception) { "未知" }
                 val executable = sys.get("executable")?.toString() ?: "未知"
                 mainHandler.post {
@@ -731,6 +1523,53 @@ class MainActivity : FlutterActivity() {
                 mainHandler.post { result.error("1008", "获取Python信息失败: ${e.message}", null) }
             }
         }.also { it.name = "py-info"; it.start() }
+    }
+
+    private fun handleGetLinuxLikeRuntimeInfo(result: MethodChannel.Result) {
+        try {
+            result.success(linuxLikeRuntimeManager.getInfo())
+        } catch (e: Exception) {
+            result.error("1014", "获取Linux-like运行环境信息失败: ${e.message}", null)
+        }
+    }
+
+    private fun handlePrepareLinuxLikeRuntime(result: MethodChannel.Result) {
+        Thread {
+            try {
+                val info = linuxLikeRuntimeManager.prepare()
+                mainHandler.post { result.success(info) }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    result.error("1015", "准备Linux-like运行环境失败: ${e.message}", null)
+                }
+            }
+        }.also { it.name = "linux-like-prepare"; it.start() }
+    }
+
+    private fun handleInstallLinuxLikeRuntime(manifestUrl: String?, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val info = linuxLikeRuntimeManager.installFromManifest(manifestUrl) { status, message ->
+                    mainHandler.post {
+                        installSink?.success(mapOf(
+                            "packageName" to "linux-like-runtime",
+                            "status" to status,
+                            "message" to message
+                        ))
+                    }
+                }
+                mainHandler.post { result.success(info) }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    installSink?.success(mapOf(
+                        "packageName" to "linux-like-runtime",
+                        "status" to "error",
+                        "Linux-like环境安装失败: ${e.message}" to "Linux-like环境安装失败: ${e.message}"
+                    ))
+                    result.error("1016", "安装Linux-like运行环境失败: ${e.message}", null)
+                }
+            }
+        }.also { it.name = "linux-like-install"; it.start() }
     }
 
     private fun handleGetAppInfo(result: MethodChannel.Result) {
@@ -857,7 +1696,7 @@ class MainActivity : FlutterActivity() {
                 mainHandler.post { result.success(apkFile.absolutePath) }
             } catch (e: Exception) {
                 mainHandler.post {
-                    result.error("1012", "下载或安装更新失败 ${e.message}", null)
+                    result.error("1012", "下载或安装更新失败: ${e.message}", null)
                 }
             } finally {
                 connection?.disconnect()
@@ -875,6 +1714,68 @@ class MainActivity : FlutterActivity() {
                 "timestamp" to System.currentTimeMillis()
             ))
         }
+    }
+
+    private fun pipeProcessOutput(inputStream: java.io.InputStream, type: String): Thread {
+        return Thread {
+            try {
+                BufferedReader(InputStreamReader(inputStream)).useLines { lines ->
+                    lines.forEach { line -> sendLog(type, line) }
+                }
+            } catch (_: Exception) {}
+        }.also { it.name = "linux-like-$type"; it.isDaemon = true; it.start() }
+    }
+
+    private data class LinuxLikeCommandResult(
+        val exitCode: Int,
+        val stdout: String,
+        val stderr: String
+    )
+
+    private fun runLinuxLikeCommandBlocking(
+        command: List<String>,
+        environment: Map<String, String>? = null,
+        emitLogs: Boolean = true
+    ): LinuxLikeCommandResult {
+        val processBuilder = ProcessBuilder(command)
+        processBuilder.redirectErrorStream(false)
+        linuxLikeRuntimeManager.applyHostEnvironment(processBuilder.environment(), environment)
+        val executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
+        val process = processBuilder.start()
+        val stdout = StringBuilder()
+        val stderr = StringBuilder()
+        val stdoutThread = collectProcessOutput(process.inputStream, "stdout", stdout, emitLogs)
+        val stderrThread = collectProcessOutput(process.errorStream, "stderr", stderr, emitLogs)
+        return try {
+            val exitCode = process.waitFor()
+            stdoutThread.join(500)
+            stderrThread.join(500)
+            LinuxLikeCommandResult(
+                exitCode = exitCode,
+                stdout = stdout.toString(),
+                stderr = stderr.toString()
+            )
+        } finally {
+            linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+        }
+    }
+
+    private fun collectProcessOutput(
+        inputStream: java.io.InputStream,
+        type: String,
+        buffer: StringBuilder,
+        emitLogs: Boolean
+    ): Thread {
+        return Thread {
+            try {
+                BufferedReader(InputStreamReader(inputStream)).useLines { lines ->
+                    lines.forEach { line ->
+                        buffer.append(line).append('\n')
+                        if (emitLogs) sendLog(type, line)
+                    }
+                }
+            } catch (_: Exception) {}
+        }.also { it.name = "linux-like-capture-$type"; it.isDaemon = true; it.start() }
     }
 
     private fun sendStatus(executionId: String, status: String, exitCode: Int?) {

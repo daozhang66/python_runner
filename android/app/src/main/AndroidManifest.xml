@@ -2,6 +2,7 @@
 
     <!-- 网络访问（pip安装需要） -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 前台服务 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -28,7 +29,8 @@
         android:label="Python运行器"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:extractNativeLibs="true">
 
         <activity
             android:name=".MainActivity"
@@ -52,7 +54,6 @@
         <!-- Python执行前台服务 -->
         <service
             android:name=".PythonForegroundService"
-            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
         <!-- 悬浮球服务 -->
@@ -69,6 +70,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- MT管理器 DocumentsProvider -->
+        <provider
+            android:name="bin.mt.file.content.MTDataFilesProvider"
+            android:authorities="${applicationId}.MTDataFilesProvider"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <activity
+            android:name="bin.mt.file.content.MTDataFilesWakeUpActivity"
+            android:taskAffinity="${applicationId}.MTDataFilesWakeUp"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true" />
 
         <meta-data
             android:name="flutterEmbedding"

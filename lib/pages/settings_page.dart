@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../services/app_logger.dart';
 import '../services/app_update_manager.dart';
 import '../services/network_debug_config.dart';
 import '../services/request_override_config.dart';
+import '../runtime/runtime_manager.dart';
 
 class SettingsPage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
@@ -49,9 +51,17 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _forceProxy = false;
   bool _autoCheckUpdates = true;
   bool _floatingBallEnabled = false;
+  String _runtimeBackend = RuntimeManager.chaquopyBackendId;
   final _bridge = NativeBridge();
   final _appUpdateManager = AppUpdateManager();
   bool _checkingUpdate = false;
+  bool _installingLinuxLike = false;
+  bool _linuxLikeAvailable = false;
+  int _engineDropdownKey = 0;
+  String _installStage = '';
+  int _installPercent = 0;
+  String _installMessage = '';
+  StreamSubscription? _installProgressSub;
 
   @override
   void initState() {
@@ -86,8 +96,123 @@ class _SettingsPageState extends State<SettingsPage> {
       _forceProxy = overrideCfg.forceProxy;
       _autoCheckUpdates = autoCheckUpdates;
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
+      _runtimeBackend = RuntimeManager.normalizePreferredBackendId(
+        prefs.getString(RuntimeManager.prefsKey),
+      );
       _githubMirrorController.text = prefs.getString('github_mirror_prefix') ?? '';
     });
+    // Check Linux-like availability
+    try {
+      final info = await _bridge.getLinuxLikeRuntimeInfo();
+      if (mounted) {
+        setState(() => _linuxLikeAvailable = info['available'] == 'true');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveRuntimeBackend(String backendId) async {
+    final normalizedBackendId =
+        RuntimeManager.normalizePreferredBackendId(backendId);
+
+    // Prevent switching to Linux-like if not installed
+    if (normalizedBackendId == RuntimeManager.linuxLikeBackendId && !_linuxLikeAvailable) {
+      if (!mounted) return;
+      setState(() => _engineDropdownKey++); // Force dropdown widget to recreate
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Linux-like 未安装，请先点击下方「安装/修复」按钮'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    await RuntimeManager.savePreferredBackendId(normalizedBackendId);
+    if (!mounted) return;
+
+    setState(() => _runtimeBackend = normalizedBackendId);
+
+    final message = normalizedBackendId == RuntimeManager.linuxLikeBackendId
+        ? 'Linux-like 已保存；执行和包管理将使用 Linux-like'
+        : '运行引擎已切换为 Chaquopy';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> _installLinuxLikeRuntime() async {
+    if (_installingLinuxLike) return;
+    setState(() {
+      _installingLinuxLike = true;
+      _installStage = 'manifest';
+      _installPercent = 0;
+      _installMessage = '获取版本信息...';
+    });
+
+    // Listen to real-time progress from Kotlin
+    _installProgressSub?.cancel();
+    _installProgressSub = _bridge.installProgressStream.listen((event) {
+      if (!mounted) return;
+      final status = event['status']?.toString() ?? '';
+      final message = event['message']?.toString() ?? '';
+      int percent = _installPercent;
+      final pctMatch = RegExp(r'(\d+)%').firstMatch(message);
+      if (pctMatch != null) {
+        percent = int.parse(pctMatch.group(1)!);
+      }
+      setState(() {
+        _installStage = status;
+        _installPercent = percent;
+        _installMessage = message;
+      });
+    });
+
+    try {
+      final info = await _bridge.installLinuxLikeRuntime();
+      await RuntimeManager.savePreferredBackendId(
+        RuntimeManager.linuxLikeBackendId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _installingLinuxLike = false;
+        _runtimeBackend = RuntimeManager.linuxLikeBackendId;
+        _linuxLikeAvailable = info['available'] == 'true';
+        _installStage = '';
+        _installPercent = 100;
+        _installMessage = '';
+      });
+
+      final message = info['available'] == 'true'
+          ? 'Linux-like 开发版已安装'
+          : (info['message'] ?? 'Linux-like 安装完成，但暂不可用');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _installingLinuxLike = false;
+        _installStage = '';
+        _installPercent = 0;
+        _installMessage = '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Linux-like 安装失败: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      _installProgressSub?.cancel();
+      _installProgressSub = null;
+    }
+  }
+
+  String get _runtimeBackendSubtitle {
+    final label = _runtimeBackend == RuntimeManager.linuxLikeBackendId
+        ? (_linuxLikeAvailable ? '可用' : '未安装')
+        : '可用';
+    return '$label：${RuntimeManager.backendStatusMessage(_runtimeBackend)}';
   }
 
   Future<void> _saveMirror() async {
@@ -100,7 +225,21 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('镜像源已保存'), duration: Duration(seconds: 1)),
+        const SnackBar(content: Text('PyPI 源已保存'), duration: Duration(seconds: 1)),
+      );
+    }
+  }
+
+  Future<void> _restoreOfficialMirror() async {
+    final prefs = await SharedPreferences.getInstance();
+    _mirrorController.clear();
+    await prefs.remove('pypi_index_url');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已恢复官方源（https://pypi.org/simple）'),
+          duration: Duration(seconds: 1),
+        ),
       );
     }
   }
@@ -428,11 +567,83 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
 
-          // ── Script ──
+          // ── Runtime Engine ──
           _SectionCard(
-            icon: Icons.code,
-            title: '脚本',
+            icon: Icons.memory,
+            title: '运行引擎',
             children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('$_runtimeBackend-$_engineDropdownKey'),
+                  value: _runtimeBackend,
+                  decoration: const InputDecoration(
+                    labelText: '运行引擎',
+                    prefixIcon: Icon(Icons.memory),
+                    border: OutlineInputBorder(gapPadding: 0),
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: RuntimeManager.chaquopyBackendId,
+                      child: Text('Chaquopy（默认）'),
+                    ),
+                    DropdownMenuItem(
+                      value: RuntimeManager.linuxLikeBackendId,
+                      child: Text('Linux-like（实验）'),
+                    ),
+                  ],
+                  selectedItemBuilder: (context) => const [
+                    Text('Chaquopy'),
+                    Text('Linux-like'),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      _saveRuntimeBackend(value);
+                    }
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  _runtimeBackendSubtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _installingLinuxLike
+                    ? _InstallProgressCard(
+                        stage: _installStage,
+                        percent: _installPercent,
+                        message: _installMessage,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _installLinuxLikeRuntime,
+                            icon: const Icon(Icons.download_for_offline_outlined),
+                            label: const Text('安装/修复 Linux-like 开发版'),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '会下载约 104MB 的 Debian + Python + pip + build-essential 环境包。',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Column(
@@ -440,9 +651,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Row(
                       children: [
-                        Text('PyPI 镜像源', style: Theme.of(context).textTheme.titleSmall),
+                        Text('PyPI 源', style: Theme.of(context).textTheme.titleSmall),
                         const Spacer(),
-                        Text('留空使用默认源', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Text('留空使用官方源', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -454,7 +665,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             enableSuggestions: false,
                             autocorrect: false,
                             decoration: const InputDecoration(
-                              hintText: 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple',
+                              hintText: 'https://pypi.org/simple',
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             ),
@@ -464,9 +675,24 @@ class _SettingsPageState extends State<SettingsPage> {
                         IconButton(onPressed: _saveMirror, icon: const Icon(Icons.save)),
                       ],
                     ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _restoreOfficialMirror,
+                        child: const Text('恢复官方源'),
+                      ),
+                    ),
                   ],
                 ),
               ),
+            ],
+          ),
+
+          // ── Script ──
+          _SectionCard(
+            icon: Icons.code,
+            title: '脚本',
+            children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Column(
@@ -509,15 +735,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         } else if (v <= 60) {
                           val = v.round();
                         } else if (v <= 100) {
-                          // 60s -> 600s (1m -> 10m), step 60s
                           val = 60 + ((v - 60) * 540 / 40).round();
                           val = (val / 60).round() * 60;
                         } else if (v <= 140) {
-                          // 600s -> 3600s (10m -> 1h), step 300s
                           val = 600 + ((v - 100) * 3000 / 40).round();
                           val = (val / 300).round() * 300;
                         } else {
-                          // 3600s -> 36000s (1h -> 10h), step 1800s
                           val = 3600 + ((v - 140) * 32400 / 10).round();
                           val = (val / 1800).round() * 1800;
                         }
@@ -586,6 +809,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(width: 8),
                         IconButton(onPressed: _pickExportDir, icon: const Icon(Icons.folder_open)),
+                        IconButton(onPressed: _saveExportDir, icon: const Icon(Icons.save)),
                       ],
                     ),
                   ],
@@ -899,10 +1123,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
 
-          // ── Logs & Info ──
+          // ── System Tools ──
           _SectionCard(
-            icon: Icons.article_outlined,
-            title: '日志与信息',
+            icon: Icons.build_outlined,
+            title: '系统工具',
             children: [
               ListTile(
                 leading: const Icon(Icons.visibility_outlined),
@@ -925,7 +1149,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _clearSystemLogs,
               ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
+            ],
+          ),
+
+          // ── About ──
+          _SectionCard(
+            icon: Icons.info_outline,
+            title: '关于',
+            children: [
               ListTile(
                 leading: const Icon(Icons.menu_book_outlined),
                 title: const Text('使用手册'),
@@ -989,6 +1220,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _installProgressSub?.cancel();
     _mirrorController.dispose();
     _exportDirController.dispose();
     _workingDirController.dispose();
@@ -998,6 +1230,101 @@ class _SettingsPageState extends State<SettingsPage> {
     _globalHeadersController.dispose();
     _globalCookieController.dispose();
     super.dispose();
+  }
+}
+
+class _InstallProgressCard extends StatelessWidget {
+  final String stage;
+  final int percent;
+  final String message;
+
+  const _InstallProgressCard({
+    required this.stage,
+    required this.percent,
+    required this.message,
+  });
+
+  IconData _stageIcon(String s) {
+    switch (s) {
+      case 'manifest': return Icons.cloud_download_outlined;
+      case 'downloading': return Icons.download_outlined;
+      case 'verifying': return Icons.verified_outlined;
+      case 'extracting': return Icons.folder_open_outlined;
+      case 'finalizing': return Icons.check_circle_outline;
+      default: return Icons.hourglass_empty;
+    }
+  }
+
+  String _stageLabel(String s) {
+    switch (s) {
+      case 'manifest': return '获取版本信息';
+      case 'downloading': return '下载运行环境';
+      case 'verifying': return '校验文件完整性';
+      case 'extracting': return '解压运行环境';
+      case 'finalizing': return '配置完成中';
+      default: return '准备中';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.primaryContainer.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(_stageIcon(stage), size: 18, color: c.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '正在安装 Linux-like',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.onSurface),
+                ),
+              ),
+              Text(
+                '$percent%',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percent / 100.0,
+              minHeight: 6,
+              backgroundColor: c.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation<Color>(c.primary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: c.primary),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message.isNotEmpty ? message : _stageLabel(stage),
+                  style: TextStyle(fontSize: 11.5, color: c.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1256,8 +1583,9 @@ class _UserManualPage extends StatelessWidget {
             items: const [
               _ManualItem(Icons.search, '搜索', '按名称过滤已安装的包'),
               _ManualItem(Icons.tab, '分类查看', '用户安装/内置库两个 Tab 分开显示'),
-              _ManualItem(Icons.add, '安装包', '输入包名安装，可指定版本和镜像源'),
-              _ManualItem(Icons.delete_outline, '卸载包', '用户安装的包点击删除按钮卸载'),
+              _ManualItem(Icons.add, '安装包', '输入包名安装，可指定版本和 PyPI 源；留空使用官方源'),
+              _ManualItem(Icons.delete_outline, '卸载包', '用户安装的包点击删除按钮卸载；支持清理其孤儿依赖'),
+              _ManualItem(Icons.view_list_outlined, '用户安装列表', '仅显示顶层安装包，不显示 certifi、urllib3 等自动依赖'),
             ],
           ),
           const SizedBox(height: 12),
@@ -1268,7 +1596,9 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
               _ManualItem(Icons.color_lens_outlined, 'Material You', 'Android 12+ 可跟随系统壁纸动态取色'),
               _ManualItem(Icons.bubble_chart, '悬浮球', '开启后悬浮球常驻屏幕，支持贴边收起、快捷运行最近脚本、拖拽停止等'),
-              _ManualItem(Icons.inventory_2_outlined, 'PyPI 镜像源', 'pip 安装镜像地址，留空用官方源'),
+              _ManualItem(Icons.memory, '运行引擎',
+                  '支持两种运行引擎：Chaquopy（轻量稳定，Python 3.11）和 Linux-like（Debian 环境，支持更多系统依赖），可在设置中切换'),
+              _ManualItem(Icons.inventory_2_outlined, 'PyPI 源', 'pip 安装索引地址；留空使用官方源，也可一键恢复官方源'),
               _ManualItem(Icons.timer_outlined, '执行超时', '脚本最长运行时间（可设为无限制）'),
               _ManualItem(Icons.work_outline, '工作目录', '脚本中 open() 等相对路径的基准目录'),
               _ManualItem(Icons.folder_outlined, '导出目录', '脚本导出目标文件夹'),
@@ -1277,6 +1607,25 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.visibility_outlined, '记录网络请求', '捕获 Python HTTP 库的真实请求'),
               _ManualItem(Icons.tune, '请求覆盖', '全局覆盖 UA/Headers/Cookie/超时/重定向'),
               _ManualItem(Icons.article_outlined, '系统日志', '查看、导出或清空运行日志和崩溃日志'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ManualSection(
+            icon: Icons.extension_outlined,
+            title: '自定义 Python 库',
+            items: [
+              const _ManualItem(Icons.folder_outlined, '添加存储',
+                  'MT管理器侧拉栏点击 ⋮ → 添加本地存储 → 点击 ≡ 找到 Python运行器 → 使用此文件夹'),
+              const _ManualItem(Icons.code, 'Chaquopy 库目录',
+                  '添加后进入 files → chaquopy → pip，pip 安装的包和自定义库都在这里'),
+              const _ManualItem(Icons.code, 'Linux-like 库目录',
+                  '添加后进入 files → linux_like → user_site_packages，Linux-like 用户安装库和自定义库都在这里'),
+              const _ManualItem(Icons.create_new_folder, '创建库文件',
+                  '在库目录中新建 .py 文件（如 mylib.py），编写代码保存即可'),
+              const _ManualItem(Icons.play_arrow, '脚本中引用',
+                  '直接 import mylib 即可使用，无需额外配置，也可创建包目录 mylib/__init__.py'),
+              const _ManualItem(Icons.warning_amber, '注意事项',
+                  '两个引擎的库目录互相独立，切换引擎后需进入对应目录操作；修改后无需重启 APP'),
             ],
           ),
           const SizedBox(height: 16),
@@ -1447,10 +1796,11 @@ class _AboutPageState extends State<_AboutPage> {
             title: '技术架构',
             children: [
               const _AboutItem(label: '框架', value: 'Flutter + Dart · Material 3 · Provider'),
-              const _AboutItem(label: 'Python', value: 'Chaquopy 嵌入式 Python 3.11，内置 40+ 常用库'),
-              const _AboutItem(label: '原生层', value: 'Kotlin · MethodChannel + EventChannel 通信'),
+              const _AboutItem(label: '运行引擎',
+                  value: 'Chaquopy (Python 3.11) / Linux-like (Debian proot) 可切换'),
+              const _AboutItem(label: '原生层', value: 'Kotlin · MethodChannel + EventChannel 双向通信'),
               const _AboutItem(label: '存储', value: 'SharedPreferences + SQLite + 文件系统'),
-              const _AboutItem(label: '运行要求', value: 'Android 8.0+ · arm64-v8a / armeabi-v7a'),
+              const _AboutItem(label: '运行要求', value: 'Android 8.0+ · arm64-v8a'),
             ],
           ),
         ],

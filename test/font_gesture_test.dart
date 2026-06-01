@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -55,7 +55,8 @@ void main() {
       expect(find.byIcon(Icons.text_decrease_rounded), findsNothing);
       expect(find.byIcon(Icons.text_increase_rounded), findsNothing);
 
-      final before = _selectableFontSize(tester, find.byType(SelectableText).first);
+      final before =
+          _selectableFontSize(tester, find.byType(SelectableText).first);
 
       await _pinchOut(
         tester,
@@ -63,11 +64,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final after = _selectableFontSize(tester, find.byType(SelectableText).first);
+      final after =
+          _selectableFontSize(tester, find.byType(SelectableText).first);
       expect(after, greaterThan(before));
     });
 
-    testWidgets('script editor uses pinch-to-zoom instead of format size menu', (
+    testWidgets('script editor uses pinch-to-zoom instead of format size menu',
+        (
       WidgetTester tester,
     ) async {
       SharedPreferences.setMockInitialValues(const {
@@ -139,13 +142,14 @@ void main() {
       await tester.tap(openFullView.first, warnIfMissed: false);
       await tester.pumpAndSettle();
 
-      final fullBodyText = find.byType(SelectableText).last;
+      final fullBodyText = find.byKey(
+        const ValueKey('network_full_body_text'),
+      );
       final before = _selectableFontSize(tester, fullBodyText);
 
-      final fullBodyGesture = find.byType(GestureDetector).last;
       await _pinchOut(
         tester,
-        fullBodyGesture,
+        fullBodyText,
       );
       await tester.pumpAndSettle();
       final after = _selectableFontSize(tester, fullBodyText);

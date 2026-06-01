@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/package_info.dart';
 import '../providers/package_provider.dart';
+import '../runtime/runtime_package.dart';
 import '../widgets/confirm_dialog.dart';
 
 class PackageManagerPage extends StatefulWidget {
@@ -36,6 +39,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
 
   Future<void> _loadIndexUrl() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _indexUrl = prefs.getString('pypi_index_url');
     });
@@ -65,12 +69,27 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     if (log.isEmpty) return null;
     final last = log.last;
     if (last.contains('安装成功')) return _InstallResult.success;
-    if (last.contains('安装失败') || last.contains('Error')) return _InstallResult.error;
+    if (last.contains('安装失败') || last.contains('Error')) {
+      return _InstallResult.error;
+    }
     return null;
   }
 
   bool _matchesSearch(String name) =>
       _searchQuery.isEmpty || name.toLowerCase().contains(_searchQuery);
+
+  String _buildUninstallMessage(
+    String packageName,
+    PackageUninstallResult result,
+  ) {
+    if (!result.success) {
+      return result.message.isNotEmpty ? result.message : '$packageName 卸载失败';
+    }
+    if (result.removedDependencies.isEmpty) {
+      return '$packageName 已卸载';
+    }
+    return '$packageName 已卸载，并清理 ${result.removedDependencies.join('、')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,16 +100,20 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     final userPackages = packages
         .where((p) => p.isUserPackage && _matchesSearch(p.name))
         .toList();
-    final builtinPackagesList = packages
+    final builtinPackages = packages
         .where((p) => !p.isUserPackage && _matchesSearch(p.name))
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('库管理', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+      appBar: AppBar(
+        title: const Text(
+          '库管理',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
       body: Column(
         children: [
-          // Install input area
-          Container(
+          Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -107,7 +130,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                           hintText: '包名 (如 requests)',
                           border: OutlineInputBorder(),
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
                         onSubmitted: (_) => _install(),
                       ),
@@ -123,7 +149,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                           hintText: '版本',
                           border: OutlineInputBorder(),
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -142,7 +171,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                   const SizedBox(height: 8),
                   if (!provider.installing && installResult != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: installResult == _InstallResult.success
                             ? Colors.green.withValues(alpha: 0.1)
@@ -197,7 +229,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                           itemCount: provider.installLog.length,
                           itemBuilder: (_, i) => SelectableText(
                             provider.installLog[provider.installLog.length - 1 - i],
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                         Positioned(
@@ -209,10 +244,17 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surface
+                                    .withValues(alpha: 0.8),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Icon(Icons.copy, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              child: Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ),
@@ -223,7 +265,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               ],
             ),
           ),
-          // Search bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: TextField(
@@ -241,12 +282,14 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                     : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          // Tab bar + refresh
           Row(
             children: [
               Expanded(
@@ -254,7 +297,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                   controller: _tabController,
                   tabs: [
                     Tab(text: '用户安装 (${userPackages.length})'),
-                    Tab(text: '内置库 (${builtinPackagesList.length})'),
+                    Tab(text: '内置库 (${builtinPackages.length})'),
                   ],
                   labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   unselectedLabelStyle: const TextStyle(fontSize: 13),
@@ -267,15 +310,12 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               ),
             ],
           ),
-          // Tab views
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                // User-installed packages
                 _buildPackageList(context, userPackages, provider, canDelete: true),
-                // Built-in packages
-                _buildPackageList(context, builtinPackagesList, provider, canDelete: false),
+                _buildPackageList(context, builtinPackages, provider, canDelete: false),
               ],
             ),
           ),
@@ -286,11 +326,11 @@ class _PackageManagerPageState extends State<PackageManagerPage>
 
   Widget _buildPackageList(
     BuildContext context,
-    List<dynamic> pkgs,
+    List<PackageInfo> packages,
     PackageProvider provider, {
     required bool canDelete,
   }) {
-    if (pkgs.isEmpty) {
+    if (packages.isEmpty) {
       return Center(
         child: Text(
           _searchQuery.isNotEmpty ? '未找到匹配的库' : '暂无',
@@ -298,21 +338,22 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         ),
       );
     }
+
     return ListView.builder(
-      itemCount: pkgs.length,
+      itemCount: packages.length,
       itemBuilder: (context, index) {
-        final pkg = pkgs[index];
+        final pkg = packages[index];
         return ListTile(
           dense: true,
           title: Text(pkg.name),
-          subtitle: Text(
-            pkg.version,
-            style: const TextStyle(fontSize: 12),
-          ),
+          subtitle: Text(pkg.version, style: const TextStyle(fontSize: 12)),
           trailing: canDelete
               ? IconButton(
-                  icon: Icon(Icons.delete_outline,
-                      size: 20, color: Theme.of(context).colorScheme.error),
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                   onPressed: () async {
                     final confirmed = await ConfirmDialog.show(
                       context,
@@ -322,15 +363,15 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                       confirmColor: Theme.of(context).colorScheme.error,
                     );
                     if (!confirmed || !context.mounted) return;
-                    final success = await provider.uninstallPackage(pkg.name);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(success ? '${pkg.name} 已卸载' : '${pkg.name} 卸载失败'),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
+
+                    final result = await provider.uninstallPackage(pkg.name);
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_buildUninstallMessage(pkg.name, result)),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   },
                 )
               : null,

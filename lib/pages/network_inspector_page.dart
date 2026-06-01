@@ -1,5 +1,6 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -41,7 +42,9 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     final stats = _computeStats();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('网络请求', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+      appBar: AppBar(
+          title: const Text('网络请求',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
       body: Column(
         children: [
           // --- Search bar ---
@@ -58,7 +61,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                     style: const TextStyle(fontSize: 13),
                     decoration: const InputDecoration(
                       hintText: '搜索 URL / 域名...',
-                      border: InputBorder.none, isDense: true,
+                      border: InputBorder.none,
+                      isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
                     ),
                     onChanged: (v) => _store.setFilterDomain(v.trim()),
@@ -81,7 +85,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: _store.count == 0 ? null : () => _confirmClear(context),
+                  onPressed:
+                      _store.count == 0 ? null : () => _confirmClear(context),
                   tooltip: '清空',
                   visualDensity: VisualDensity.compact,
                 ),
@@ -100,10 +105,12 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   const Icon(Icons.filter_alt, size: 14),
                   const SizedBox(width: 6),
                   if (_store.filterDomain.isNotEmpty)
-                    _FilterChip(label: '域名: ${_store.filterDomain}',
+                    _FilterChip(
+                        label: '域名: ${_store.filterDomain}',
                         onRemove: () => _store.setFilterDomain('')),
                   if (_store.filterMethod.isNotEmpty)
-                    _FilterChip(label: '方法: ${_store.filterMethod}',
+                    _FilterChip(
+                        label: '方法: ${_store.filterMethod}',
                         onRemove: () => _store.setFilterMethod('')),
                   if (_store.filterStatus != null)
                     _FilterChip(
@@ -143,7 +150,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                           label: Text('+${domains.length - 20}',
                               style: const TextStyle(fontSize: 11)),
                           visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           padding: EdgeInsets.zero,
                         ),
                       );
@@ -174,17 +182,30 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
               child: Row(
                 children: [
-                  _StatBadge(label: '${stats['total']}', icon: Icons.http, color: colors.primary),
+                  _StatBadge(
+                      label: '${stats['total']}',
+                      icon: Icons.http,
+                      color: colors.primary),
                   const SizedBox(width: 12),
-                  _StatBadge(label: '${stats['success']}', icon: Icons.check_circle, color: Colors.green),
+                  _StatBadge(
+                      label: '${stats['success']}',
+                      icon: Icons.check_circle,
+                      color: Colors.green),
                   const SizedBox(width: 12),
-                  _StatBadge(label: '${stats['error']}', icon: Icons.error_outline, color: colors.error),
+                  _StatBadge(
+                      label: '${stats['error']}',
+                      icon: Icons.error_outline,
+                      color: colors.error),
                   const SizedBox(width: 12),
                   if (stats['avgMs'] != null)
-                    _StatBadge(label: '${stats['avgMs']}ms', icon: Icons.speed, color: colors.onSurfaceVariant),
+                    _StatBadge(
+                        label: '${stats['avgMs']}ms',
+                        icon: Icons.speed,
+                        color: colors.onSurfaceVariant),
                   const Spacer(),
                   Text('全部 ${_store.count}',
-                      style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+                      style: TextStyle(
+                          fontSize: 11, color: colors.onSurfaceVariant)),
                 ],
               ),
             ),
@@ -196,7 +217,10 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.wifi_find, size: 48, color: colors.onSurfaceVariant.withValues(alpha: 0.3)),
+                        Icon(Icons.wifi_find,
+                            size: 48,
+                            color:
+                                colors.onSurfaceVariant.withValues(alpha: 0.3)),
                         const SizedBox(height: 12),
                         Text(
                           _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
@@ -208,7 +232,10 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                             child: Text(
                               '运行包含 HTTP 请求的脚本后\n请求将自动显示在这里',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant.withValues(alpha: 0.6)),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.onSurfaceVariant
+                                      .withValues(alpha: 0.6)),
                             ),
                           ),
                       ],
@@ -239,7 +266,10 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     for (final r in all) {
       if (r.isSuccess) success++;
       if (r.isError) errors++;
-      if (r.durationMs != null) { totalMs += r.durationMs!; count++; }
+      if (r.durationMs != null) {
+        totalMs += r.durationMs!;
+        count++;
+      }
     }
     return {
       'total': all.length,
@@ -259,14 +289,17 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
-          left: 16, right: 16, top: 16,
+          left: 16,
+          right: 16,
+          top: 16,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('筛选网络请求', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text('筛选网络请求',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             TextField(
               controller: domainCtrl,
@@ -282,11 +315,13 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               },
             ),
             const SizedBox(height: 12),
-            const Text('请求方法', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            const Text('请求方法',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: ['', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'].map((m) {
+              children: ['', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']
+                  .map((m) {
                 final label = m.isEmpty ? '全部' : m;
                 final selected = _store.filterMethod == m;
                 return ChoiceChip(
@@ -301,7 +336,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               }).toList(),
             ),
             const SizedBox(height: 12),
-            const Text('状态码', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            const Text('状态码',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -346,8 +382,10 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   }
 
   void _openDetail(BuildContext context, HttpRecord record) {
-    Navigator.push(context,
-        MaterialPageRoute(builder: (_) => _HttpRecordDetailPage(record: record)));
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => _HttpRecordDetailPage(record: record)));
   }
 
   void _exportRecords(BuildContext context) {
@@ -429,14 +467,15 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         title: const Text('清空网络请求记录'),
         content: const Text('确定要清空所有已捕获的网络请求记录吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               _store.clear();
             },
-            child: Text('清空', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text('清空',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -495,7 +534,10 @@ class _HttpRecordTile extends StatelessWidget {
               child: Text(
                 record.statusText,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor),
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor),
               ),
             ),
             const SizedBox(width: 10),
@@ -519,13 +561,15 @@ class _HttpRecordTile extends StatelessWidget {
                 children: [
                   Text(
                     domain,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w500),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     record.url,
-                    style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+                    style:
+                        TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -539,11 +583,14 @@ class _HttpRecordTile extends StatelessWidget {
               children: [
                 Text(
                   record.durationText,
-                  style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+                  style:
+                      TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
                 ),
                 Text(
                   timeFmt.format(record.timestamp),
-                  style: TextStyle(fontSize: 9, color: colors.onSurfaceVariant.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: colors.onSurfaceVariant.withValues(alpha: 0.6)),
                 ),
               ],
             ),
@@ -583,7 +630,8 @@ class _StatBadge extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  const _StatBadge({required this.label, required this.icon, required this.color});
+  const _StatBadge(
+      {required this.label, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -592,7 +640,9 @@ class _StatBadge extends StatelessWidget {
       children: [
         Icon(icon, size: 13, color: color),
         const SizedBox(width: 3),
-        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w500, color: color)),
       ],
     );
   }
@@ -618,7 +668,8 @@ class _HttpRecordDetailPage extends StatelessWidget {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: record.toExportText()));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已复制请求详情'), duration: Duration(seconds: 1)),
+                const SnackBar(
+                    content: Text('已复制请求详情'), duration: Duration(seconds: 1)),
               );
             },
             tooltip: '复制',
@@ -668,8 +719,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
               if (record.statusCode != null)
                 _DetailRow('状态码', record.statusCode.toString()),
               if (record.errorType != null)
-                _DetailRow('错误类型', record.errorType!,
-                    valueColor: colors.error),
+                _DetailRow('错误类型', record.errorType!, valueColor: colors.error),
               if (record.errorMessage != null)
                 _DetailRow('错误信息', record.errorMessage!,
                     valueColor: colors.error),
@@ -708,19 +758,22 @@ class _HttpRecordDetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.orange.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.28)),
+                      border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.28)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+                        Icon(Icons.warning_amber_rounded,
+                            size: 16, color: Colors.orange.shade700),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             record.responseBodyBytes != null
                                 ? '响应体较大，显示 ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}。'
                                 : '响应体较大，当前仅显示已捕获的内容。',
-                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.orange.shade900),
                           ),
                         ),
                       ],
@@ -743,7 +796,8 @@ class _HttpRecordDetailPage extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => record.isImageBody
-                              ? _ImageFullViewPage(dataUri: record.responseBodyPreview!)
+                              ? _ImageFullViewPage(
+                                  dataUri: record.responseBodyPreview!)
                               : _BodyFullViewPage(
                                   body: record.responseBodyPreview!,
                                   bodyBytes: record.responseBodyBytes,
@@ -752,7 +806,11 @@ class _HttpRecordDetailPage extends StatelessWidget {
                                 ),
                         ),
                       ),
-                      icon: Icon(record.isImageBody ? Icons.zoom_in : Icons.open_in_full, size: 14),
+                      icon: Icon(
+                          record.isImageBody
+                              ? Icons.zoom_in
+                              : Icons.open_in_full,
+                          size: 14),
                       label: Text(record.isImageBody ? '查看原图' : '查看完整内容',
                           style: const TextStyle(fontSize: 12)),
                       style: TextButton.styleFrom(
@@ -797,8 +855,11 @@ class _SectionCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 16, color: colors.primary),
                 const SizedBox(width: 6),
-                Text(title, style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: colors.primary)),
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.primary)),
               ],
             ),
             const SizedBox(height: 8),
@@ -892,7 +953,7 @@ class _MediaInfoCard extends StatelessWidget {
   }
 
   String _mediaLabel(String type) {
-      if (type.startsWith('audio/')) return '音频';
+    if (type.startsWith('audio/')) return '音频';
     if (type.startsWith('video/')) return '视频';
     return '媒体';
   }
@@ -920,12 +981,16 @@ class _MediaInfoCard extends StatelessWidget {
         children: [
           Icon(_mediaIcon(type), size: 40, color: colors.primary),
           const SizedBox(height: 8),
-          Text(_mediaLabel(type), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colors.primary)),
+          Text(_mediaLabel(type),
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: colors.primary)),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _MediaMetaItem(label: '绫诲瀷', value: type),
+              _MediaMetaItem(label: '类型', value: type),
               const SizedBox(width: 24),
               _MediaMetaItem(label: '大小', value: _formatSize(size)),
             ],
@@ -946,9 +1011,11 @@ class _MediaMetaItem extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+        Text(label,
+            style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(value,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -975,6 +1042,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   dynamic _parsedJson;
   String _formatted = '';
   double _fontSize = 10.0;
+  double? _scaleStartFontSize;
+  final Map<int, Offset> _scalePointers = {};
+  double? _pointerScaleStartDistance;
   final _scrollController = ScrollController();
   bool _showFab = false;
   bool _searchVisible = false;
@@ -1026,11 +1096,15 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           _isTruncated = true;
         } catch (_) {
           _parsedJson = null;
-          _formatted = _looksLikeJson(widget.body) ? _basicFormatJson(widget.body) : widget.body;
+          _formatted = _looksLikeJson(widget.body)
+              ? _basicFormatJson(widget.body)
+              : widget.body;
         }
       } else {
         _parsedJson = null;
-        _formatted = _looksLikeJson(widget.body) ? _basicFormatJson(widget.body) : widget.body;
+        _formatted = _looksLikeJson(widget.body)
+            ? _basicFormatJson(widget.body)
+            : widget.body;
       }
     }
     _buildLineNumberedText();
@@ -1054,9 +1128,18 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     int lastComma = -1;
     bool inStr = false, esc = false;
     for (int i = 0; i < s.length; i++) {
-      if (esc) { esc = false; continue; }
-      if (s[i] == '\\') { esc = true; continue; }
-      if (s[i] == '"') { inStr = !inStr; continue; }
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (s[i] == '\\') {
+        esc = true;
+        continue;
+      }
+      if (s[i] == '"') {
+        inStr = !inStr;
+        continue;
+      }
       if (inStr) continue;
       if (s[i] == ',') lastComma = i;
     }
@@ -1064,11 +1147,21 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
 
     // Count and close unclosed brackets
     int curly = 0, square = 0;
-    inStr = false; esc = false;
+    inStr = false;
+    esc = false;
     for (int i = 0; i < s.length; i++) {
-      if (esc) { esc = false; continue; }
-      if (s[i] == '\\') { esc = true; continue; }
-      if (s[i] == '"') { inStr = !inStr; continue; }
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (s[i] == '\\') {
+        esc = true;
+        continue;
+      }
+      if (s[i] == '"') {
+        inStr = !inStr;
+        continue;
+      }
       if (inStr) continue;
       if (s[i] == '{') curly++;
       if (s[i] == '}') curly--;
@@ -1088,10 +1181,25 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     bool inStr = false, esc = false;
     for (int i = 0; i < input.length; i++) {
       final c = input[i];
-      if (esc) { buf.write(c); esc = false; continue; }
-      if (c == '\\' && inStr) { buf.write(c); esc = true; continue; }
-      if (c == '"') { buf.write(c); inStr = !inStr; continue; }
-      if (inStr) { buf.write(c); continue; }
+      if (esc) {
+        buf.write(c);
+        esc = false;
+        continue;
+      }
+      if (c == '\\' && inStr) {
+        buf.write(c);
+        esc = true;
+        continue;
+      }
+      if (c == '"') {
+        buf.write(c);
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) {
+        buf.write(c);
+        continue;
+      }
       if (c == '{' || c == '[') {
         buf.writeln(c);
         indent++;
@@ -1134,7 +1242,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${tempSize.round()} px', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('${tempSize.round()} px',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -1150,7 +1260,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                       },
                     ),
                   ),
-                  const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const Text('A',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 ],
               ),
             ],
@@ -1175,20 +1287,67 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     );
   }
 
+  void _handlePointerDown(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch) return;
+    _scalePointers[event.pointer] = event.localPosition;
+    if (_scalePointers.length == 2) {
+      _scaleStartFontSize = _fontSize;
+      _pointerScaleStartDistance = _currentPointerDistance();
+    }
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_scalePointers.containsKey(event.pointer)) return;
+    _scalePointers[event.pointer] = event.localPosition;
+    final startSize = _scaleStartFontSize;
+    final startDistance = _pointerScaleStartDistance;
+    final currentDistance = _currentPointerDistance();
+    if (startSize == null ||
+        startDistance == null ||
+        startDistance <= 0 ||
+        currentDistance == null) {
+      return;
+    }
+    final nextSize = (startSize * (currentDistance / startDistance))
+        .clamp(6.0, 32.0)
+        .toDouble();
+    if ((nextSize - _fontSize).abs() < 0.1) return;
+    setState(() => _fontSize = nextSize);
+  }
+
+  void _handlePointerEnd(PointerEvent event) {
+    _scalePointers.remove(event.pointer);
+    if (_scalePointers.length < 2) {
+      _scaleStartFontSize = null;
+      _pointerScaleStartDistance = null;
+    }
+  }
+
+  double? _currentPointerDistance() {
+    if (_scalePointers.length < 2) return null;
+    final points = _scalePointers.values.take(2).toList(growable: false);
+    return (points[1] - points[0]).distance;
+  }
+
   Future<void> _exportJson() async {
     try {
       final bridge = NativeBridge();
       final now = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final path = await bridge.exportLog(_formatted, fileName: 'response_$now.json');
+      final path =
+          await bridge.exportLog(_formatted, fileName: 'response_$now.json');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已导出: ${path}'), duration: const Duration(seconds: 3)),
+          SnackBar(
+              content: Text('已导出: ${path}'),
+              duration: const Duration(seconds: 3)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: ${e}'), duration: const Duration(seconds: 2)),
+          SnackBar(
+              content: Text('导出失败: ${e}'),
+              duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -1196,7 +1355,10 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
 
   void _doSearch(String query) {
     if (query.isEmpty) {
-      setState(() { _searchMatches = []; _searchCurrent = -1; });
+      setState(() {
+        _searchMatches = [];
+        _searchCurrent = -1;
+      });
       return;
     }
     final lines = _formatted.split('\n');
@@ -1223,7 +1385,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   void _prevSearchMatch() {
     if (_searchMatches.isEmpty) return;
     setState(() {
-      _searchCurrent = (_searchCurrent - 1 + _searchMatches.length) % _searchMatches.length;
+      _searchCurrent =
+          (_searchCurrent - 1 + _searchMatches.length) % _searchMatches.length;
     });
     _scrollToLine(_searchMatches[_searchCurrent]);
   }
@@ -1258,7 +1421,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text('JSON',
-                    style: TextStyle(fontSize: 10, color: colors.onPrimaryContainer)),
+                    style: TextStyle(
+                        fontSize: 10, color: colors.onPrimaryContainer)),
               ),
             ],
           ],
@@ -1326,7 +1490,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 case 'copy':
                   Clipboard.setData(ClipboardData(text: _formatted));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+                    const SnackBar(
+                        content: Text('已复制'), duration: Duration(seconds: 1)),
                   );
                 case 'export':
                   _exportJson();
@@ -1351,15 +1516,19 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         hintText: '搜索内容...',
-                        border: InputBorder.none, isDense: true,
+                        border: InputBorder.none,
+                        isDense: true,
                       ),
                       onSubmitted: _doSearch,
-                      onChanged: (v) { if (v.isEmpty) _doSearch(''); },
+                      onChanged: (v) {
+                        if (v.isEmpty) _doSearch('');
+                      },
                     ),
                   ),
                   if (_searchMatches.isNotEmpty)
                     Text('${_searchCurrent + 1}/${_searchMatches.length}',
-                        style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+                        style: TextStyle(
+                            fontSize: 11, color: colors.onSurfaceVariant)),
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_up, size: 18),
                     onPressed: _prevSearchMatch,
@@ -1374,7 +1543,11 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                     icon: const Icon(Icons.close, size: 16),
                     onPressed: () {
                       _searchCtrl.clear();
-                      setState(() { _searchVisible = false; _searchMatches = []; _searchCurrent = -1; });
+                      setState(() {
+                        _searchVisible = false;
+                        _searchMatches = [];
+                        _searchCurrent = -1;
+                      });
                     },
                     visualDensity: VisualDensity.compact,
                   ),
@@ -1388,31 +1561,46 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
             child: Row(
               children: [
                 if (_isTruncated) ...[
-                  Icon(Icons.warning_amber, size: 12, color: Colors.orange.shade700),
+                  Icon(Icons.warning_amber,
+                      size: 12, color: Colors.orange.shade700),
                   const SizedBox(width: 3),
-                    Text('已截断', style: TextStyle(fontSize: 10, color: Colors.orange.shade700)),
+                  Text('已截断',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.orange.shade700)),
                   const SizedBox(width: 8),
                 ],
-                Text('$lineCount 行', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+                Text('$lineCount 行',
+                    style: TextStyle(
+                        fontSize: 10, color: colors.onSurfaceVariant)),
                 if (widget.bodyBytes != null) ...[
                   const SizedBox(width: 8),
                   Text(
                     _isTruncated
                         ? '已捕获 ${_formatByteSize(utf8.encode(widget.body).length)} / ${_formatByteSize(widget.bodyBytes!)}'
                         : _formatByteSize(widget.bodyBytes!),
-                    style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+                    style:
+                        TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
                   ),
                 ],
                 const Spacer(),
-                Text('${_formatted.length} 字符', style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+                Text('${_formatted.length} 字符',
+                    style: TextStyle(
+                        fontSize: 10, color: colors.onSurfaceVariant)),
               ],
             ),
           ),
           // --- Content: single SelectableText for performance ---
           Expanded(
             child: Stack(
-                children: [
-                  SingleChildScrollView(
+              children: [
+                Listener(
+                  key: const ValueKey('network_full_body_zoom_gesture'),
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: _handlePointerDown,
+                  onPointerMove: _handlePointerMove,
+                  onPointerUp: _handlePointerEnd,
+                  onPointerCancel: _handlePointerEnd,
+                  child: SingleChildScrollView(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(12),
                     child: Container(
@@ -1423,47 +1611,54 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: SelectableText(
+                        key: const ValueKey('network_full_body_text'),
                         _lineNumberedText,
-                        style: TextStyle(fontFamily: 'monospace', fontSize: _fontSize, height: 1.5),
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: _fontSize,
+                            height: 1.5),
                       ),
                     ),
                   ),
-                  if (_showFab)
-                    Positioned(
-                      right: 12,
-                      bottom: 16,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 36,
-                            height: 36,
-                            child: FloatingActionButton.small(
-                              heroTag: 'top',
-                              onPressed: () => _scrollController.animateTo(0,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOut),
-                              child: const Icon(Icons.keyboard_arrow_up, size: 20),
-                            ),
+                ),
+                if (_showFab)
+                  Positioned(
+                    right: 12,
+                    bottom: 16,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: FloatingActionButton.small(
+                            heroTag: 'top',
+                            onPressed: () => _scrollController.animateTo(0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut),
+                            child:
+                                const Icon(Icons.keyboard_arrow_up, size: 20),
                           ),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            width: 36,
-                            height: 36,
-                            child: FloatingActionButton.small(
-                              heroTag: 'bottom',
-                              onPressed: () => _scrollController.animateTo(
-                                  _scrollController.position.maxScrollExtent,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOut),
-                              child: const Icon(Icons.keyboard_arrow_down, size: 20),
-                            ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: FloatingActionButton.small(
+                            heroTag: 'bottom',
+                            onPressed: () => _scrollController.animateTo(
+                                _scrollController.position.maxScrollExtent,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut),
+                            child:
+                                const Icon(Icons.keyboard_arrow_down, size: 20),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1500,7 +1695,11 @@ class _JsonTreeNode extends StatefulWidget {
   final dynamic data;
   final int depth;
   final double fontSize;
-  const _JsonTreeNode({super.key, required this.data, required this.depth, required this.fontSize});
+  const _JsonTreeNode(
+      {super.key,
+      required this.data,
+      required this.depth,
+      required this.fontSize});
 
   @override
   State<_JsonTreeNode> createState() => _JsonTreeNodeState();
@@ -1543,10 +1742,20 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                 child: Text(_expanded ? '▼' : '▶',
                     style: TextStyle(fontSize: fs - 3, color: colors.primary)),
               ),
-              Text('{', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              Text('{',
+                  style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: fs,
+                      color: colors.onSurface)),
               if (!_expanded) ...[
-                Text(' ${map.length} keys ', style: TextStyle(fontSize: fs - 2, color: colors.onSurfaceVariant)),
-                Text('}', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+                Text(' ${map.length} keys ',
+                    style: TextStyle(
+                        fontSize: fs - 2, color: colors.onSurfaceVariant)),
+                Text('}',
+                    style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: fs,
+                        color: colors.onSurface)),
               ],
             ],
           ),
@@ -1566,7 +1775,8 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                       children: [
                         Text('"${items[i].key}": ',
                             style: TextStyle(
-                                fontFamily: 'monospace', fontSize: fs,
+                                fontFamily: 'monospace',
+                                fontSize: fs,
                                 color: Colors.blue.shade700)),
                         _JsonValue(
                           data: items[i].value,
@@ -1577,7 +1787,11 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                       ],
                     ),
                   ),
-                Text('}', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+                Text('}',
+                    style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: fs,
+                        color: colors.onSurface)),
               ],
             ),
           ),
@@ -1600,10 +1814,20 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                 child: Text(_expanded ? '▼' : '▶',
                     style: TextStyle(fontSize: fs - 3, color: colors.primary)),
               ),
-              Text('[', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+              Text('[',
+                  style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: fs,
+                      color: colors.onSurface)),
               if (!_expanded) ...[
-                Text(' ${list.length} items ', style: TextStyle(fontSize: fs - 2, color: colors.onSurfaceVariant)),
-                Text(']', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+                Text(' ${list.length} items ',
+                    style: TextStyle(
+                        fontSize: fs - 2, color: colors.onSurfaceVariant)),
+                Text(']',
+                    style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: fs,
+                        color: colors.onSurface)),
               ],
             ],
           ),
@@ -1624,7 +1848,11 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                       trailing: i < list.length - 1 ? ',' : null,
                     ),
                   ),
-                Text(']', style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: colors.onSurface)),
+                Text(']',
+                    style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: fs,
+                        color: colors.onSurface)),
               ],
             ),
           ),
@@ -1635,7 +1863,8 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
   Widget _buildPrimitive(dynamic value, double fs) {
     return Text(
       _primitiveText(value),
-      style: TextStyle(fontFamily: 'monospace', fontSize: fs, color: _primitiveColor(value)),
+      style: TextStyle(
+          fontFamily: 'monospace', fontSize: fs, color: _primitiveColor(value)),
     );
   }
 }
@@ -1646,7 +1875,11 @@ class _JsonValue extends StatelessWidget {
   final int depth;
   final double fontSize;
   final String? trailing;
-  const _JsonValue({required this.data, required this.depth, required this.fontSize, this.trailing});
+  const _JsonValue(
+      {required this.data,
+      required this.depth,
+      required this.fontSize,
+      this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -1656,7 +1889,10 @@ class _JsonValue extends StatelessWidget {
     }
     return Text(
       _primitiveText(data) + (trailing ?? ''),
-      style: TextStyle(fontFamily: 'monospace', fontSize: fontSize, color: _primitiveColor(data)),
+      style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: fontSize,
+          color: _primitiveColor(data)),
     );
   }
 }
@@ -1717,7 +1953,8 @@ class _ImagePreview extends StatelessWidget {
           child: Image.memory(
             bytes,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Text('(图片渲染失败)', style: TextStyle(fontSize: 12)),
+            errorBuilder: (_, __, ___) =>
+                const Text('(图片渲染失败)', style: TextStyle(fontSize: 12)),
           ),
         ),
       ),
@@ -1751,7 +1988,8 @@ class _ImageFullViewPage extends StatelessWidget {
         title: const Text('图片预览', style: TextStyle(fontSize: 15)),
       ),
       body: bytes == null
-          ? Center(child: Text('(图片解码失败)', style: TextStyle(color: colors.error)))
+          ? Center(
+              child: Text('(图片解码失败)', style: TextStyle(color: colors.error)))
           : InteractiveViewer(
               minScale: 0.2,
               maxScale: 8.0,
@@ -1759,8 +1997,9 @@ class _ImageFullViewPage extends StatelessWidget {
                 child: Image.memory(
                   bytes,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                      Center(child: Text('(图片渲染失败)', style: TextStyle(color: colors.error))),
+                  errorBuilder: (_, __, ___) => Center(
+                      child: Text('(图片渲染失败)',
+                          style: TextStyle(color: colors.error))),
                 ),
               ),
             ),

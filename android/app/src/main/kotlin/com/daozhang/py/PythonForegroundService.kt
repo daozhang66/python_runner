@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -48,7 +47,6 @@ class PythonForegroundService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Don't try to restart — just let it die gracefully
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         super.onTaskRemoved(rootIntent)
@@ -63,6 +61,23 @@ class PythonForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // CRITICAL: Call startForeground() FIRST, unconditionally.
+        // Any failure before this call causes ForegroundServiceDidNotStartInTimeException.
+        try {
+            val safeNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Python Runner")
+                .setContentText("运行中...")
+                .setSmallIcon(android.R.drawable.ic_menu_manage)
+                .setOngoing(true)
+                .build()
+            startForeground(NOTIFICATION_ID, safeNotification)
+        } catch (e: Exception) {
+            android.util.Log.e("PythonRunner", "startForeground failed", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        // Now it's safe to handle the intent
         if (intent?.action == ACTION_STOP) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -73,29 +88,20 @@ class PythonForegroundService : Service() {
         scriptName = intent?.getStringExtra(EXTRA_SCRIPT_NAME)
         startTime = System.currentTimeMillis()
 
-        val contentText = when (taskType) {
-            TASK_PIP_INSTALL -> "正在安装 Python 包..."
-            else -> {
-                val name = scriptName?.removeSuffix(".py") ?: "脚本"
-                "$name 运行中..."
-            }
-        }
-
+        // Update notification with actual content
         try {
-            val notification = buildNotification(contentText)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
+            val contentText = when (taskType) {
+                TASK_PIP_INSTALL -> "正在安装 Python 包..."
+                else -> {
+                    val name = scriptName?.removeSuffix(".py") ?: "脚本"
+                    "$name 运行中..."
+                }
             }
-        } catch (e: Exception) {
-            android.util.Log.w("PythonRunner", "Failed to startForeground: ${e.message}")
-            stopSelf()
-            return START_NOT_STICKY
-        }
+            val notification = buildNotification(contentText)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
 
-        // Start periodic notification updates (every 10s)
         updateHandler.removeCallbacks(updateRunnable)
         updateHandler.postDelayed(updateRunnable, 10_000)
 
@@ -105,15 +111,17 @@ class PythonForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Python Runner",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Python 脚本执行状态"
-        }
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+        try {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Python Runner",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Python 脚本执行状态"
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        } catch (_: Exception) {}
     }
 
     private fun updateNotificationWithDuration() {
@@ -132,19 +140,20 @@ class PythonForegroundService : Service() {
     }
 
     private fun buildNotification(contentText: String): Notification {
+        val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE
+        } else {
+            0
+        }
         val stopIntent = Intent(this, PythonForegroundService::class.java).apply {
             action = ACTION_STOP
         }
-        val stopPendingIntent = PendingIntent.getService(
-            this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, piFlags)
 
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val launchPendingIntent = PendingIntent.getActivity(
-            this, 0, launchIntent, PendingIntent.FLAG_IMMUTABLE
-        )
+        val launchPendingIntent = PendingIntent.getActivity(this, 0, launchIntent, piFlags)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Python Runner")
@@ -157,8 +166,10 @@ class PythonForegroundService : Service() {
     }
 
     fun updateNotification(text: String) {
-        val notification = buildNotification(text)
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification)
+        try {
+            val notification = buildNotification(text)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
     }
 }
