@@ -2,6 +2,8 @@
 
 # Python Runner
 
+> Developed with **Claude Code/Codex** (AI coding assistant)
+
 Python Runner is a Flutter-based Android app for running Python scripts with script management, full-screen terminal output, package management, network request inspection, and dual runtime support.
 
 ## Features
