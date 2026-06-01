@@ -2,96 +2,159 @@
 
 # Python Runner
 
-> 本项目由 **Claude Code**（Anthropic AI 编码助手）辅助开发
+> 本项目由 **Claude Code/Codex**辅助开发
 
-一个基于 Flutter 的 Python 脚本运行器，具备实时控制台、包管理器和网络调试功能。
+一个基于 Flutter 的 Android Python 脚本运行器，提供脚本管理、全屏终端、库管理、网络请求调试，以及双运行时切换能力。
 
 ## 主要功能
 
-- **代码编辑器**：语法高亮、搜索、自动缩进
-- **本地运行**：基于 Chaquopy 的本地执行
-- **交互式输入**：完整支持 `input()` 函数
-- **图形引擎**：`scene` 模块，支持游戏和动画（CustomPaint）
-- **包管理器**：pip 包安装/卸载
-- **50+ 内置 Python 库**：覆盖常用标准库
-- **运行历史**：日志持久化与导出
-- **脚本管理**：导入/导出/批量操作
+- **脚本管理**
+  - 新建、编辑、重命名、复制、导入、导出、删除
+  - 列表/宫格双视图
+  - 长按菜单与多选批量操作
+  - 支持脚本置顶
 
-## 网络调试体系
+- **代码编辑器**
+  - 语法高亮
+  - 搜索与跳转
+  - 只读/编辑切换
+  - 字号调节
+  - 保存后直接运行
 
-三层网络调试能力：
+- **全屏终端**
+  - 实时 stdout / stderr 输出
+  - `input()` 交互输入
+  - 日志搜索、错误过滤、复制、清空
+  - 运行超时控制
 
-### 1. 代理 / SSL 调试（外部调试底座）
-- 配置代理 host/port，将请求导出到 Charles/Fiddler/Proxyman/Mitmproxy
-- 允许不安全证书，配合抓包工具的 MITM 证书
-- 设置页 → 网络调试模式
+- **悬浮球**
+  - 运行状态指示
+  - 自动贴边与自动收起
+  - 最近脚本快捷运行
+  - 拖拽到底部区域快速停止脚本
 
-### 2. 网络请求查看器（内部可视化）
-- 底部「网络」Tab 实时查看所有 Python HTTP 请求
-- 显示：请求方法、URL、请求头、请求体、状态码、响应头、响应体预览、耗时、错误类型
-- 支持按域名/方法/状态码筛选
-- 支持复制/导出请求记录
-- 自动 Hook 的库：requests、httpx、urllib3
+- **库管理**
+  - 安装 / 卸载 Python 包
+  - 支持指定版本
+  - 支持自定义 PyPI 源，留空使用官方源
+  - 用户安装 / 内置库分开展示
+  - 用户安装列表只显示顶层包，不显示自动依赖
+  - 卸载时支持清理孤儿依赖
 
-### 3. 全局请求覆盖（内部控制）
-- 全局 User-Agent 覆盖（解决 python-requests/2.x.x 被拦截）
-- 全局额外请求头注入（JSON 格式）
-- 全局 Cookie 注入
-- 默认 HTTP 超时控制
-- 跟随重定向开关
-- 强制代理开关
-- 设置页 → 启用请求覆盖
+- **双运行时**
+  - **Chaquopy**
+    - 轻量、稳定、启动快
+    - 适合常规 Python 脚本
+  - **Linux-like**
+    - Debian + proot 环境
+    - 支持更多系统依赖与 pip 包
+    - 首次使用需在设置页安装运行环境
 
-## 技术栈
+- **网络调试**
+  - 底部「网络」页查看 Python HTTP 请求
+  - 支持 URL / 域名搜索
+  - 支持域名、方法、状态码筛选
+  - 支持请求详情、JSON 树查看
+  - 支持全局 UA / Header / Cookie / Timeout / Redirect 覆盖
 
-- Flutter + Material 3
-- Chaquopy（Python 运行时）
-- CustomPaint（图形渲染）
-- Python Monkey Patch（HTTP Hook）
+- **日志与诊断**
+  - 系统日志查看、导出、清空
+  - 崩溃日志与脚本错误日志记录
+  - 诊断信息导出
 
-## 快速开始
+## 运行时说明
 
-### 环境要求
+### Chaquopy
 
-- Flutter SDK (>=3.0)
-- Android Studio / VS Code with Flutter extension
-- Android 设备或模拟器 (API 21+)
+- 内置到 APK 中
+- 适合轻量脚本与常用 Python 库
+- 某些需要原生编译扩展或系统依赖的包可能无法安装
 
-### 安装运行
+### Linux-like
+
+- 基于 Debian rootfs + proot
+- 运行环境首次安装后会解压到：
+
+```text
+/data/user/0/com.daozhang.py/files/linux_like/
+```
+
+- 用户安装包目录：
+
+```text
+/data/user/0/com.daozhang.py/files/linux_like/user_site_packages
+```
+
+- 库管理页中的“用户安装”只显示顶层安装包，不显示 `certifi`、`urllib3` 这类自动依赖
+
+## 库管理说明
+
+- **PyPI 源**
+  - 可手动设置 pip 索引地址
+  - 留空时使用官方源
+  - 设置页支持一键恢复官方源
+
+- **安装**
+  - 可输入包名
+  - 可选指定版本
+  - Linux-like 与 Chaquopy 的包互相独立
+
+- **卸载**
+  - 卸载顶层包时，会尝试清理当前已无人依赖的孤儿依赖
+
+## 网络调试说明
+
+自动记录以下常见 Python HTTP 库请求：
+
+- `requests`
+- `httpx`
+- `urllib`
+
+支持：
+
+- 统计摘要
+- URL 搜索
+- 请求详情
+- JSON 树状查看
+- 请求覆盖配置
+
+## 项目结构
+
+```text
+lib/
+├─ main.dart
+├─ models/
+├─ pages/
+├─ providers/
+├─ runtime/
+├─ services/
+├─ utils/
+└─ widgets/
+
+android/
+assets/
+test/
+```
+
+## 开发环境
+
+- Flutter SDK
+- Android Studio 或 VS Code
+- Android 真机或模拟器
+
+## 运行
 
 ```bash
-git clone https://github.com/daozhang66/python_runner.git
-cd python_runner
 flutter pub get
 flutter run
 ```
 
-### 构建 APK
+## 构建 Release APK
 
 ```bash
 flutter build apk --release
 ```
 
-## 项目结构
+## 仓库
 
-```
-lib/
-├── main.dart                    # App 入口
-├── models/                      # 数据模型（execution_state、log_entry 等）
-├── pages/                       # UI 页面（控制台、编辑器、设置等）
-├── providers/                   # 状态管理（Provider 模式）
-├── services/                    # 核心服务（日志、数据库、桥接等）
-├── utils/                       # 工具类（ANSI 解析器等）
-└── widgets/                     # 可复用组件
-android/                         # Android 原生配置
-assets/                          # 静态资源
-test/                            # 单元测试
-```
-
-## 许可证
-
-采用 MIT 许可证。详见 `LICENSE` 文件。
-
-## 项目链接
-
-- GitHub: [https://github.com/daozhang66/python_runner](https://github.com/daozhang66/python_runner)
+- GitHub: https://github.com/daozhang66/python_runner
