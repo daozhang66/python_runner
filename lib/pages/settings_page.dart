@@ -262,6 +262,9 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+        surfaceTintColor: Colors.transparent,
         title: const Text('下载加速镜像'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -370,6 +373,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+          surfaceTintColor: Colors.transparent,
           title: const Text('安全警告'),
           content: const Text(
             '允许不安全证书将使网络连接不验证SSL证书，'
@@ -441,6 +447,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+        surfaceTintColor: Colors.transparent,
         title: const Text('清空系统日志'),
         content: const Text('确定要清空所有系统日志和崩溃日志吗？此操作不可撤销。'),
         actions: [
@@ -528,6 +537,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                            surfaceTintColor: Colors.transparent,
                             title: const Text('需要悬浮窗权限'),
                             content: const Text(
                               '悬浮球需要「显示在其他应用上层」权限。\n\n'
@@ -577,11 +589,20 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: DropdownButtonFormField<String>(
                   key: ValueKey('$_runtimeBackend-$_engineDropdownKey'),
                   value: _runtimeBackend,
-                  decoration: const InputDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  iconEnabledColor: Theme.of(context).colorScheme.primary,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
                     labelText: '运行引擎',
                     prefixIcon: Icon(Icons.memory),
                     border: OutlineInputBorder(gapPadding: 0),
                     isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
@@ -595,9 +616,17 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Text('Linux-like（实验）'),
                     ),
                   ],
-                  selectedItemBuilder: (context) => const [
-                    Text('Chaquopy'),
-                    Text('Linux-like'),
+                  selectedItemBuilder: (context) => [
+                    Text('Chaquopy',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        )),
+                    Text('Linux-like',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        )),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -931,6 +960,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                        surfaceTintColor: Colors.transparent,
                         title: const Text('启用请求覆盖'),
                         content: const Text(
                           '开启后将全局覆盖 Python 脚本中 HTTP 请求的 '
@@ -1712,6 +1744,7 @@ class _AboutPageState extends State<_AboutPage> {
   String _pyVersion = '';
   String _sitePackages = '';
   String _pythonPath = '';
+  String _chaquopyPipDir = '';
 
   @override
   void initState() {
@@ -1747,6 +1780,7 @@ class _AboutPageState extends State<_AboutPage> {
       _pyVersion = pyInfo['pythonVersion'] ?? '';
       _sitePackages = pyInfo['sitePackages'] ?? '';
       _pythonPath = pyInfo['pythonPath'] ?? '';
+      _chaquopyPipDir = pyInfo['chaquopyPipDir'] ?? '';
     });
   }
 
@@ -1794,7 +1828,12 @@ class _AboutPageState extends State<_AboutPage> {
                     : 'Chaquopy',
               ),
               if (_pyVersion.isNotEmpty) _AboutItem(label: '版本', value: _pyVersion),
-              if (_sitePackages.isNotEmpty) _AboutItem(label: '安装目录', value: _sitePackages, mono: true),
+              if (_runtimeBackend == RuntimeManager.chaquopyBackendId && _chaquopyPipDir.isNotEmpty)
+                _AboutItem(label: '安装目录', value: _chaquopyPipDir, mono: true),
+              if (_runtimeBackend == RuntimeManager.chaquopyBackendId && _chaquopyPipDir.isEmpty && _sitePackages.isNotEmpty)
+                _AboutItem(label: '安装目录', value: _sitePackages, mono: true),
+              if (_runtimeBackend != RuntimeManager.chaquopyBackendId && _sitePackages.isNotEmpty)
+                _AboutItem(label: '安装目录', value: _sitePackages, mono: true),
               if (_pythonPath.isNotEmpty) _AboutItem(label: '路径', value: _pythonPath, mono: true),
             ],
           ),
