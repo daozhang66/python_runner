@@ -2,6 +2,8 @@
 
 # Python Runner
 
+> 本项目由 **Claude Code/Codex**辅助开发
+
 一个基于 Flutter 的 Android Python 脚本运行器，提供脚本管理、全屏终端、库管理、网络请求调试，以及双运行时切换能力。
 
 ## 主要功能
