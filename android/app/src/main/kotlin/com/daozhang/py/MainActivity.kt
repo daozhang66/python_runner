@@ -938,6 +938,7 @@ class MainActivity : FlutterActivity() {
         val version: String,
         val normalizedName: String,
         val metadataDir: File,
+        val isDirectRequest: Boolean,
         val topLevelEntries: List<String>,
         val recordEntries: List<String>,
         val requires: List<String>
@@ -965,6 +966,7 @@ class MainActivity : FlutterActivity() {
                     version = metadata["Version"]?.firstOrNull().orEmpty(),
                     normalizedName = normalizePythonPackageName(name),
                     metadataDir = metadataDir,
+                    isDirectRequest = metadataDir.resolve("REQUESTED").isFile,
                     topLevelEntries = metadataDir.resolve("top_level.txt")
                         .takeIf { it.isFile }
                         ?.readLines()
@@ -1007,6 +1009,7 @@ class MainActivity : FlutterActivity() {
                     version = readPythonPackageVersion(packageDir),
                     normalizedName = normalizePythonPackageName(name),
                     metadataDir = packageDir,
+                    isDirectRequest = false,
                     topLevelEntries = listOf(name),
                     recordEntries = emptyList(),
                     requires = emptyList()
@@ -1204,10 +1207,82 @@ class MainActivity : FlutterActivity() {
             .mapNotNull { installed[it]?.name }
     }
 
+    private fun queryLinuxLikeTopLevelPackages(): MutableMap<String, String> {
+        return try {
+            val command = linuxLikeRuntimeManager.buildPythonModuleCommand(
+                "pip",
+                listOf(
+                    "--disable-pip-version-check",
+                    "list",
+                    "--not-required",
+                    "--format=json"
+                )
+            )
+            val commandResult = runLinuxLikeCommandBlocking(command, emitLogs = false)
+            if (commandResult.exitCode != 0) {
+                return mutableMapOf()
+            }
+            val json = JSONArray(commandResult.stdout)
+            val packages = linkedMapOf<String, String>()
+            for (i in 0 until json.length()) {
+                val item = json.getJSONObject(i)
+                val packageName = item.optString("name")
+                if (packageName.isBlank()) continue
+                val normalizedPackageName = normalizePythonPackageName(packageName)
+                if (linuxLikeBootstrapPackages.contains(normalizedPackageName)) continue
+                packages[normalizedPackageName] = item.optString("version")
+            }
+            packages.toMutableMap()
+        } catch (_: Exception) {
+            mutableMapOf()
+        }
+    }
+
+    private fun resolveLinuxLikeExplicitPackages(
+        distributions: List<LinuxLikeDistribution>,
+        topLevelPackages: Map<String, String>
+    ): MutableMap<String, String> {
+        val explicitPackages = loadLinuxLikeExplicitPackages()
+        if (distributions.isEmpty()) {
+            return explicitPackages
+        }
+
+        val requestedPackages = linkedMapOf<String, String>()
+        distributions
+            .filter { it.isDirectRequest && !linuxLikeBootstrapPackages.contains(it.normalizedName) }
+            .sortedBy { it.name.lowercase(Locale.US) }
+            .forEach { distribution ->
+                requestedPackages[distribution.normalizedName] = distribution.version
+            }
+        if (requestedPackages.isNotEmpty()) {
+            if (requestedPackages != explicitPackages) {
+                saveLinuxLikeExplicitPackages(requestedPackages)
+            }
+            return requestedPackages.toMutableMap()
+        }
+
+        if (topLevelPackages.isNotEmpty()) {
+            val resolvedPackages = linkedMapOf<String, String>()
+            topLevelPackages.toSortedMap().forEach { (name, version) ->
+                resolvedPackages[name] = version
+            }
+            if (resolvedPackages != explicitPackages) {
+                saveLinuxLikeExplicitPackages(resolvedPackages)
+            }
+            return resolvedPackages.toMutableMap()
+        }
+
+        return explicitPackages
+    }
+
     private fun cleanupLinuxLikeOrphanDependencies(): List<String> {
         val removedDependencies = linkedSetOf<String>()
-        val explicitPackages = loadLinuxLikeExplicitPackages().keys.toMutableSet()
         while (true) {
+            val distributions = linuxLikeDistributions()
+            val explicitPackages = resolveLinuxLikeExplicitPackages(
+                distributions,
+                queryLinuxLikeTopLevelPackages()
+            ).keys
             val orphanDependencies = queryLinuxLikeOrphanDependencies(explicitPackages)
             if (orphanDependencies.isEmpty()) {
                 break
@@ -1219,31 +1294,6 @@ class MainActivity : FlutterActivity() {
             removedThisRound.forEach { removedDependencies.add(it) }
         }
         return removedDependencies.toList()
-    }
-
-    private fun migrateLinuxLikeExplicitPackagesIfMissing(
-        distributions: List<LinuxLikeDistribution>
-    ): MutableMap<String, String> {
-        val explicitPackages = loadLinuxLikeExplicitPackages()
-        if (distributions.isEmpty()) {
-            return explicitPackages
-        }
-        var changed = false
-        distributions.forEach { distribution ->
-            val name = distribution.normalizedName
-            if (
-                !explicitPackages.containsKey(name) &&
-                !linuxLikeBootstrapPackages.contains(name) &&
-                !linuxLikeImplicitDependencyPackages.contains(name)
-            ) {
-                explicitPackages[name] = distribution.version
-                changed = true
-            }
-        }
-        if (changed) {
-            saveLinuxLikeExplicitPackages(explicitPackages)
-        }
-        return explicitPackages
     }
 
     private fun handleListLinuxLikePackages(result: MethodChannel.Result) {
@@ -1264,46 +1314,50 @@ class MainActivity : FlutterActivity() {
                 }
                 val json = org.json.JSONArray(commandResult.stdout)
                 val hostDistributions = linuxLikeDistributions()
+                val topLevelPackages = queryLinuxLikeTopLevelPackages()
                 val explicitPackages =
-                    migrateLinuxLikeExplicitPackagesIfMissing(hostDistributions).keys
+                    resolveLinuxLikeExplicitPackages(hostDistributions, topLevelPackages).keys
                 val packages = mutableListOf<Map<String, String>>()
-                val installedPackageNames = mutableSetOf<String>()
+                val installedPackageNames =
+                    hostDistributions.mapTo(mutableSetOf()) { it.normalizedName }
                 val listedPackageNames = mutableSetOf<String>()
-
-                hostDistributions
-                    .filter { explicitPackages.contains(it.normalizedName) }
-                    .sortedBy { it.name.lowercase(Locale.US) }
-                    .forEach { distribution ->
-                        installedPackageNames.add(distribution.normalizedName)
-                        listedPackageNames.add(distribution.normalizedName)
-                        packages.add(
-                            mapOf(
-                                "name" to distribution.name,
-                                "version" to distribution.version,
-                                "source" to "user"
-                            )
-                        )
-                    }
+                val pipListedPackages = mutableListOf<Map<String, String>>()
 
                 for (i in 0 until json.length()) {
                     val item = json.getJSONObject(i)
                     val packageName = item.optString("name")
+                    val packageVersion = item.optString("version")
                     val normalizedPackageName = normalizePythonPackageName(packageName)
+                    pipListedPackages.add(
+                        mapOf(
+                            "name" to packageName,
+                            "version" to packageVersion
+                        )
+                    )
                     installedPackageNames.add(normalizedPackageName)
+                }
+
+                pipListedPackages
+                    .sortedBy { it["name"]?.lowercase(Locale.US) ?: "" }
+                    .forEach { item ->
+                    val packageName = item["name"].orEmpty()
+                    if (packageName.isBlank()) return@forEach
+                    val packageVersion = item["version"].orEmpty()
+                    val normalizedPackageName = normalizePythonPackageName(packageName)
                     val isBootstrapPackage =
                         linuxLikeBootstrapPackages.contains(normalizedPackageName)
                     val isExplicitUserPackage = explicitPackages.contains(normalizedPackageName)
                     if (!isBootstrapPackage && !isExplicitUserPackage) {
-                        continue
+                        return@forEach
                     }
                     if (listedPackageNames.contains(normalizedPackageName)) {
-                        continue
+                        return@forEach
                     }
                     listedPackageNames.add(normalizedPackageName)
                     packages.add(
                         mapOf(
                             "name" to packageName,
-                            "version" to item.optString("version"),
+                            "version" to packageVersion.ifBlank { "unknown" },
                             "source" to if (isExplicitUserPackage) "user" else "runtime"
                         )
                     )

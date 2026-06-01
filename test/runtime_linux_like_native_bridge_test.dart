@@ -66,12 +66,13 @@ void main() {
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('migrateLinuxLikeExplicitPackagesIfMissing'));
+    expect(activity, contains('resolveLinuxLikeExplicitPackages'));
+    expect(activity, contains('queryLinuxLikeTopLevelPackages'));
+    expect(activity, contains('REQUESTED'));
     expect(activity, contains('hostDistributions'));
-    expect(activity, contains('"source" to "user"'));
     expect(activity, contains('removeMissingLinuxLikeExplicitPackages'));
-    expect(activity, contains('isExplicitUserPackage'));
-    expect(activity, contains('if (!isBootstrapPackage && !isExplicitUserPackage)'));
+    expect(activity, contains('explicitPackages.contains(normalizedPackageName)'));
+    expect(activity, contains('pipListedPackages'));
     expect(activity,
         contains('"source" to if (isExplicitUserPackage) "user" else "runtime"'));
   });
@@ -82,13 +83,15 @@ void main() {
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('migrateLinuxLikeExplicitPackagesIfMissing'));
+    expect(activity, contains('resolveLinuxLikeExplicitPackages'));
     expect(activity, contains('readPythonPackageVersion'));
-    expect(activity, contains('linuxLikeImplicitDependencyPackages'));
+    expect(activity, contains('"--not-required"'));
     expect(activity, contains('metadataOwnedTopLevels'));
-    expect(activity, isNot(contains('explicitPackages.isNotEmpty() || distributions.isEmpty()')));
-    expect(activity, contains('!explicitPackages.containsKey(name)'));
-    expect(activity, contains('if (changed)'));
+    expect(activity, contains('requestedPackages'));
+    expect(activity, contains('topLevelPackages'));
+    expect(activity, isNot(contains('!linuxLikeImplicitDependencyPackages.contains(name)')));
+    expect(activity, contains('saveLinuxLikeExplicitPackages(requestedPackages)'));
+    expect(activity, contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
   });
 
   test('linux-like package install verifies pip actually installed package',
