@@ -164,11 +164,20 @@ void main() {
 
     expect(manager, contains('target["HOME"] = "/root"'));
     expect(manager, contains('target["PATH"] ='));
+    expect(manager, contains('target["TERM"] = "xterm-256color"'));
     expect(manager, contains('target["PIP_NO_INPUT"] = "1"'));
     expect(
         manager,
         isNot(contains(
             'target["PYRUNNER_HTTP_HOOK_CONFIG"] = "{\\"record_requests\\": true}"')));
+  });
+
+  test('script execution environment sets TERM for terminal utilities', () {
+    final provider = File(
+      'lib/providers/execution_provider.dart',
+    ).readAsStringSync();
+
+    expect(provider, contains("'TERM': 'xterm-256color'"));
   });
 
   test('linux-like script launcher preserves script semantics with runpy', () {

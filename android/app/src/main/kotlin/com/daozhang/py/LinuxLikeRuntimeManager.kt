@@ -431,6 +431,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         target["USER"] = "root"
         target["LOGNAME"] = "root"
         target["SHELL"] = "/bin/sh"
+        target["TERM"] = "xterm-256color"
         target["PATH"] =
             "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         target["LANG"] = "C.UTF-8"

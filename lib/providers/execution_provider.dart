@@ -285,6 +285,7 @@ class ExecutionProvider extends ChangeNotifier {
       final environment = <String, String>{
         'PYRUNNER_RUNTIME_BACKEND': runtimeBackendId,
         'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
+        'TERM': 'xterm-256color',
         // Pass device timezone to Linux-like so Python sees the correct local time
         'TZ': 'UTC${-DateTime.now().timeZoneOffset.inHours}',
       };
