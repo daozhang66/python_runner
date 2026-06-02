@@ -22,6 +22,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         const val defaultManifestUrl =
             "https://raw.githubusercontent.com/daozhang66/python_runner/main/linux-like/debian-python-dev-aarch64.json"
         const val defaultRuntimeFlavor = "debian-python-dev-aarch64"
+        const val stdinRequestSentinel = "__PYRUNNER_STDIN_REQUEST__"
     }
 
     private val runtimeDir: File = File(context.filesDir, "linux_like")
@@ -348,10 +349,36 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         add("-c")
         val hooksDirLiteral = toPythonStringLiteral(hooksDir.absolutePath)
         val scriptPathLiteral = toPythonStringLiteral(scriptPath)
+        val stdinRequestSentinelLiteral = toPythonStringLiteral(stdinRequestSentinel)
         val code = buildString {
-            appendLine("import os, runpy, sys")
+            appendLine("import builtins, json, os, runpy, sys")
             appendLine("hooks_dir = $hooksDirLiteral")
             appendLine("script_path = $scriptPathLiteral")
+            appendLine("stdin_request_sentinel = $stdinRequestSentinelLiteral")
+            appendLine("_original_stdin = sys.stdin")
+            appendLine("_stdin_request_from_input = False")
+            appendLine("def _emit_stdin_request(prompt=''):")
+            appendLine("    payload = json.dumps({'prompt': prompt}, ensure_ascii=False)")
+            appendLine("    sys.__stdout__.write(stdin_request_sentinel + payload + '\\n')")
+            appendLine("    sys.__stdout__.flush()")
+            appendLine("class _PythonRunnerStdin:")
+            appendLine("    def readline(self, *args, **kwargs):")
+            appendLine("        global _stdin_request_from_input")
+            appendLine("        if not _stdin_request_from_input:")
+            appendLine("            _emit_stdin_request()")
+            appendLine("        return _original_stdin.readline(*args, **kwargs)")
+            appendLine("    def __getattr__(self, name):")
+            appendLine("        return getattr(_original_stdin, name)")
+            appendLine("sys.stdin = _PythonRunnerStdin()")
+            appendLine("def _patched_input(prompt=''):")
+            appendLine("    global _stdin_request_from_input")
+            appendLine("    _emit_stdin_request(str(prompt) if prompt is not None else '')")
+            appendLine("    _stdin_request_from_input = True")
+            appendLine("    try:")
+            appendLine("        return sys.stdin.readline().rstrip('\\n')")
+            appendLine("    finally:")
+            appendLine("        _stdin_request_from_input = False")
+            appendLine("builtins.input = _patched_input")
             appendLine("sys.path.insert(0, hooks_dir)")
             appendLine("if os.environ.get('PYRUNNER_HTTP_HOOK_CONFIG'):")
             appendLine("    try:")
