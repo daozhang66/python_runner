@@ -486,12 +486,7 @@ class MainActivity : FlutterActivity() {
                         val type = item.callAttr("__getitem__", 0).toString()
                         val content = item.callAttr("__getitem__", 1).toString()
                         if (type == "__stdin_request__") {
-                            mainHandler.post {
-                                stdinRequestSink?.success(mapOf(
-                                    "executionId" to executionId,
-                                    "timestamp" to System.currentTimeMillis()
-                                ))
-                            }
+                            emitStdinRequest(executionId)
                         } else {
                             sendLog(type, content)
                         }
@@ -662,9 +657,9 @@ class MainActivity : FlutterActivity() {
                 currentExecutionProcess = process
 
                 val stdoutThread =
-                    collectProcessOutput(process.inputStream, "stdout", stdout, true)
+                    collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId)
                 val stderrThread =
-                    collectProcessOutput(process.errorStream, "stderr", stderr, true)
+                    collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId)
 
                 if (timeoutSeconds > 0) {
                     Thread {
@@ -1819,18 +1814,49 @@ class MainActivity : FlutterActivity() {
         inputStream: java.io.InputStream,
         type: String,
         buffer: StringBuilder,
-        emitLogs: Boolean
+        emitLogs: Boolean,
+        executionId: String? = null
     ): Thread {
         return Thread {
             try {
                 BufferedReader(InputStreamReader(inputStream)).useLines { lines ->
                     lines.forEach { line ->
+                        if (line.startsWith(LinuxLikeRuntimeManager.stdinRequestSentinel)) {
+                            emitStdinRequest(
+                                executionId,
+                                parseLinuxLikePrompt(line.removePrefix(LinuxLikeRuntimeManager.stdinRequestSentinel))
+                            )
+                            return@forEach
+                        }
                         buffer.append(line).append('\n')
                         if (emitLogs) sendLog(type, line)
                     }
                 }
             } catch (_: Exception) {}
         }.also { it.name = "linux-like-capture-$type"; it.isDaemon = true; it.start() }
+    }
+
+    private fun parseLinuxLikePrompt(payload: String): String {
+        val trimmed = payload.trim()
+        if (trimmed.isEmpty()) return ""
+        return try {
+            JSONObject(trimmed).optString("prompt", "")
+        } catch (_: Exception) {
+            trimmed
+        }
+    }
+
+    private fun emitStdinRequest(executionId: String?, prompt: String = "") {
+        if (executionId.isNullOrBlank()) return
+        mainHandler.post {
+            stdinRequestSink?.success(
+                mapOf(
+                    "executionId" to executionId,
+                    "prompt" to prompt,
+                    "timestamp" to System.currentTimeMillis()
+                )
+            )
+        }
     }
 
     private fun sendStatus(executionId: String, status: String, exitCode: Int?) {

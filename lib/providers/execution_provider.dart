@@ -48,6 +48,7 @@ class ExecutionProvider extends ChangeNotifier {
   StreamSubscription? _stdinSub;
   String? _currentScriptName;
   bool _waitingForInput = false;
+  String _currentInputPrompt = '';
 
   /// History of all script execution logs
   final List<ScriptLogRecord> _logHistory = [];
@@ -82,6 +83,7 @@ class ExecutionProvider extends ChangeNotifier {
       _state.status == ExecutionStatus.running ||
       _state.status == ExecutionStatus.stopping;
   bool get waitingForInput => _waitingForInput;
+  String get currentInputPrompt => _currentInputPrompt;
   List<ScriptLogRecord> get logHistory => List.unmodifiable(_logHistory);
 
   ExecutionProvider(this._bridge, {RuntimeManager? runtimeManager})
@@ -158,6 +160,7 @@ class ExecutionProvider extends ChangeNotifier {
         }
         if (isTerminal) {
           _waitingForInput = false;
+          _currentInputPrompt = '';
           unawaited(HttpInspectorStore.instance.flush());
           // Update floating ball status and hide after delay
           _updateFloatingBallOnTerminal(_state.status);
@@ -173,6 +176,28 @@ class ExecutionProvider extends ChangeNotifier {
 
     try {
       _stdinSub = _runtimeManager.stdinRequestStream.listen((request) {
+        final activeExecutionId = _state.executionId;
+        if (_state.status != ExecutionStatus.running &&
+            _state.status != ExecutionStatus.stopping) {
+          return;
+        }
+        if (request.executionId != null &&
+            activeExecutionId != null &&
+            request.executionId != activeExecutionId) {
+          return;
+        }
+        _currentInputPrompt = request.prompt;
+        if (_currentInputPrompt.isNotEmpty) {
+          final entry = LogEntry(
+            type: LogType.stdout,
+            content: _currentInputPrompt,
+            timestamp: DateTime.now(),
+          );
+          _logs.add(entry);
+          if (_logHistory.isNotEmpty) {
+            _logHistory.last.logs.add(entry);
+          }
+        }
         _waitingForInput = true;
         // Update floating ball to show waiting state
         _updateFloatingBallStatus('waiting_input');
@@ -224,6 +249,7 @@ class ExecutionProvider extends ChangeNotifier {
     _currentScriptName = name;
     _logs.clear();
     _waitingForInput = false;
+    _currentInputPrompt = '';
     _state = ExecutionState(
       executionId: executionId,
       status: ExecutionStatus.running,
@@ -322,14 +348,28 @@ class ExecutionProvider extends ChangeNotifier {
   Future<void> sendStdin(String input) async {
     try {
       await _runtimeManager.sendStdin(input);
-      _logs.add(LogEntry(
-        type: LogType.info,
-        content: '> $input',
+      final prompt = _currentInputPrompt;
+      final echoedInput = prompt.isNotEmpty ? '$prompt$input' : '> $input';
+      final mergedPromptLine = prompt.isNotEmpty &&
+          _logs.isNotEmpty &&
+          _logs.last.content == prompt;
+      final entry = LogEntry(
+        type: mergedPromptLine ? LogType.stdout : LogType.info,
+        content: echoedInput,
         timestamp: DateTime.now(),
-      ));
-      if (_logHistory.isNotEmpty) {
-        _logHistory.last.logs.add(_logs.last);
+      );
+      if (mergedPromptLine) {
+        _logs[_logs.length - 1] = entry;
+        if (_logHistory.isNotEmpty && _logHistory.last.logs.isNotEmpty) {
+          _logHistory.last.logs[_logHistory.last.logs.length - 1] = entry;
+        }
+      } else {
+        _logs.add(entry);
+        if (_logHistory.isNotEmpty) {
+          _logHistory.last.logs.add(entry);
+        }
       }
+      _currentInputPrompt = '';
       _waitingForInput = false;
       _scheduleNotify();
     } catch (e) {

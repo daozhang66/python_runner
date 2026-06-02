@@ -182,6 +182,65 @@ void main() {
     expect(manager, isNot(contains(r"exec(open('$scriptPath').read())")));
   });
 
+  test('linux-like launcher emits stdin request sentinel for interactive input',
+      () {
+    final manager = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
+    ).readAsStringSync();
+
+    expect(manager, contains('stdinRequestSentinel'));
+    expect(manager, contains('_emit_stdin_request'));
+    expect(manager, contains('sys.__stdout__.write'));
+    expect(manager, isNot(contains('sys.__stderr__.write(stdin_request_sentinel')));
+    expect(manager, contains('class _PythonRunnerStdin'));
+    expect(manager, contains('builtins.input = _patched_input'));
+    expect(manager, contains("return sys.stdin.readline().rstrip('\\\\n')"));
+  });
+
+  test('android bridge converts linux-like stdin sentinel into prompt events',
+      () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('emitStdinRequest('));
+    expect(activity, contains('parseLinuxLikePrompt'));
+    expect(
+      activity,
+      contains('line.startsWith(LinuxLikeRuntimeManager.stdinRequestSentinel)'),
+    );
+    expect(activity, isNot(contains('type == "stderr" &&')));
+    expect(activity, contains('"prompt" to prompt'));
+  });
+
+  test('execution provider only enters waiting-input state for active execution',
+      () {
+    final provider = File(
+      'lib/providers/execution_provider.dart',
+    ).readAsStringSync();
+
+    expect(provider, contains('final activeExecutionId = _state.executionId;'));
+    expect(
+      provider,
+      contains('request.executionId != activeExecutionId'),
+    );
+    expect(provider, contains('_currentInputPrompt = request.prompt;'));
+    expect(provider, contains("_updateFloatingBallStatus('waiting_input');"));
+  });
+
+  test('execution provider merges prompt-only stdin requests with user input',
+      () {
+    final provider = File(
+      'lib/providers/execution_provider.dart',
+    ).readAsStringSync();
+
+    expect(provider, contains('_currentInputPrompt = request.prompt;'));
+    expect(provider, contains("content: _currentInputPrompt,"));
+    expect(provider, contains("final echoedInput = prompt.isNotEmpty ? '\$prompt\$input' : '> \$input';"));
+    expect(provider, contains('final mergedPromptLine = prompt.isNotEmpty &&'));
+    expect(provider, contains('_logs[_logs.length - 1] = entry;'));
+  });
+
   test(
       'release build does not hardcode local signing passwords or apksigner path',
       () {
