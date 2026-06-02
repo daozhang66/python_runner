@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Parses ANSI escape codes in text and returns colored TextSpans.
 class AnsiParser {
-  static final _ansiRegex = RegExp(r'\x1b\[([0-9;]*)m');
+  static final _ansiRegex = RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|[@-_])');
 
   static const Map<int, Color> _colors = {
     // Standard colors
@@ -27,7 +27,7 @@ class AnsiParser {
 
   /// Parse [text] containing ANSI codes into a list of [TextSpan].
   static List<TextSpan> parse(String text, {Color defaultColor = Colors.white}) {
-    if (!text.contains('\x1b[')) {
+    if (!text.contains('\x1b')) {
       return [TextSpan(text: text, style: TextStyle(color: defaultColor))];
     }
 
@@ -50,16 +50,19 @@ class AnsiParser {
         }
       }
 
-      final codes = match.group(1)?.split(';') ?? [];
-      for (final codeStr in codes) {
-        final code = int.tryParse(codeStr) ?? 0;
-        if (code == 0) {
-          currentColor = defaultColor;
-          bold = false;
-        } else if (code == 1) {
-          bold = true;
-        } else if (_colors.containsKey(code)) {
-          currentColor = _colors[code]!;
+      final escape = match.group(0) ?? '';
+      if (escape.startsWith('\x1b[') && escape.endsWith('m')) {
+        final codes = escape.substring(2, escape.length - 1).split(';');
+        for (final codeStr in codes) {
+          final code = int.tryParse(codeStr) ?? 0;
+          if (code == 0) {
+            currentColor = defaultColor;
+            bold = false;
+          } else if (code == 1) {
+            bold = true;
+          } else if (_colors.containsKey(code)) {
+            currentColor = _colors[code]!;
+          }
         }
       }
 
