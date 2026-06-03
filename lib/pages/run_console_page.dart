@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/execution_provider.dart';
@@ -188,12 +189,18 @@ class _RunningTimer extends StatefulWidget {
 class _RunningTimerState extends State<_RunningTimer> {
   late DateTime _startTime;
   Duration _elapsed = Duration.zero;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _startTime = widget.startTime;
-    _tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _elapsed = DateTime.now().difference(_startTime);
+      });
+    });
   }
 
   @override
@@ -202,14 +209,6 @@ class _RunningTimerState extends State<_RunningTimer> {
     if (oldWidget.startTime != widget.startTime) {
       _startTime = widget.startTime;
     }
-  }
-
-  void _tick() {
-    if (!mounted) return;
-    setState(() {
-      _elapsed = DateTime.now().difference(_startTime);
-    });
-    Future.delayed(const Duration(seconds: 1), _tick);
   }
 
   String _formatDuration(Duration d) {
@@ -231,5 +230,11 @@ class _RunningTimerState extends State<_RunningTimer> {
       '${widget.label} ${_formatDuration(_elapsed)}',
       style: TextStyle(fontSize: 11, color: widget.color, fontWeight: FontWeight.w500),
     );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 }

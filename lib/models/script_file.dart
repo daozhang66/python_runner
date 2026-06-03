@@ -48,8 +48,8 @@ class ScriptFile {
     return ScriptFile(
       name: map['name'] as String,
       path: map['path'] as String,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
-      modifiedAt: DateTime.fromMillisecondsSinceEpoch(map['modifiedAt'] as int),
+      createdAt: DateTime.fromMillisecondsSinceEpoch((map['createdAt'] as num).toInt()),
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch((map['modifiedAt'] as num).toInt()),
       runCount: map['runCount'] as int? ?? 0,
       isPinned: (map['isPinned'] as int? ?? 0) == 1,
     );

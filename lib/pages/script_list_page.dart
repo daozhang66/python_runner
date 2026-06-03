@@ -46,6 +46,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   Future<void> _loadViewMode() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _isGridView = prefs.getBool('script_grid_view') ?? false;
     });
@@ -412,14 +413,22 @@ class _ScriptListPageState extends State<ScriptListPage> {
     );
   }
 
-  void _duplicateScript(String name) async {
-    final provider = context.read<ScriptProvider>();
-    final content = await provider.readScript(name);
-    final copyName = name.replaceAll('.py', '_copy.py');
-    await provider.createScript(copyName, content: content);
+  Future<void> _duplicateScript(String name) async {
+    try {
+      final provider = context.read<ScriptProvider>();
+      final content = await provider.readScript(name);
+      final copyName = name.replaceAll('.py', '_copy.py');
+      await provider.createScript(copyName, content: content);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('复制失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
   }
 
-  void _deleteScript(String name) async {
+  Future<void> _deleteScript(String name) async {
     final confirmed = await ConfirmDialog.show(context,
         title: '删除脚本',
         content: '确定要删除 "${name.replaceAll(".py", "")}" 吗？此操作不可撤销。',

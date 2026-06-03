@@ -36,12 +36,14 @@ class NativeBridge {
 
   Future<bool> deleteScript(String name) async {
     final result = await _invoke('deleteScript', {'name': name});
-    return result as bool;
+    if (result is bool) return result;
+    return result == true;
   }
 
   Future<bool> renameScript(String oldName, String newName) async {
     final result = await _invoke('renameScript', {'oldName': oldName, 'newName': newName});
-    return result as bool;
+    if (result is bool) return result;
+    return result == true;
   }
 
   Future<List<String>> listScripts() async {
@@ -54,12 +56,13 @@ class NativeBridge {
 
   Future<String> readScript(String name) async {
     final result = await _invoke('readScript', {'name': name});
-    return result as String;
+    return result?.toString() ?? '';
   }
 
   Future<bool> saveScript(String name, String content) async {
     final result = await _invoke('saveScript', {'name': name, 'content': content});
-    return result as bool;
+    if (result is bool) return result;
+    return result == true;
   }
 
   Future<void> executeScript(String name, String executionId,
@@ -104,7 +107,7 @@ class NativeBridge {
 
   Future<String> importScriptFromUri(String uri, String name) async {
     final result = await _invoke('importScriptFromUri', {'uri': uri, 'name': name});
-    return result as String;
+    return result?.toString() ?? '';
   }
 
   Future<String> exportLog(String content, {String fileName = 'log.txt', String? destDir}) async {
@@ -113,12 +116,12 @@ class NativeBridge {
       'fileName': fileName,
       'destDir': destDir,
     });
-    return result as String;
+    return result?.toString() ?? '';
   }
 
   Future<String> exportScript(String name, String destDir) async {
     final result = await _invoke('exportScript', {'name': name, 'destDir': destDir});
-    return result as String;
+    return result?.toString() ?? '';
   }
 
   Future<Map<String, String>> getPythonInfo() async {
@@ -199,7 +202,8 @@ class NativeBridge {
 
   Future<bool> checkOverlayPermission() async {
     final result = await _invoke('checkOverlayPermission', {});
-    return result as bool;
+    if (result is bool) return result;
+    return result == true;
   }
 
   Future<void> requestOverlayPermission() async {
@@ -224,7 +228,8 @@ class NativeBridge {
 
   Future<String?> consumePendingRunScript() async {
     final result = await _invoke('consumePendingRunScript', {});
-    return result as String?;
+    if (result == null) return null;
+    return result.toString();
   }
 
   Future<String> downloadAndInstallApk(String url, {required String fileName}) async {
@@ -232,7 +237,7 @@ class NativeBridge {
       'url': url,
       'fileName': fileName,
     });
-    return result as String;
+    return result?.toString() ?? '';
   }
 
   Map<String, String> _stringMap(dynamic result) {

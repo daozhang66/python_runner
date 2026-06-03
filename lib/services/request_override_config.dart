@@ -59,7 +59,7 @@ class RequestOverrideConfig extends ChangeNotifier {
       try {
         final decoded = jsonDecode(rulesJson);
         if (decoded is List) {
-          _domainRules = decoded.cast<Map<String, dynamic>>();
+          _domainRules = decoded.whereType<Map<String, dynamic>>().toList();
         }
       } catch (_) {
         _domainRules = [];
