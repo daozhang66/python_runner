@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 /// Parses ANSI escape codes in text and returns colored TextSpans.
 class AnsiParser {
-  static final _ansiRegex = RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|[@-_])');
+  static final _ansiRegex = RegExp(
+    r'\x1B\[(?:[0-9;]*[A-Za-z]|[0-9;]*[ -/]*[@-~])'
+    r'|\x1B[@-_]'
+    r'|\x1B\[[0-9;:]*m'
+  );
 
-  static const Map<int, Color> _colors = {
-    // Standard colors
+  static const Map<int, Color> _fgColors = {
     30: Color(0xFF555555), // black
     31: Color(0xFFE05050), // red
     32: Color(0xFF50E050), // green
@@ -14,7 +17,6 @@ class AnsiParser {
     35: Color(0xFFE050E0), // magenta
     36: Color(0xFF50E0E0), // cyan
     37: Color(0xFFCCCCCC), // white
-    // Bright colors
     90: Color(0xFF808080), // bright black (gray)
     91: Color(0xFFFF6B6B), // bright red
     92: Color(0xFF69FF94), // bright green
@@ -25,6 +27,28 @@ class AnsiParser {
     97: Color(0xFFFFFFFF), // bright white
   };
 
+  static const Map<int, Color> _bgColors = {
+    40: Color(0xFF555555),
+    41: Color(0xFFE05050),
+    42: Color(0xFF50E050),
+    43: Color(0xFFE0E050),
+    44: Color(0xFF5090E0),
+    45: Color(0xFFE050E0),
+    46: Color(0xFF50E0E0),
+    47: Color(0xFFCCCCCC),
+    100: Color(0xFF808080),
+    101: Color(0xFFFF6B6B),
+    102: Color(0xFF69FF94),
+    103: Color(0xFFFFFF69),
+    104: Color(0xFF69AAFF),
+    105: Color(0xFFFF69FF),
+    106: Color(0xFF69FFFF),
+    107: Color(0xFFFFFFFF),
+  };
+
+  /// Standard 256-color palette (entries 16-255).
+  static final List<Color>? _color256Cache = null;
+
   /// Parse [text] containing ANSI codes into a list of [TextSpan].
   static List<TextSpan> parse(String text, {Color defaultColor = Colors.white}) {
     if (!text.contains('\x1b')) {
@@ -33,6 +57,7 @@ class AnsiParser {
 
     final spans = <TextSpan>[];
     Color currentColor = defaultColor;
+    Color? currentBgColor;
     bool bold = false;
     int lastEnd = 0;
 
@@ -44,6 +69,7 @@ class AnsiParser {
             text: segment,
             style: TextStyle(
               color: currentColor,
+              backgroundColor: currentBgColor,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ));
@@ -52,17 +78,57 @@ class AnsiParser {
 
       final escape = match.group(0) ?? '';
       if (escape.startsWith('\x1b[') && escape.endsWith('m')) {
-        final codes = escape.substring(2, escape.length - 1).split(';');
-        for (final codeStr in codes) {
-          final code = int.tryParse(codeStr) ?? 0;
+        final codeStr = escape.substring(2, escape.length - 1);
+        final codes = codeStr.split(';');
+        int i = 0;
+        while (i < codes.length) {
+          final code = int.tryParse(codes[i]) ?? 0;
           if (code == 0) {
             currentColor = defaultColor;
+            currentBgColor = null;
             bold = false;
           } else if (code == 1) {
             bold = true;
-          } else if (_colors.containsKey(code)) {
-            currentColor = _colors[code]!;
+          } else if (_fgColors.containsKey(code)) {
+            currentColor = _fgColors[code]!;
+          } else if (_bgColors.containsKey(code)) {
+            currentBgColor = _bgColors[code]!;
+          } else if (code == 38 && i + 1 < codes.length) {
+            final sub = int.tryParse(codes[i + 1]) ?? 0;
+            if (sub == 5 && i + 2 < codes.length) {
+              // 256-color: ESC[38;5;Nm
+              currentColor = _color256(int.tryParse(codes[i + 2]) ?? 0);
+              i += 2;
+            } else if (sub == 2 && i + 4 < codes.length) {
+              // RGB: ESC[38;2;R;G;Bm
+              currentColor = Color.fromARGB(
+                255,
+                int.tryParse(codes[i + 2]) ?? 0,
+                int.tryParse(codes[i + 3]) ?? 0,
+                int.tryParse(codes[i + 4]) ?? 0,
+              );
+              i += 4;
+            }
+          } else if (code == 48 && i + 1 < codes.length) {
+            final sub = int.tryParse(codes[i + 1]) ?? 0;
+            if (sub == 5 && i + 2 < codes.length) {
+              currentBgColor = _color256(int.tryParse(codes[i + 2]) ?? 0);
+              i += 2;
+            } else if (sub == 2 && i + 4 < codes.length) {
+              currentBgColor = Color.fromARGB(
+                255,
+                int.tryParse(codes[i + 2]) ?? 0,
+                int.tryParse(codes[i + 3]) ?? 0,
+                int.tryParse(codes[i + 4]) ?? 0,
+              );
+              i += 4;
+            }
+          } else if (code == 39) {
+            currentColor = defaultColor;
+          } else if (code == 49) {
+            currentBgColor = null;
           }
+          i++;
         }
       }
 
@@ -74,6 +140,7 @@ class AnsiParser {
         text: text.substring(lastEnd),
         style: TextStyle(
           color: currentColor,
+          backgroundColor: currentBgColor,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
       ));
@@ -82,6 +149,31 @@ class AnsiParser {
     return spans.isEmpty
         ? [TextSpan(text: text, style: TextStyle(color: defaultColor))]
         : spans;
+  }
+
+  /// Map a 256-color index to a Flutter Color.
+  static Color _color256(int n) {
+    if (n < 0 || n > 255) return const Color(0xFFCCCCCC);
+    // 0-7: standard colors
+    if (n < 8) return _fgColors[30 + n] ?? const Color(0xFFCCCCCC);
+    // 8-15: bright colors
+    if (n < 16) return _fgColors[82 + n] ?? const Color(0xFFCCCCCC);
+    // 16-231: 6x6x6 color cube
+    if (n < 232) {
+      final v = n - 16;
+      final b = v % 6;
+      final g = (v ~/ 6) % 6;
+      final r = v ~/ 36;
+      return Color.fromARGB(255, _cubeValue(r), _cubeValue(g), _cubeValue(b));
+    }
+    // 232-255: grayscale ramp
+    final gray = 8 + (n - 232) * 10;
+    return Color.fromARGB(255, gray, gray, gray);
+  }
+
+  static int _cubeValue(int v) {
+    const levels = [0, 95, 135, 175, 215, 255];
+    return levels[v.clamp(0, 5)];
   }
 
   /// Strip all ANSI escape codes, returning plain text.

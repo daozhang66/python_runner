@@ -74,6 +74,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final overrideCfg = RequestOverrideConfig.instance;
     await overrideCfg.load();
     final autoCheckUpdates = await _appUpdateManager.isAutoCheckEnabled();
+    if (!mounted) return;
     setState(() {
       _mirrorController.text = prefs.getString('pypi_index_url') ?? '';
       _timeout = prefs.getInt('execution_timeout') ?? 60;
@@ -303,7 +304,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() => dialogCtrl.dispose());
   }
 
   Future<void> _saveTimeout(int value) async {
@@ -386,7 +387,7 @@ class _SettingsPageState extends State<SettingsPage> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text('确认启用', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Text('确认启用', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
             ),
           ],
         ),
@@ -1261,6 +1262,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _globalUaController.dispose();
     _globalHeadersController.dispose();
     _globalCookieController.dispose();
+    _githubMirrorController.dispose();
     super.dispose();
   }
 }
@@ -1484,7 +1486,7 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _levelFilter,
+                    value: _levelFilter,
                     decoration: const InputDecoration(labelText: '级别'),
                     items: const ['ALL', 'INFO', 'WARN', 'ERROR']
                         .map((level) => DropdownMenuItem(value: level, child: Text(level)))
@@ -1495,7 +1497,7 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _sectionFilter,
+                    value: _sectionFilter,
                     decoration: const InputDecoration(labelText: '区块'),
                     items: _sectionFilters
                         .map((section) => DropdownMenuItem(value: section, child: Text(section)))

@@ -119,6 +119,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     final prefs = await SharedPreferences.getInstance();
     final content =
         await context.read<ScriptProvider>().readScript(widget.scriptName);
+    if (!mounted) return;
     _savedText = content;
     _controller.text = content;
     _controller.addListener(_onTextChanged);

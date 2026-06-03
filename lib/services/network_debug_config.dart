@@ -13,6 +13,7 @@ class NetworkDebugConfig {
   bool _allowInsecureCerts = false;
   String _proxyHost = '';
   int _proxyPort = 0;
+  int _loadVersion = 0;
 
   bool get debugModeEnabled => _debugModeEnabled;
   bool get allowInsecureCerts => _debugModeEnabled && _allowInsecureCerts;
@@ -23,8 +24,10 @@ class NetworkDebugConfig {
 
   /// Load configuration from SharedPreferences.
   Future<void> load() async {
+    final version = ++_loadVersion;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (version != _loadVersion) return; // superseded by a newer call
       _debugModeEnabled = prefs.getBool('net_debug_mode') ?? false;
       _allowInsecureCerts = prefs.getBool('net_allow_insecure') ?? false;
       _proxyHost = prefs.getString('net_proxy_host') ?? '';

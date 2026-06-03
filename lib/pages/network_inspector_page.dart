@@ -366,7 +366,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() => domainCtrl.dispose());
   }
 
   Widget _statusChip(BuildContext ctx, int? value, String label) {
@@ -1633,9 +1633,11 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                           height: 36,
                           child: FloatingActionButton.small(
                             heroTag: 'top',
-                            onPressed: () => _scrollController.animateTo(0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut),
+                            onPressed: () => _scrollController.hasClients
+                                ? _scrollController.animateTo(0,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut)
+                                : null,
                             child:
                                 const Icon(Icons.keyboard_arrow_up, size: 20),
                           ),
@@ -1646,10 +1648,12 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                           height: 36,
                           child: FloatingActionButton.small(
                             heroTag: 'bottom',
-                            onPressed: () => _scrollController.animateTo(
-                                _scrollController.position.maxScrollExtent,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut),
+                            onPressed: () => _scrollController.hasClients
+                                ? _scrollController.animateTo(
+                                    _scrollController.position.maxScrollExtent,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut)
+                                : null,
                             child:
                                 const Icon(Icons.keyboard_arrow_down, size: 20),
                           ),
@@ -1912,7 +1916,7 @@ Color _primitiveColor(dynamic value) {
   if (value is bool) return Colors.purple;
   if (value is num) return Colors.orange.shade800;
   if (value is String) return Colors.green.shade700;
-  return Colors.black;
+  return const Color(0xFF9E9E9E); // visible on both light and dark backgrounds
 }
 
 // --- Image preview widget ---

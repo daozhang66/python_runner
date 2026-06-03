@@ -282,12 +282,23 @@ class ExecutionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final offset = DateTime.now().timeZoneOffset;
+      final totalMinutes = offset.inMinutes;
+      final absMinutes = totalMinutes.abs();
+      final h = absMinutes ~/ 60;
+      final m = absMinutes % 60;
+      // POSIX TZ: negative sign = east of UTC (e.g. UTC-8 means UTC+8)
+      final tzSign = totalMinutes >= 0 ? '-' : '+';
+      final tzValue = m > 0
+          ? 'UTC$tzSign$h:${m.toString().padLeft(2, '0')}'
+          : 'UTC$tzSign$h';
+
       final environment = <String, String>{
         'PYRUNNER_RUNTIME_BACKEND': runtimeBackendId,
         'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
         'TERM': 'xterm-256color',
         // Pass device timezone to Linux-like so Python sees the correct local time
-        'TZ': 'UTC${-DateTime.now().timeZoneOffset.inHours}',
+        'TZ': tzValue,
       };
       if (preferredRuntimeBackendId != runtimeBackendId) {
         _logger.warn(
@@ -468,6 +479,8 @@ class ExecutionProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  bool _pollingPending = false;
+
   void _pollPendingRunScript() {
     // Poll every 500ms to check if floating ball triggered a script run
     _pendingRunPollTimer =
@@ -476,7 +489,8 @@ class ExecutionProvider extends ChangeNotifier {
         timer.cancel();
         return;
       }
-      if (isRunning) return;
+      if (isRunning || _pollingPending) return;
+      _pollingPending = true;
       try {
         final name = await _bridge.consumePendingRunScript();
         if (name != null && name.isNotEmpty) {
@@ -487,7 +501,9 @@ class ExecutionProvider extends ChangeNotifier {
             _pendingNavigateScriptName = name;
           }
         }
-      } catch (_) {}
+      } catch (_) {} finally {
+        _pollingPending = false;
+      }
     });
   }
 
@@ -504,12 +520,13 @@ class ExecutionProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void _updateFloatingBallOnTerminal(ExecutionStatus status) async {
+  Future<void> _updateFloatingBallOnTerminal(ExecutionStatus status) async {
     if (!_floatingBallEnabled) return;
     if (status == ExecutionStatus.error) {
       await _updateFloatingBallStatus('error');
       // Show error for 3 seconds, then go idle
       await Future.delayed(const Duration(seconds: 3));
+      if (_disposed) return;
     }
     await _updateFloatingBallStatus('idle');
   }

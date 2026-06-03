@@ -4,11 +4,15 @@ import '../models/script_file.dart';
 
 class DatabaseService {
   static Database? _db;
+  static Future<Database>? _dbFuture;
 
-  Future<Database> get database async {
-    if (_db != null) return _db!;
-    _db = await _initDb();
-    return _db!;
+  Future<Database> get database {
+    if (_db != null) return Future.value(_db!);
+    _dbFuture ??= _initDb().then((db) {
+      _db = db;
+      return db;
+    });
+    return _dbFuture!;
   }
 
   Future<Database> _initDb() async {

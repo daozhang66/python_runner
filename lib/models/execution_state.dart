@@ -15,11 +15,12 @@ class ExecutionState {
     String? executionId,
     ExecutionStatus? status,
     int? exitCode,
+    bool clearExitCode = false,
   }) {
     return ExecutionState(
       executionId: executionId ?? this.executionId,
       status: status ?? this.status,
-      exitCode: exitCode,
+      exitCode: clearExitCode ? null : (exitCode ?? this.exitCode),
     );
   }
 

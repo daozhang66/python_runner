@@ -159,19 +159,25 @@ class PackageProvider extends ChangeNotifier {
     }
   }
 
+  Timer? _installLogClearTimer;
+  bool _disposed = false;
+
   void clearInstallLog() {
     _installLog.clear();
     notifyListeners();
   }
 
   void _scheduleInstallLogClear() {
-    Future.delayed(const Duration(seconds: 5), () {
-      clearInstallLog();
+    _installLogClearTimer?.cancel();
+    _installLogClearTimer = Timer(const Duration(seconds: 5), () {
+      if (!_disposed) clearInstallLog();
     });
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _installLogClearTimer?.cancel();
     _installSub?.cancel();
     super.dispose();
   }
