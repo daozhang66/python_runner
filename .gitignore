@@ -46,6 +46,9 @@ app.*.map.json
 debian-python-dev-aarch64-v1.tar.xz
 backdrop/
 
+# Gradle build reports
+android/build/
+
 # Flutter repo-specific
 /bin/cache/
 /bin/internal/bootstrap.bat
