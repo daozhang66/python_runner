@@ -23,6 +23,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             "https://raw.githubusercontent.com/daozhang66/python_runner/main/linux-like/debian-python-dev-aarch64.json"
         const val defaultRuntimeFlavor = "debian-python-dev-aarch64"
         const val stdinRequestSentinel = "__PYRUNNER_STDIN_REQUEST__"
+        const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"
     }
 
     private val runtimeDir: File = File(context.filesDir, "linux_like")
@@ -279,7 +280,10 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         workingDir: String? = null,
         environment: Map<String, String>? = null
     ): List<String> {
-        return buildBaseCommand(workingDir).apply {
+        return buildBaseCommand(
+            resolveScriptWorkingDir(workingDir),
+            ensureWorkingDirExists = true
+        ).apply {
             addPythonLauncherWithHook(scriptPath)
         }
     }
@@ -309,8 +313,14 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         }
     }
 
+    fun resolveScriptWorkingDir(workingDir: String?): String {
+        val candidate = workingDir?.trim().orEmpty()
+        return if (candidate.isNotEmpty()) candidate else defaultScriptWorkingDir
+    }
+
     private fun buildBaseCommand(
-        workingDir: String? = null
+        workingDir: String? = null,
+        ensureWorkingDirExists: Boolean = false
     ): MutableList<String> {
         ensureDirectories()
         repairCriticalExecutablePermissions()
@@ -332,8 +342,14 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         listOf("/sdcard", "/storage", "/mnt").forEach { path ->
             if (File(path).exists()) addBind(command, path)
         }
-        if (resolvedWorkingDir.startsWith("/") && File(resolvedWorkingDir).exists()) {
-            addBind(command, resolvedWorkingDir)
+        if (resolvedWorkingDir.startsWith("/")) {
+            val hostWorkingDir = File(resolvedWorkingDir)
+            if (ensureWorkingDirExists && !hostWorkingDir.exists()) {
+                hostWorkingDir.mkdirs()
+            }
+            if (hostWorkingDir.exists()) {
+                addBind(command, hostWorkingDir.absolutePath)
+            }
         }
         command.add("-w")
         command.add(resolvedWorkingDir)

@@ -135,6 +135,22 @@ void main() {
     expect(manager, contains('dir.deleteRecursively()'));
   });
 
+  test('linux-like scripts default to Download/PythonRunner and create cwd bind',
+      () {
+    final manager = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
+    ).readAsStringSync();
+
+    expect(
+      manager,
+      contains('const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"'),
+    );
+    expect(manager, contains('fun resolveScriptWorkingDir('));
+    expect(manager, contains('ensureWorkingDirExists = true'));
+    expect(manager, contains('hostWorkingDir.mkdirs()'));
+    expect(manager, contains('addBind(command, hostWorkingDir.absolutePath)'));
+  });
+
   test('linux-like user packages install into dedicated app-owned overlay path',
       () {
     final manager = File(
@@ -178,6 +194,17 @@ void main() {
     ).readAsStringSync();
 
     expect(provider, contains("'TERM': 'xterm-256color'"));
+  });
+
+  test('linux-like script execution HOME follows resolved working directory', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('resolveScriptWorkingDir(workingDir)'));
+    expect(activity, contains('executionEnvironment["HOME"] = resolvedWorkingDir'));
+    expect(activity, contains('processBuilder.environment(),'));
+    expect(activity, contains('executionEnvironment'));
   });
 
   test('linux-like script launcher preserves script semantics with runpy', () {

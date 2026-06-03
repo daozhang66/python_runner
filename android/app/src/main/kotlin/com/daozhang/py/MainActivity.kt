@@ -635,10 +635,14 @@ class MainActivity : FlutterActivity() {
         sendStatus(executionId, "running", null)
         result.success(mapOf("executionId" to executionId, "status" to "started"))
 
+        val resolvedWorkingDir = linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)
+        val executionEnvironment = environment?.toMutableMap() ?: mutableMapOf()
+        executionEnvironment["HOME"] = resolvedWorkingDir
+
         val command = linuxLikeRuntimeManager.buildPythonCommand(
             file.absolutePath,
-            workingDir,
-            environment
+            resolvedWorkingDir,
+            executionEnvironment
         )
         val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -651,7 +655,10 @@ class MainActivity : FlutterActivity() {
             try {
                 val processBuilder = ProcessBuilder(command)
                 processBuilder.redirectErrorStream(false)
-                linuxLikeRuntimeManager.applyHostEnvironment(processBuilder.environment(), environment)
+                linuxLikeRuntimeManager.applyHostEnvironment(
+                    processBuilder.environment(),
+                    executionEnvironment
+                )
                 executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
                 val process = processBuilder.start()
                 currentExecutionProcess = process
