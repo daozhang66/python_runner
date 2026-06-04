@@ -49,6 +49,11 @@ backdrop/
 # Gradle build reports
 android/build/
 
+# Store assets & local docs
+apptb.png
+play_store_512.png
+docs/
+
 # Flutter repo-specific
 /bin/cache/
 /bin/internal/bootstrap.bat
