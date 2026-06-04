@@ -14,7 +14,8 @@ class RunConsolePage extends StatefulWidget {
   State<RunConsolePage> createState() => _RunConsolePageState();
 }
 
-class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObserver {
+class _RunConsolePageState extends State<RunConsolePage>
+    with WidgetsBindingObserver {
   final _terminalKey = GlobalKey<TerminalViewState>();
 
   String get _displayName => widget.scriptName.replaceAll('.py', '');
@@ -52,7 +53,8 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('运行失败: $e'), duration: const Duration(seconds: 3)),
+          SnackBar(
+              content: Text('运行失败: $e'), duration: const Duration(seconds: 3)),
         );
       }
     }
@@ -62,7 +64,8 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
   Widget build(BuildContext context) {
     final exec = context.watch<ExecutionProvider>();
     final logs = exec.logs;
-    final isRunning = exec.isRunning && exec.currentScriptName == widget.scriptName;
+    final isRunning =
+        exec.isRunning && exec.currentScriptName == widget.scriptName;
     final waiting = exec.waitingForInput;
     final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -85,7 +88,8 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
     final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFFAFAFA),
+      backgroundColor:
+          isDark ? const Color(0xFF0D1117) : const Color(0xFFFAFAFA),
       appBar: AppBar(
         backgroundColor: appBarBg,
         foregroundColor: isDark ? Colors.white : colors.onSurface,
@@ -100,7 +104,11 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
                 color: statusColor,
                 shape: BoxShape.circle,
                 boxShadow: isRunning
-                    ? [BoxShadow(color: statusColor.withValues(alpha: 0.5), blurRadius: 6)]
+                    ? [
+                        BoxShadow(
+                            color: statusColor.withValues(alpha: 0.5),
+                            blurRadius: 6)
+                      ]
                     : null,
               ),
             ),
@@ -122,16 +130,27 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
                 color: statusColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: isRunning
-                  ? _RunningTimer(
-                      startTime: _runStartTime ?? DateTime.now(),
-                      label: waiting ? '等待输入' : '运行中',
-                      color: statusColor,
-                    )
-                  : Text(
-                      statusText,
-                      style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w500),
-                    ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: isRunning
+                    ? _RunningTimer(
+                        key: ValueKey(statusText),
+                        startTime: _runStartTime ?? DateTime.now(),
+                        label: waiting ? '等待输入' : '运行中',
+                        color: statusColor,
+                      )
+                    : Text(
+                        statusText,
+                        key: ValueKey(statusText),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: statusColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -145,7 +164,8 @@ class _RunConsolePageState extends State<RunConsolePage> with WidgetsBindingObse
             )
           else
             IconButton(
-              icon: Icon(Icons.replay_rounded, color: isDark ? Colors.greenAccent : Colors.green, size: 22),
+              icon: Icon(Icons.replay_rounded,
+                  color: isDark ? Colors.greenAccent : Colors.green, size: 22),
               onPressed: _rerun,
               tooltip: '重新运行',
             ),
@@ -177,6 +197,7 @@ class _RunningTimer extends StatefulWidget {
   final String label;
   final Color color;
   const _RunningTimer({
+    super.key,
     required this.startTime,
     required this.label,
     required this.color,
@@ -228,7 +249,8 @@ class _RunningTimerState extends State<_RunningTimer> {
   Widget build(BuildContext context) {
     return Text(
       '${widget.label} ${_formatDuration(_elapsed)}',
-      style: TextStyle(fontSize: 11, color: widget.color, fontWeight: FontWeight.w500),
+      style: TextStyle(
+          fontSize: 11, color: widget.color, fontWeight: FontWeight.w500),
     );
   }
 

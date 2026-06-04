@@ -9,6 +9,7 @@ import 'package:re_highlight/styles/vs.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import '../providers/script_provider.dart';
 import '../providers/execution_provider.dart';
+import '../utils/app_page_transitions.dart';
 import 'run_console_page.dart';
 
 class ScriptEditorPage extends StatefulWidget {
@@ -266,8 +267,8 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
       if (mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => RunConsolePage(scriptName: widget.scriptName),
+          AppPageTransitions.scaleIn(
+            RunConsolePage(scriptName: widget.scriptName),
           ),
         );
       }
@@ -336,8 +337,8 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
             icon: const Icon(Icons.fullscreen),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => RunConsolePage(scriptName: widget.scriptName),
+              AppPageTransitions.fadeThrough(
+                RunConsolePage(scriptName: widget.scriptName),
               ),
             ),
             tooltip: '全屏终端',
