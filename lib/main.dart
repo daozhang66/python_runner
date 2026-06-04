@@ -23,6 +23,7 @@ import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/run_console_page.dart';
+import 'utils/app_page_transitions.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -275,7 +276,6 @@ class _SplashGateState extends State<SplashGate>
   late AnimationController _animController;
   late Animation<double> _fadeIn;
   late Animation<double> _scale;
-  late Animation<double> _fadeOut;
 
   @override
   void initState() {
@@ -285,7 +285,6 @@ class _SplashGateState extends State<SplashGate>
       duration: const Duration(milliseconds: 900),
     );
     _fadeIn = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
-    _fadeOut = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
     _scale = Tween<double>(begin: 0.82, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
@@ -320,22 +319,22 @@ class _SplashGateState extends State<SplashGate>
                 const Duration(seconds: 5),
                 onTimeout: () => <Permission, PermissionStatus>{},
               );
-          await Permission.notification
-              .request()
-              .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied);
+          await Permission.notification.request().timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => PermissionStatus.denied);
         } else {
-          await Permission.storage
-              .request()
-              .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied);
+          await Permission.storage.request().timeout(const Duration(seconds: 5),
+              onTimeout: () => PermissionStatus.denied);
         }
 
         // MANAGE_EXTERNAL_STORAGE is only relevant on Android 11+ and can jump
         // into vendor-specific settings UIs. Keep it non-blocking here.
-        if (androidInfo >= 30 && !await Permission.manageExternalStorage.isGranted) {
+        if (androidInfo >= 30 &&
+            !await Permission.manageExternalStorage.isGranted) {
           unawaited(
-            Permission.manageExternalStorage
-                .request()
-                .timeout(const Duration(seconds: 5), onTimeout: () => PermissionStatus.denied),
+            Permission.manageExternalStorage.request().timeout(
+                const Duration(seconds: 5),
+                onTimeout: () => PermissionStatus.denied),
           );
         }
       }
@@ -365,80 +364,144 @@ class _SplashGateState extends State<SplashGate>
     super.dispose();
   }
 
+  Widget _buildSplashText(
+    String text, {
+    required TextStyle style,
+  }) {
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: style,
+    );
+  }
+
+  Widget _buildSplashContent({
+    required Color primaryColor,
+    required Color surfaceColor,
+    required ColorScheme colors,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 88,
+          height: 88,
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                primaryColor,
+                primaryColor.withValues(alpha: 0.4),
+              ],
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Center(
+              child: Text(
+                'Py',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w300,
+                  color: primaryColor,
+                  letterSpacing: -1,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        _buildSplashText(
+          'Python 运行器',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: colors.onSurface,
+            letterSpacing: 1.4,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildSplashText(
+          '人生苦短，我用 Python',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: colors.onSurfaceVariant.withValues(alpha: 0.82),
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 34),
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: primaryColor.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_ready) return widget.child;
+    final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.white;
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final primaryColor = colors.primary;
+    final gradientColors = isDark
+        ? [
+            const Color(0xFF121212),
+            const Color(0xFF0F172A),
+          ]
+        : [
+            Colors.white,
+            const Color(0xFFEAF2FF),
+          ];
 
-    return Scaffold(
+    final splash = Scaffold(
+      key: const ValueKey('splash'),
       backgroundColor: bgColor,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeIn,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 88,
-                  height: 88,
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        primaryColor,
-                        primaryColor.withValues(alpha: 0.4),
-                      ],
-                    ),
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Py',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w300,
-                          color: primaryColor,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Python 运行器',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: primaryColor.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: gradientColors,
+          ),
+        ),
+        child: Center(
+          child: FadeTransition(
+            opacity: _fadeIn,
+            child: ScaleTransition(
+              scale: _scale,
+              child: _buildSplashContent(
+                primaryColor: primaryColor,
+                surfaceColor: bgColor,
+                colors: colors,
+              ),
             ),
           ),
         ),
       ),
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: _ready
+          ? KeyedSubtree(
+              key: const ValueKey('home'),
+              child: widget.child,
+            )
+          : splash,
     );
   }
 }
@@ -478,8 +541,9 @@ class _HomePageState extends State<HomePage> {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (!mounted) return;
           appNavigatorKey.currentState?.push(
-            MaterialPageRoute(
-                builder: (_) => RunConsolePage(scriptName: scriptName)),
+            AppPageTransitions.fadeThrough(
+              RunConsolePage(scriptName: scriptName),
+            ),
           );
         });
       });

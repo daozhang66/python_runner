@@ -5,6 +5,8 @@ class ScriptFile {
   final DateTime modifiedAt;
   final int runCount;
   final bool isPinned;
+  final int sortOrder;
+  final int? groupId;
 
   ScriptFile({
     required this.name,
@@ -13,6 +15,8 @@ class ScriptFile {
     required this.modifiedAt,
     this.runCount = 0,
     this.isPinned = false,
+    this.sortOrder = 0,
+    this.groupId,
   });
 
   ScriptFile copyWith({
@@ -22,6 +26,9 @@ class ScriptFile {
     DateTime? modifiedAt,
     int? runCount,
     bool? isPinned,
+    int? sortOrder,
+    int? groupId,
+    bool clearGroup = false,
   }) {
     return ScriptFile(
       name: name ?? this.name,
@@ -30,6 +37,8 @@ class ScriptFile {
       modifiedAt: modifiedAt ?? this.modifiedAt,
       runCount: runCount ?? this.runCount,
       isPinned: isPinned ?? this.isPinned,
+      sortOrder: sortOrder ?? this.sortOrder,
+      groupId: clearGroup ? null : groupId ?? this.groupId,
     );
   }
 
@@ -41,6 +50,8 @@ class ScriptFile {
       'modifiedAt': modifiedAt.millisecondsSinceEpoch,
       'runCount': runCount,
       'isPinned': isPinned ? 1 : 0,
+      'sortOrder': sortOrder,
+      'groupId': groupId,
     };
   }
 
@@ -48,10 +59,14 @@ class ScriptFile {
     return ScriptFile(
       name: map['name'] as String,
       path: map['path'] as String,
-      createdAt: DateTime.fromMillisecondsSinceEpoch((map['createdAt'] as num).toInt()),
-      modifiedAt: DateTime.fromMillisecondsSinceEpoch((map['modifiedAt'] as num).toInt()),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+          (map['createdAt'] as num).toInt()),
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(
+          (map['modifiedAt'] as num).toInt()),
       runCount: map['runCount'] as int? ?? 0,
       isPinned: (map['isPinned'] as int? ?? 0) == 1,
+      sortOrder: (map['sortOrder'] as int?) ?? 0,
+      groupId: (map['groupId'] as num?)?.toInt(),
     );
   }
 }
