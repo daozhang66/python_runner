@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,7 +38,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   Widget build(BuildContext context) {
     final records = _store.filteredRecords;
     final colors = Theme.of(context).colorScheme;
-    final stats = _computeStats();
+    final stats = _store.stats;
 
     return Scaffold(
       appBar: AppBar(
@@ -257,28 +256,6 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     );
   }
 
-  Map<String, dynamic> _computeStats() {
-    final all = _store.records;
-    var success = 0;
-    var errors = 0;
-    var totalMs = 0;
-    var count = 0;
-    for (final r in all) {
-      if (r.isSuccess) success++;
-      if (r.isError) errors++;
-      if (r.durationMs != null) {
-        totalMs += r.durationMs!;
-        count++;
-      }
-    }
-    return {
-      'total': all.length,
-      'success': success,
-      'error': errors,
-      'avgMs': count > 0 ? (totalMs / count).round() : null,
-    };
-  }
-
   void _showFilterSheet(BuildContext context) {
     final domainCtrl = TextEditingController(text: _store.filterDomain);
     showModalBottomSheet(
@@ -386,78 +363,6 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         context,
         MaterialPageRoute(
             builder: (_) => _HttpRecordDetailPage(record: record)));
-  }
-
-  void _exportRecords(BuildContext context) {
-    final text = _store.exportFiltered();
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已复制 ${_store.filteredRecords.length} 条请求记录到剪贴板'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _showExportOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: const Text('复制为文本'),
-              subtitle: const Text('复制请求记录到剪贴板'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _exportRecords(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.file_present),
-              title: const Text('导出 HAR 文件'),
-              subtitle: const Text('可导入 Charles / Fiddler 等工具'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _exportHar(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _exportHar(BuildContext context) async {
-    try {
-      final harJson = _store.exportHar(filteredOnly: true);
-      final now = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final fileName = 'pyrunner_$now.har';
-      final bridge = NativeBridge();
-      final path = await bridge.exportLog(harJson, fileName: fileName);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('HAR 文件已导出: ${path}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('HAR 导出失败: ${e}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   void _confirmClear(BuildContext context) {
@@ -1041,6 +946,8 @@ class _BodyFullViewPage extends StatefulWidget {
 class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   dynamic _parsedJson;
   String _formatted = '';
+  List<String> _formattedLines = const [];
+  int _lineCount = 0;
   double _fontSize = 10.0;
   double? _scaleStartFontSize;
   final Map<int, Offset> _scalePointers = {};
@@ -1107,6 +1014,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
             : widget.body;
       }
     }
+    _formattedLines = _formatted.split('\n');
+    _lineCount = _formattedLines.length;
     _buildLineNumberedText();
   }
 
@@ -1118,7 +1027,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   /// Try to repair a truncated JSON string by cutting back to last valid boundary
   /// and adding missing closing brackets.
   String? _tryRepairTruncatedJson(String input) {
-    final marker = '...（已截断）';
+    const marker = '...（已截断）';
     final idx = input.lastIndexOf(marker);
     if (idx <= 0) return null;
 
@@ -1168,8 +1077,12 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (s[i] == '[') square++;
       if (s[i] == ']') square--;
     }
-    for (int i = 0; i < square; i++) s += ']';
-    for (int i = 0; i < curly; i++) s += '}';
+    for (int i = 0; i < square; i++) {
+      s += ']';
+    }
+    for (int i = 0; i < curly; i++) {
+      s += '}';
+    }
 
     return s;
   }
@@ -1222,12 +1135,11 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   }
 
   void _buildLineNumberedText() {
-    final lines = _formatted.split('\n');
-    final totalWidth = lines.length.toString().length;
+    final totalWidth = _lineCount.toString().length;
     final buf = StringBuffer();
-    for (int i = 0; i < lines.length; i++) {
+    for (int i = 0; i < _formattedLines.length; i++) {
       final num = (i + 1).toString().padLeft(totalWidth);
-      buf.writeln('$num  ${lines[i]}');
+      buf.writeln('$num  ${_formattedLines[i]}');
     }
     _lineNumberedText = buf.toString();
   }
@@ -1338,7 +1250,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('已导出: ${path}'),
+              content: Text('已导出: $path'),
               duration: const Duration(seconds: 3)),
         );
       }
@@ -1346,7 +1258,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: ${e}'),
+              content: Text('导出失败: $e'),
               duration: const Duration(seconds: 2)),
         );
       }
@@ -1361,11 +1273,10 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       });
       return;
     }
-    final lines = _formatted.split('\n');
     final matches = <int>[];
     final q = query.toLowerCase();
-    for (int i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().contains(q)) matches.add(i);
+    for (int i = 0; i < _formattedLines.length; i++) {
+      if (_formattedLines[i].toLowerCase().contains(q)) matches.add(i);
     }
     setState(() {
       _searchMatches = matches;
@@ -1405,7 +1316,6 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   Widget build(BuildContext context) {
     final isJson = _parsedJson != null;
     final colors = Theme.of(context).colorScheme;
-    final lineCount = _formatted.split('\n').length;
 
     return Scaffold(
       appBar: AppBar(
@@ -1569,7 +1479,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                           fontSize: 10, color: Colors.orange.shade700)),
                   const SizedBox(width: 8),
                 ],
-                Text('$lineCount 行',
+                Text('$_lineCount 行',
                     style: TextStyle(
                         fontSize: 10, color: colors.onSurfaceVariant)),
                 if (widget.bodyBytes != null) ...[
@@ -1700,8 +1610,7 @@ class _JsonTreeNode extends StatefulWidget {
   final int depth;
   final double fontSize;
   const _JsonTreeNode(
-      {super.key,
-      required this.data,
+      {required this.data,
       required this.depth,
       required this.fontSize});
 
@@ -1766,7 +1675,7 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
         ),
         if (_expanded)
           Padding(
-            padding: EdgeInsets.only(left: 8),
+            padding: const EdgeInsets.only(left: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1838,7 +1747,7 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
         ),
         if (_expanded)
           Padding(
-            padding: EdgeInsets.only(left: 8),
+            padding: const EdgeInsets.only(left: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1907,7 +1816,7 @@ String _primitiveText(dynamic value) {
   if (value == null) return 'null';
   if (value is bool) return value.toString();
   if (value is num) return value.toString();
-  if (value is String) return '"${value}"';
+  if (value is String) return '"$value"';
   return value.toString();
 }
 

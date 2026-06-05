@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,8 +51,10 @@ class TerminalViewState extends State<TerminalView> {
   static const double _fontSizeMin = 6.0;
   static const double _fontSizeMax = 32.0;
   static const String _fontSizePrefsKey = 'terminal_font_size';
+  static const int _maxAnsiCacheEntries = 6000;
 
-  final Map<int, List<TextSpan>> _ansiCache = {};
+  final LinkedHashMap<String, List<TextSpan>> _ansiCache =
+      LinkedHashMap<String, List<TextSpan>>();
   int _lastLogCount = 0;
 
   @override
@@ -210,8 +212,9 @@ class TerminalViewState extends State<TerminalView> {
     widget.onStdin!(input);
     _autoScroll = true;
     _scrollToBottom();
-    if (mounted && _stdinFocusNode.canRequestFocus)
+    if (mounted && _stdinFocusNode.canRequestFocus) {
       _stdinFocusNode.requestFocus();
+    }
   }
 
   // --- Colors ---
@@ -230,9 +233,19 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   List<TextSpan> _getSpans(LogEntry log, Color defaultColor) {
-    final key = log.content.hashCode ^ defaultColor.hashCode;
-    return _ansiCache.putIfAbsent(
-        key, () => AnsiParser.parse(log.content, defaultColor: defaultColor));
+    final key = '${log.type.name}|${defaultColor.toARGB32()}|${log.content}';
+    final cached = _ansiCache.remove(key);
+    if (cached != null) {
+      _ansiCache[key] = cached;
+      return cached;
+    }
+
+    final parsed = AnsiParser.parse(log.content, defaultColor: defaultColor);
+    _ansiCache[key] = parsed;
+    if (_ansiCache.length > _maxAnsiCacheEntries) {
+      _ansiCache.remove(_ansiCache.keys.first);
+    }
+    return parsed;
   }
 
   List<LogEntry> _filteredLogs() {
@@ -250,54 +263,41 @@ class TerminalViewState extends State<TerminalView> {
     return result;
   }
 
-  // --- Build the single SelectableText with all lines ---
+  TextSpan _buildLineSpan(
+    LogEntry log,
+    int index,
+    ColorScheme colors,
+  ) {
+    final color = _logColor(log.type, colors);
+    final spans = <InlineSpan>[];
 
-  /// Build one big TextSpan tree: each log line is a group of spans
-  /// followed by a `\n`. This lets the user drag-select across lines.
-  List<TextSpan> _buildAllSpans(ColorScheme colors) {
-    final all = <TextSpan>[];
-    final filteredLogs = _filteredLogs();
-    for (int i = 0; i < filteredLogs.length; i++) {
-      final log = filteredLogs[i];
-      final color = _logColor(log.type, colors);
-
-      // Optional line number prefix
-      if (_showLineNumbers) {
-        all.add(TextSpan(
-          text: '${i + 1}'.padLeft(4) + '  ',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: _fontSize * 0.85,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white24
-                : Colors.black26,
-          ),
-        ));
-      }
-
-      // The actual log content (with ANSI colors)
-      final spans = _getSpans(log, color);
-      // Wrap each span to inherit the base font size
-      for (final span in spans) {
-        all.add(TextSpan(
-          text: span.text,
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: _fontSize,
-            height: 1.5,
-            color: span.style?.color ?? color,
-            fontWeight: span.style?.fontWeight,
-          ),
-        ));
-      }
-
-      // Newline between lines (but not after the last one)
-      if (i < widget.logs.length - 1) {
-        all.add(TextSpan(
-            text: '\n', style: TextStyle(fontSize: _fontSize, height: 1.5)));
-      }
+    if (_showLineNumbers) {
+      spans.add(TextSpan(
+        text: '${'${index + 1}'.padLeft(4)}  ',
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: _fontSize * 0.85,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white24
+              : Colors.black26,
+        ),
+      ));
     }
-    return all;
+
+    for (final span in _getSpans(log, color)) {
+      spans.add(TextSpan(
+        text: span.text,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: _fontSize,
+          height: 1.5,
+          color: span.style?.color ?? color,
+          fontWeight: span.style?.fontWeight,
+        ),
+      ));
+    }
+
+    return TextSpan(children: spans);
   }
 
   void _copyAll() {
@@ -306,116 +306,11 @@ class TerminalViewState extends State<TerminalView> {
     _showToast('已复制全部 ${widget.logs.length} 行');
   }
 
-  void _copyRange(int from, int to) {
-    final lo = from < to ? from : to;
-    final hi = from < to ? to : from;
-    final text = widget.logs
-        .getRange(lo, hi + 1)
-        .map((e) => AnsiParser.strip(e.content))
-        .join('\n');
-    Clipboard.setData(ClipboardData(text: text));
-    _showToast('已复制第 ${lo + 1}-${hi + 1} 行（共 ${hi - lo + 1} 行）');
-  }
-
   void _showToast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(seconds: 1)),
     );
-  }
-
-  // --- Long-press menu ---
-
-  void _showLineMenu(int index) {
-    final log = widget.logs[index];
-    final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colors.onSurfaceVariant.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            if (log.content.length > 60)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(
-                  AnsiParser.strip(log.content).substring(0, 60) + '...',
-                  style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      color: colors.onSurfaceVariant),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.copy, size: 20),
-              title: const Text('复制此行'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Clipboard.setData(
-                    ClipboardData(text: AnsiParser.strip(log.content)));
-                _showToast('已复制');
-              },
-            ),
-            if (index > 0)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.content_copy, size: 20),
-                title: Text('复制第 1-${index + 1} 行'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _copyRange(0, index);
-                },
-              ),
-            if (index < widget.logs.length - 1)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.content_copy, size: 20),
-                title: Text('复制第 ${index + 1}-${widget.logs.length} 行'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _copyRange(index, widget.logs.length - 1);
-                },
-              ),
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.select_all, size: 20),
-              title: Text('复制全部（${widget.logs.length} 行）'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _copyAll();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _looksLikeJson(String text) {
-    final s = AnsiParser.strip(text).trim();
-    return (s.startsWith('{') && s.endsWith('}')) ||
-        (s.startsWith('[') && s.endsWith(']'));
   }
 
   // --- Build ---
@@ -532,7 +427,7 @@ class TerminalViewState extends State<TerminalView> {
                         hintText: '搜索日志...',
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding: EdgeInsets.symmetric(
                             horizontal: 8, vertical: 6),
                       ),
                       onChanged: (v) => setState(() => _searchQuery = v),
@@ -596,17 +491,14 @@ class TerminalViewState extends State<TerminalView> {
                   : Scrollbar(
                       controller: _scrollController,
                       thumbVisibility: true,
-                      child: SingleChildScrollView(
+                      child: ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: MediaQuery.sizeOf(context).width > 20
-                                ? MediaQuery.sizeOf(context).width - 20
-                                : MediaQuery.sizeOf(context).width,
-                          ),
+                        itemCount: displayLogs.length,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 1),
                           child: SelectableText.rich(
-                            TextSpan(children: _buildAllSpans(colors)),
+                            _buildLineSpan(displayLogs[index], index, colors),
                           ),
                         ),
                       ),

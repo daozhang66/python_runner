@@ -117,9 +117,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   }
 
   Future<void> _loadContent() async {
+    final scriptProvider = context.read<ScriptProvider>();
     final prefs = await SharedPreferences.getInstance();
-    final content =
-        await context.read<ScriptProvider>().readScript(widget.scriptName);
+    final content = await scriptProvider.readScript(widget.scriptName);
     if (!mounted) return;
     _savedText = content;
     _controller.text = content;
@@ -158,64 +158,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
       _scaleStartFontSize = null;
       unawaited(_persistFontSize());
     }
-  }
-
-  void _showFontSizeSlider() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    double tempSize = _fontSize;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${tempSize.round()} px',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('A', style: TextStyle(fontSize: 12)),
-                  Expanded(
-                    child: Slider(
-                      value: tempSize,
-                      min: _minFontSize,
-                      max: _maxFontSize,
-                      divisions: (_maxFontSize - _minFontSize).round(),
-                      onChanged: (v) {
-                        setDialogState(() => tempSize = v);
-                        setState(() => _fontSize = v);
-                      },
-                    ),
-                  ),
-                  const Text('A',
-                      style:
-                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() => _fontSize = 10.0);
-                setDialogState(() => tempSize = 10.0);
-              },
-              child: const Text('重置'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                unawaited(_persistFontSize());
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _onTextChanged() {
@@ -273,9 +215,11 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
         );
       }
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('运行失败: $e'), duration: Duration(seconds: 3)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('运行失败: $e'), duration: const Duration(seconds: 3)),
+        );
+      }
     }
   }
 
@@ -304,9 +248,9 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final execProvider = context.watch<ExecutionProvider>();
-    final isThisRunning = execProvider.isRunning &&
-        execProvider.currentScriptName == widget.scriptName;
+    final isThisRunning = context.select<ExecutionProvider, bool>(
+      (p) => p.isRunning && p.currentScriptName == widget.scriptName,
+    );
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

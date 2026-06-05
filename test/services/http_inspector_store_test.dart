@@ -92,5 +92,52 @@ void main() {
         }
       }
     });
+
+    test('stats are updated incrementally and cleared with records', () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_store_stats_');
+      try {
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+          persistDebounce: const Duration(milliseconds: 5),
+        );
+        await store.ensureLoaded();
+
+        store.addFromJson({
+          'id': 'ok-1',
+          'timestamp': 1710000000000,
+          'method': 'get',
+          'url': 'https://example.com/success',
+          'request_headers': const {},
+          'status_code': 200,
+          'duration_ms': 40,
+        });
+        store.addFromJson({
+          'id': 'err-1',
+          'timestamp': 1710000000100,
+          'method': 'post',
+          'url': 'https://example.com/error',
+          'request_headers': const {},
+          'status_code': 500,
+          'duration_ms': 60,
+        });
+
+        expect(store.stats['total'], 2);
+        expect(store.stats['success'], 1);
+        expect(store.stats['error'], 1);
+        expect(store.stats['avgMs'], 50);
+
+        store.clear();
+
+        expect(store.stats['total'], 0);
+        expect(store.stats['success'], 0);
+        expect(store.stats['error'], 0);
+        expect(store.stats['avgMs'], isNull);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
   });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +12,6 @@ import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
 import '../runtime/runtime_manager.dart';
 import '../runtime/runtime_request.dart';
-import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
 /// Stores logs for a single script execution run
@@ -36,22 +36,31 @@ class ScriptLogRecord {
 }
 
 class ExecutionProvider extends ChangeNotifier {
+  static const int maxCurrentLogs = 5000;
+  static const int maxLogsPerHistoryRecord = 5000;
+  static const int maxHistoryRecords = 20;
+
   final NativeBridge _bridge;
   RuntimeManager _runtimeManager;
   final bool _runtimeManagerLocked;
-  final _uuid = const Uuid();
+  int _executionSequence = 0;
 
   ExecutionState _state = const ExecutionState();
   final List<LogEntry> _logs = [];
+  late final UnmodifiableListView<LogEntry> _logsView =
+      UnmodifiableListView(_logs);
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
   StreamSubscription? _stdinSub;
   String? _currentScriptName;
   bool _waitingForInput = false;
   String _currentInputPrompt = '';
+  int _logVersion = 0;
 
   /// History of all script execution logs
   final List<ScriptLogRecord> _logHistory = [];
+  late final UnmodifiableListView<ScriptLogRecord> _logHistoryView =
+      UnmodifiableListView(_logHistory);
 
   bool _floatingBallEnabled = false;
 
@@ -77,14 +86,15 @@ class ExecutionProvider extends ChangeNotifier {
   static const _notifyDelay = Duration(milliseconds: 100);
 
   ExecutionState get state => _state;
-  List<LogEntry> get logs => List.unmodifiable(_logs);
+  List<LogEntry> get logs => _logsView;
+  int get logVersion => _logVersion;
   String? get currentScriptName => _currentScriptName;
   bool get isRunning =>
       _state.status == ExecutionStatus.running ||
       _state.status == ExecutionStatus.stopping;
   bool get waitingForInput => _waitingForInput;
   String get currentInputPrompt => _currentInputPrompt;
-  List<ScriptLogRecord> get logHistory => List.unmodifiable(_logHistory);
+  List<ScriptLogRecord> get logHistory => _logHistoryView;
 
   ExecutionProvider(this._bridge, {RuntimeManager? runtimeManager})
       : _runtimeManager = runtimeManager ??
@@ -136,10 +146,7 @@ class ExecutionProvider extends ChangeNotifier {
           return;
         }
 
-        _logs.add(entry);
-        if (_logHistory.isNotEmpty) {
-          _logHistory.last.logs.add(entry);
-        }
+        _appendLiveLog(entry);
         // High-frequency log streams — throttle notifications
         _scheduleNotify();
       }, onError: (e) {
@@ -193,10 +200,7 @@ class ExecutionProvider extends ChangeNotifier {
             content: _currentInputPrompt,
             timestamp: DateTime.now(),
           );
-          _logs.add(entry);
-          if (_logHistory.isNotEmpty) {
-            _logHistory.last.logs.add(entry);
-          }
+          _appendLiveLog(entry);
         }
         _waitingForInput = true;
         // Update floating ball to show waiting state
@@ -233,6 +237,51 @@ class ExecutionProvider extends ChangeNotifier {
     });
   }
 
+  void _bumpLogVersion() {
+    _logVersion++;
+  }
+
+  static void _trimListToMax<T>(List<T> items, int maxItems) {
+    if (items.length <= maxItems) return;
+    items.removeRange(0, items.length - maxItems);
+  }
+
+  void _appendLiveLog(LogEntry entry) {
+    _logs.add(entry);
+    _trimListToMax(_logs, maxCurrentLogs);
+    if (_logHistory.isNotEmpty) {
+      final historyLogs = _logHistory.last.logs;
+      historyLogs.add(entry);
+      _trimListToMax(historyLogs, maxLogsPerHistoryRecord);
+    }
+    _bumpLogVersion();
+  }
+
+  void _replaceLastLiveLog(LogEntry entry) {
+    if (_logs.isEmpty) {
+      _appendLiveLog(entry);
+      return;
+    }
+    _logs[_logs.length - 1] = entry;
+    if (_logHistory.isNotEmpty && _logHistory.last.logs.isNotEmpty) {
+      _logHistory.last.logs[_logHistory.last.logs.length - 1] = entry;
+    }
+    _bumpLogVersion();
+  }
+
+  void _clearCurrentLogs() {
+    if (_logs.isEmpty) return;
+    _logs.clear();
+    _bumpLogVersion();
+  }
+
+  String _nextExecutionId() {
+    _executionSequence = (_executionSequence + 1) & 0xFFFF;
+    final micros = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+    final seq = _executionSequence.toRadixString(16).padLeft(4, '0');
+    return '$micros-$seq';
+  }
+
   Future<void> executeScript(String name) async {
     // If a previous execution is still marked as running, clean it up
     if (_state.status == ExecutionStatus.running) {
@@ -245,9 +294,9 @@ class ExecutionProvider extends ChangeNotifier {
       }
     }
 
-    final executionId = _uuid.v4();
+    final executionId = _nextExecutionId();
     _currentScriptName = name;
-    _logs.clear();
+    _clearCurrentLogs();
     _waitingForInput = false;
     _currentInputPrompt = '';
     _state = ExecutionState(
@@ -278,6 +327,7 @@ class ExecutionProvider extends ChangeNotifier {
       scriptName: name,
       startTime: DateTime.now(),
     ));
+    _trimListToMax(_logHistory, maxHistoryRecords);
 
     notifyListeners();
 
@@ -339,7 +389,7 @@ class ExecutionProvider extends ChangeNotifier {
       _showFloatingBallIfNeeded(name);
     } catch (e) {
       _logger.error('脚本启动失败: $name, error: $e', source: 'Execution');
-      _logs.add(LogEntry(
+      _appendLiveLog(LogEntry(
         type: LogType.error,
         content: 'Failed to start: $e',
         timestamp: DateTime.now(),
@@ -371,15 +421,9 @@ class ExecutionProvider extends ChangeNotifier {
         timestamp: DateTime.now(),
       );
       if (mergedPromptLine) {
-        _logs[_logs.length - 1] = entry;
-        if (_logHistory.isNotEmpty && _logHistory.last.logs.isNotEmpty) {
-          _logHistory.last.logs[_logHistory.last.logs.length - 1] = entry;
-        }
+        _replaceLastLiveLog(entry);
       } else {
-        _logs.add(entry);
-        if (_logHistory.isNotEmpty) {
-          _logHistory.last.logs.add(entry);
-        }
+        _appendLiveLog(entry);
       }
       _currentInputPrompt = '';
       _waitingForInput = false;
@@ -403,7 +447,7 @@ class ExecutionProvider extends ChangeNotifier {
   }
 
   void clearLogs() {
-    _logs.clear();
+    _clearCurrentLogs();
     notifyListeners();
   }
 

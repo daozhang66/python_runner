@@ -233,6 +233,55 @@ void main() {
     expect(settingsSource, contains('widget.currentMaterialYouEnabled'));
   });
 
+  test('home page keeps tabs alive and splash/theme path avoids repeated rebuild work',
+      () {
+    final mainSource = File('lib/main.dart').readAsStringSync();
+
+    expect(mainSource, contains('body: IndexedStack('));
+    expect(mainSource, contains('_cachedLightTheme'));
+    expect(mainSource, contains('_cachedDarkTheme'));
+    expect(mainSource, contains('Stopwatch()..start()'));
+    expect(mainSource,
+        isNot(contains('Future.delayed(const Duration(milliseconds: 1200))')));
+  });
+
+  test('script list and editor use cheaper rebuild patterns', () {
+    final listPage = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final editorPage =
+        File('lib/pages/script_editor_page.dart').readAsStringSync();
+
+    expect(listPage, contains('GridView.builder('));
+    expect(listPage, contains('itemExtentBuilder:'));
+    expect(listPage, contains('final indexByName = <String, int>{};'));
+    expect(editorPage, contains('context.select<ExecutionProvider, bool>('));
+    expect(editorPage, isNot(contains('context.watch<ExecutionProvider>()')));
+  });
+
+  test('network inspector caches stats and formatted line metadata', () {
+    final pageSource =
+        File('lib/pages/network_inspector_page.dart').readAsStringSync();
+    final storeSource =
+        File('lib/services/http_inspector_store.dart').readAsStringSync();
+
+    expect(pageSource, contains('_lineCount'));
+    expect(pageSource,
+        isNot(contains("final lineCount = _formatted.split('\\\\n').length")));
+    expect(storeSource, contains('Map<String, dynamic> get stats'));
+    expect(storeSource, contains('_totalCount'));
+    expect(storeSource, contains('_successCount'));
+    expect(storeSource, contains('_errorCount'));
+  });
+
+  test('execution provider no longer depends on uuid package', () {
+    final providerSource =
+        File('lib/providers/execution_provider.dart').readAsStringSync();
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+
+    expect(providerSource, isNot(contains("import 'package:uuid/uuid.dart';")));
+    expect(providerSource, isNot(contains('Uuid(')));
+    expect(pubspec, isNot(contains('\n  uuid:')));
+  });
+
   test(
       'graphics engine and scene support are fully removed from user-visible and runtime layers',
       () {

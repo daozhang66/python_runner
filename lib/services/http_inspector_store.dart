@@ -244,6 +244,11 @@ class HttpInspectorStore extends ChangeNotifier {
   String _filterDomain = '';
   String _filterMethod = '';
   int? _filterStatus; // null = all, 0 = errors, 200 = 2xx, etc.
+  int _totalCount = 0;
+  int _successCount = 0;
+  int _errorCount = 0;
+  int _totalDurationMs = 0;
+  int _durationCount = 0;
   Timer? _persistTimer;
   Future<void>? _loadFuture;
   Future<void> _persistChain = Future<void>.value();
@@ -256,6 +261,13 @@ class HttpInspectorStore extends ChangeNotifier {
   String get filterMethod => _filterMethod;
   int? get filterStatus => _filterStatus;
   bool get isLoaded => _loaded;
+  Map<String, dynamic> get stats => {
+        'total': _totalCount,
+        'success': _successCount,
+        'error': _errorCount,
+        'avgMs':
+            _durationCount > 0 ? (_totalDurationMs / _durationCount).round() : null,
+      };
 
   /// Get filtered records (newest first).
   List<HttpRecord> get filteredRecords {
@@ -324,6 +336,7 @@ class HttpInspectorStore extends ChangeNotifier {
       final record = HttpRecord.fromJson(json);
       if (record.url.isEmpty) return;
       _records.add(record);
+      _addToStats(record);
       _applyLimits();
       notifyListeners();
       _schedulePersist();
@@ -335,6 +348,7 @@ class HttpInspectorStore extends ChangeNotifier {
   /// Clear all records.
   void clear() {
     _records.clear();
+    _resetStats();
     notifyListeners();
     _schedulePersist();
   }
@@ -357,7 +371,7 @@ class HttpInspectorStore extends ChangeNotifier {
     buf.writeln();
     for (final r in _records) {
       buf.writeln(r.toExportText());
-      buf.writeln('${'─' * 50}');
+      buf.writeln('─' * 50);
     }
     return buf.toString();
   }
@@ -371,7 +385,7 @@ class HttpInspectorStore extends ChangeNotifier {
     buf.writeln();
     for (final r in list) {
       buf.writeln(r.toExportText());
-      buf.writeln('${'─' * 50}');
+      buf.writeln('─' * 50);
     }
     return buf.toString();
   }
@@ -510,9 +524,48 @@ class HttpInspectorStore extends ChangeNotifier {
   void _applyLimits() {
     final trimmed = trimRecords(_records);
     if (trimmed.length == _records.length) return;
+    final removedCount = _records.length - trimmed.length;
+    for (final removed in _records.take(removedCount)) {
+      _removeFromStats(removed);
+    }
     _records
       ..clear()
       ..addAll(trimmed);
+  }
+
+  void _resetStats() {
+    _totalCount = 0;
+    _successCount = 0;
+    _errorCount = 0;
+    _totalDurationMs = 0;
+    _durationCount = 0;
+  }
+
+  void _addToStats(HttpRecord record) {
+    _totalCount++;
+    if (record.isSuccess) _successCount++;
+    if (record.isError) _errorCount++;
+    if (record.durationMs != null) {
+      _totalDurationMs += record.durationMs!;
+      _durationCount++;
+    }
+  }
+
+  void _removeFromStats(HttpRecord record) {
+    _totalCount--;
+    if (record.isSuccess) _successCount--;
+    if (record.isError) _errorCount--;
+    if (record.durationMs != null) {
+      _totalDurationMs -= record.durationMs!;
+      _durationCount--;
+    }
+  }
+
+  void _recomputeStats() {
+    _resetStats();
+    for (final record in _records) {
+      _addToStats(record);
+    }
   }
 
   void _schedulePersist() {
@@ -543,6 +596,7 @@ class HttpInspectorStore extends ChangeNotifier {
     } catch (e) {
       debugPrint('HttpInspectorStore.load error: $e');
     } finally {
+      _recomputeStats();
       _loaded = true;
       notifyListeners();
     }
