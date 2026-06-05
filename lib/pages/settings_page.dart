@@ -11,6 +11,7 @@ import '../services/app_update_manager.dart';
 import '../services/network_debug_config.dart';
 import '../services/request_override_config.dart';
 import '../runtime/runtime_manager.dart';
+import 'update_log_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
@@ -514,6 +515,13 @@ class _SettingsPageState extends State<SettingsPage> {
     await _appUpdateManager.setAutoCheckEnabled(enabled);
     if (!mounted) return;
     setState(() => _autoCheckUpdates = enabled);
+  }
+
+  void _openUpdateLogPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => UpdateLogPage()),
+    );
   }
 
   @override
@@ -1370,6 +1378,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _checkingUpdate ? null : _checkForUpdates,
               ),
+              ListTile(
+                leading: const Icon(Icons.history_outlined),
+                title: const Text('更新日志'),
+                subtitle: const Text(
+                  '查看 GitHub Releases 历史版本',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openUpdateLogPage,
+              ),
               SwitchListTile(
                 secondary: const Icon(Icons.update_outlined),
                 title: const Text('启动时自动检查更新'),
@@ -1852,6 +1870,8 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.work_outline, '工作目录', '脚本中 open() 等相对路径的基准目录'),
               _ManualItem(Icons.folder_outlined, '导出目录', '脚本导出目标文件夹'),
               _ManualItem(Icons.update_outlined, '自动更新', '每次启动检查更新，可在设置中开关'),
+              _ManualItem(
+                  Icons.history_outlined, '更新日志', '查看 GitHub Releases 历史版本'),
               _ManualItem(
                   Icons.bug_report_outlined, '网络调试模式', '代理/SSL 配置，用于外部抓包工具'),
               _ManualItem(

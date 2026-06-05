@@ -5,7 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:python_runner/pages/settings_page.dart';
 
 void main() {
-  testWidgets('settings page shows update controls', (WidgetTester tester) async {
+  testWidgets('settings page shows update controls',
+      (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(const {});
 
     await tester.pumpWidget(
@@ -35,6 +36,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('检查更新'), findsOneWidget);
+    expect(find.text('更新日志'), findsOneWidget);
     expect(find.text('启动时自动检查更新'), findsOneWidget);
   });
   testWidgets('settings page uses official PyPI source wording',
