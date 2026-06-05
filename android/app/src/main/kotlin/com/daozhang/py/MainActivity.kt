@@ -6,8 +6,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
-import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -19,8 +17,6 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -35,17 +31,25 @@ class MainActivity : FlutterActivity() {
     private val METHOD_CHANNEL = "com.daozhang.py/native_bridge"
     private val LOG_STREAM_CHANNEL = "com.daozhang.py/log_stream"
     private val INSTALL_PROGRESS_CHANNEL = "com.daozhang.py/install_progress"
+    private val DOWNLOAD_PROGRESS_CHANNEL = "com.daozhang.py/download_progress"
     private val EXECUTION_STATUS_CHANNEL = "com.daozhang.py/execution_status"
 
     private val STDIN_REQUEST_CHANNEL = "com.daozhang.py/stdin_request"
 
     private var logSink: EventChannel.EventSink? = null
     private var installSink: EventChannel.EventSink? = null
+    private var downloadSink: EventChannel.EventSink? = null
     private var statusSink: EventChannel.EventSink? = null
     private var stdinRequestSink: EventChannel.EventSink? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val apkInstaller by lazy { ApkInstaller(this) }
+    private val downloadManager by lazy {
+        DownloadManager(this) { event ->
+            mainHandler.post { downloadSink?.success(event) }
+        }
+    }
     private val linuxLikeRuntimeManager by lazy { LinuxLikeRuntimeManager(this) }
     private val linuxLikeBootstrapPackages = setOf("pip", "setuptools", "wheel")
     private val linuxLikeImplicitDependencyPackages = setOf(
@@ -155,6 +159,17 @@ class MainActivity : FlutterActivity() {
                 }
             })
 
+        // EventChannel: download_progress
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_PROGRESS_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    downloadSink = events
+                }
+                override fun onCancel(arguments: Any?) {
+                    downloadSink = null
+                }
+            })
+
         // EventChannel: execution_status
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EXECUTION_STATUS_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
@@ -253,7 +268,26 @@ class MainActivity : FlutterActivity() {
                     "downloadAndInstallApk" -> {
                         val url = call.argument<String>("url") ?: ""
                         val fileName = call.argument<String>("fileName") ?: "python_runner_update.apk"
-                        handleDownloadAndInstallApk(url, fileName, result)
+                        handleStartApkDownload(url, fileName, "", "", result)
+                    }
+                    "startApkDownload" -> {
+                        val url = call.argument<String>("url") ?: ""
+                        val fileName = call.argument<String>("fileName") ?: "python_runner_update.apk"
+                        val version = call.argument<String>("version") ?: ""
+                        val sha256 = call.argument<String>("sha256") ?: ""
+                        handleStartApkDownload(url, fileName, version, sha256, result)
+                    }
+                    "cancelDownload" -> {
+                        val taskId = call.argument<String>("taskId") ?: ""
+                        result.success(downloadManager.cancelDownload(taskId))
+                    }
+                    "retryDownload" -> {
+                        val taskId = call.argument<String>("taskId") ?: ""
+                        result.success(downloadManager.retryDownload(taskId))
+                    }
+                    "installDownloadedApk" -> {
+                        val taskId = call.argument<String>("taskId") ?: ""
+                        handleInstallDownloadedApk(taskId, result)
                     }
                     "getAppInfo" -> handleGetAppInfo(result)
                     "getPythonInfo" -> handleGetPythonInfo(result)
@@ -1665,100 +1699,51 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleDownloadAndInstallApk(
+    private fun handleStartApkDownload(
         url: String,
         fileName: String,
+        version: String,
+        sha256: String,
         result: MethodChannel.Result
     ) {
-        Thread {
-            var connection: HttpURLConnection? = null
-            try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
-                    !packageManager.canRequestPackageInstalls()
-                ) {
-                    val settingsIntent = Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:$packageName")
-                    ).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(settingsIntent)
-                    mainHandler.post {
-                        result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)
-                    }
-                    return@Thread
-                }
-
-                val targetDir = File(
-                    getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir,
-                    "updates"
-                )
-                if (!targetDir.exists()) targetDir.mkdirs()
-
-                val safeFileName = if (fileName.lowercase().endsWith(".apk")) {
-                    fileName
-                } else {
-                    "$fileName.apk"
-                }
-                val apkFile = File(targetDir, safeFileName)
-                if (apkFile.exists()) apkFile.delete()
-
-                connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 15000
-                    readTimeout = 60000
-                    setRequestProperty("Accept", "application/octet-stream")
-                    setRequestProperty("User-Agent", "python_runner-updater")
-                    instanceFollowRedirects = true
-                    connect()
-                }
-                if (connection.responseCode !in 200..299) {
-                    throw IllegalStateException("HTTP ${connection.responseCode}")
-                }
-
-                val totalBytes = connection.contentLength.toLong()
-                var downloadedBytes = 0L
-                val buffer = ByteArray(8192)
-                connection.inputStream.use { input ->
-                    apkFile.outputStream().use { output ->
-                        var bytesRead: Int
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            downloadedBytes += bytesRead
-                            val progress = if (totalBytes > 0) {
-                                (downloadedBytes * 100 / totalBytes).toInt().coerceIn(0, 100)
-                            } else { -1 }
-                            mainHandler.post {
-                                installSink?.success(mapOf(
-                                    "downloaded" to downloadedBytes,
-                                    "total" to totalBytes,
-                                    "progress" to progress
-                                ))
-                            }
-                        }
-                    }
-                }
-
-                val apkUri = FileProvider.getUriForFile(
-                    this,
-                    "$packageName.fileprovider",
-                    apkFile
-                )
-                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(apkUri, "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                startActivity(installIntent)
-                mainHandler.post { result.success(apkFile.absolutePath) }
-            } catch (e: Exception) {
-                mainHandler.post {
-                    result.error("1012", "下载或安装更新失败: ${e.message}", null)
-                }
-            } finally {
-                connection?.disconnect()
+        try {
+            if (!apkInstaller.canRequestPackageInstalls()) {
+                apkInstaller.openInstallPermissionSettings()
+                downloadSink?.success(mapOf(
+                    "taskId" to "",
+                    "type" to "apk_update",
+                    "status" to "install_permission_required",
+                    "downloadedBytes" to 0L,
+                    "totalBytes" to -1L,
+                    "progress" to -1,
+                    "speedBytesPerSecond" to 0L,
+                    "etaSeconds" to -1L,
+                    "retryCount" to 0,
+                    "filePath" to "",
+                    "errorCode" to "INSTALL_PERMISSION_REQUIRED",
+                    "errorMessage" to "请先允许此应用安装APK，然后再重试更新"
+                ))
+                result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)
+                return
             }
-        }.also { it.name = "apk-update"; it.start() }
+            val taskId = downloadManager.startApkDownload(url, fileName, version, sha256)
+            result.success(taskId)
+        } catch (e: Exception) {
+            result.error("1012", "启动下载失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleInstallDownloadedApk(taskId: String, result: MethodChannel.Result) {
+        try {
+            val apkFile = downloadManager.completedFile(taskId)
+                ?: throw IllegalStateException("下载任务未完成或文件不存在")
+            val path = apkInstaller.installApk(apkFile)
+            result.success(path)
+        } catch (e: SecurityException) {
+            result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)
+        } catch (e: Exception) {
+            result.error("1012", "打开安装器失败: ${e.message}", null)
+        }
     }
 
     // --- Helpers ---

@@ -69,6 +69,7 @@ class AppUpdateManager {
         }
       }
 
+      if (!context.mounted) return;
       await _showUpdateDialog(
         context,
         updateInfo,
@@ -208,24 +209,106 @@ class AppUpdateManager {
 
     final progressNotifier = ValueNotifier<double>(0.0);
     final progressTextNotifier = ValueNotifier<String>('准备下载...');
+    final statusTitleNotifier = ValueNotifier<String>('正在下载 v${updateInfo.latestVersion}');
+    final failedNotifier = ValueNotifier<bool>(false);
+    final finished = Completer<void>();
     StreamSubscription? progressSub;
+    String? taskId;
+    var dialogOpen = false;
+    var installStarted = false;
 
-    progressSub = _bridge.installProgressStream.listen((event) {
-      final progress = event['progress'] as int? ?? 0;
-      final downloaded = event['downloaded'] as int? ?? 0;
-      final total = event['total'] as int? ?? 0;
-      if (progress >= 0) {
+    void completeOnce() {
+      if (!finished.isCompleted) {
+        finished.complete();
+      }
+    }
+
+    void closeDialog() {
+      if (dialogOpen && context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      dialogOpen = false;
+    }
+
+    Future<void> installCompletedTask(String completedTaskId) async {
+      if (installStarted) return;
+      installStarted = true;
+      statusTitleNotifier.value = '下载完成，正在打开安装器';
+      try {
+        await _bridge.installDownloadedApk(completedTaskId);
+        if (!context.mounted) return;
+        closeDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('安装器已打开'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        completeOnce();
+      } catch (error) {
+        installStarted = false;
+        failedNotifier.value = true;
+        statusTitleNotifier.value = '下载失败';
+        progressTextNotifier.value = '安装失败：${_formatError(error)}';
+      }
+    }
+
+    progressSub = _bridge.downloadProgressStream.listen((event) {
+      final currentTaskId = event['taskId']?.toString() ?? '';
+      if (taskId != null && currentTaskId.isNotEmpty && currentTaskId != taskId) {
+        return;
+      }
+
+      final status = event['status']?.toString() ?? '';
+      final progress = _eventInt(event, 'progress', -1);
+      final downloaded = _eventLong(event, 'downloadedBytes', 0);
+      final total = _eventLong(event, 'totalBytes', -1);
+      final speed = _eventLong(event, 'speedBytesPerSecond', 0);
+      final eta = _eventLong(event, 'etaSeconds', -1);
+
+      if (progress >= 0 && total > 0) {
         progressNotifier.value = progress / 100.0;
-        final downloadedMB = (downloaded / 1024 / 1024).toStringAsFixed(1);
-        final totalMB = (total / 1024 / 1024).toStringAsFixed(1);
-        progressTextNotifier.value = '$downloadedMB / $totalMB MB ($progress%)';
+        progressTextNotifier.value =
+            '${_formatByteSize(downloaded)} / ${_formatByteSize(total)} ($progress%)'
+            ' · ${_formatByteSize(speed)}/s'
+            '${eta >= 0 ? ' · 剩余约 ${_formatEta(eta)}' : ''}';
       } else {
         progressNotifier.value = 0.0;
         progressTextNotifier.value = '正在下载...';
       }
+
+      switch (status) {
+        case 'checking':
+          statusTitleNotifier.value = '准备下载 v${updateInfo.latestVersion}';
+        case 'downloading':
+          failedNotifier.value = false;
+          statusTitleNotifier.value = '正在下载 v${updateInfo.latestVersion}';
+        case 'retrying':
+          statusTitleNotifier.value = '网络异常，正在重试';
+        case 'failed':
+          failedNotifier.value = true;
+          statusTitleNotifier.value = '下载失败';
+          progressTextNotifier.value =
+              event['errorMessage']?.toString().isNotEmpty == true
+                  ? event['errorMessage'].toString()
+                  : '下载失败，请重试';
+        case 'cancelled':
+          closeDialog();
+          completeOnce();
+        case 'completed':
+          final completedTaskId = currentTaskId.isNotEmpty ? currentTaskId : taskId;
+          if (completedTaskId != null) {
+            unawaited(installCompletedTask(completedTaskId));
+          }
+        case 'install_permission_required':
+          closeDialog();
+          completeOnce();
+      }
     });
 
-    showDialog<void>(
+    if (!context.mounted) return;
+    dialogOpen = true;
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (progressContext) => AlertDialog(
@@ -233,7 +316,10 @@ class AppUpdateManager {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('正在下载 v${updateInfo.latestVersion}'),
+            ValueListenableBuilder<String>(
+              valueListenable: statusTitleNotifier,
+              builder: (_, text, __) => Text(text),
+            ),
             const SizedBox(height: 16),
             ValueListenableBuilder<double>(
               valueListenable: progressNotifier,
@@ -252,23 +338,50 @@ class AppUpdateManager {
             ),
           ],
         ),
+        actions: [
+          ValueListenableBuilder<bool>(
+            valueListenable: failedNotifier,
+            builder: (_, failed, __) => failed
+                ? TextButton(
+                    onPressed: () async {
+                      final id = taskId;
+                      if (id == null) return;
+                      failedNotifier.value = false;
+                      statusTitleNotifier.value = '正在重试';
+                      await _bridge.retryDownload(id);
+                    },
+                    child: const Text('重试'),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          TextButton(
+            onPressed: () async {
+              final id = taskId;
+              if (id != null) {
+                await _bridge.cancelDownload(id);
+              }
+              closeDialog();
+              completeOnce();
+            },
+            child: const Text('取消'),
+          ),
+        ],
       ),
-    );
+    ).then((_) {
+      dialogOpen = false;
+      completeOnce();
+    }));
 
     try {
-      await _bridge.downloadAndInstallApk(
+      taskId = await _bridge.startApkDownload(
         downloadUrl,
         fileName: asset.name,
+        version: updateInfo.latestVersion,
       );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('安装器已打开'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      await finished.future;
     } catch (error) {
       if (!context.mounted) return;
+      closeDialog();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Python Runner 更新失败：${_formatError(error)}'),
@@ -276,13 +389,47 @@ class AppUpdateManager {
         ),
       );
     } finally {
-      await progressSub?.cancel();
+      await progressSub.cancel();
       progressNotifier.dispose();
       progressTextNotifier.dispose();
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
+      statusTitleNotifier.dispose();
+      failedNotifier.dispose();
     }
+  }
+
+  int _eventInt(Map<dynamic, dynamic> event, String key, int fallback) {
+    final value = event[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return fallback;
+  }
+
+  int _eventLong(Map<dynamic, dynamic> event, String key, int fallback) {
+    final value = event[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return fallback;
+  }
+
+  String _formatByteSize(num bytes) {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    var value = bytes.toDouble();
+    var unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    return '${value.toStringAsFixed(unitIndex == 0 ? 0 : 1)} ${units[unitIndex]}';
+  }
+
+  String _formatEta(num seconds) {
+    final totalSeconds = seconds.toInt();
+    if (totalSeconds < 60) return '$totalSeconds 秒';
+    final minutes = totalSeconds ~/ 60;
+    final remainSeconds = totalSeconds % 60;
+    if (remainSeconds == 0) return '$minutes 分钟';
+    return '$minutes 分 $remainSeconds 秒';
   }
 
   Future<void> _rememberDismissedVersion(String version) async {

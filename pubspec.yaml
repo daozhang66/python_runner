@@ -29,8 +29,6 @@ dependencies:
   path: ^1.9.0
   # 状态管理
   provider: ^6.1.2
-  # UUID生成
-  uuid: ^4.5.0
   # 时间格式化
   intl: ^0.20.2
   # 权限管理

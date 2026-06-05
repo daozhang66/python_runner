@@ -23,6 +23,9 @@ class ScriptListPage extends StatefulWidget {
 }
 
 class _ScriptListPageState extends State<ScriptListPage> {
+  static const double _scriptListItemExtent = 94;
+  static const double _folderListItemExtent = 84;
+
   final _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
   bool _isGridView = false;
   bool _maskScriptNames = false;
@@ -42,11 +45,9 @@ class _ScriptListPageState extends State<ScriptListPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      context.read<ScriptProvider>().loadScripts();
-      _loadViewMode();
-      _loadScriptNameMaskPreference();
-    });
+    context.read<ScriptProvider>().loadScripts();
+    _loadViewMode();
+    _loadScriptNameMaskPreference();
   }
 
   @override
@@ -92,7 +93,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   String _displayScriptName(String name, int index) {
     if (!_maskScriptNames) return name.replaceAll('.py', '');
-    final maskedPrefix = '脚本 ';
+    const maskedPrefix = '脚本 ';
     return '$maskedPrefix${(index + 1).toString().padLeft(2, '0')}';
   }
 
@@ -286,9 +287,10 @@ class _ScriptListPageState extends State<ScriptListPage> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (!file.name.toLowerCase().endsWith('.py')) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('只支持导入 .py 文件'), duration: Duration(seconds: 2)));
+      }
       return;
     }
     final name = file.name;
@@ -320,15 +322,17 @@ class _ScriptListPageState extends State<ScriptListPage> {
       if (overwrite != true) return;
       // Overwrite existing script content
       await provider.saveScript(name, content);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('已覆盖: $name'), duration: const Duration(seconds: 2)));
+      }
     } else {
       await provider.createScript(name,
           content: content, groupId: _activeGroupId);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('已导入: $name'), duration: const Duration(seconds: 2)));
+      }
     }
   }
 
@@ -346,17 +350,19 @@ class _ScriptListPageState extends State<ScriptListPage> {
     final destDir = prefs.getString('export_dir') ?? '';
     try {
       final path = await _bridge.exportScript(name, destDir);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('已导出到: $path'),
               duration: const Duration(seconds: 3)),
         );
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('导出失败: $e')),
         );
+      }
     }
   }
 
@@ -868,10 +874,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
               actions: [
                 TextButton(
                   onPressed: () => setState(() {
-                    if (allSelected)
+                    if (allSelected) {
                       _selectedScripts.clear();
-                    else
+                    } else {
                       _selectedScripts.addAll(scripts.map((s) => s.name));
+                    }
                   }),
                   child: Text(allSelected ? '取消全选' : '全选'),
                 ),
@@ -1055,6 +1062,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
     final canDrag = !_multiSelectMode && !_searchMode;
     if (!canDrag) {
       return ListView.builder(
+        itemExtentBuilder: (index, _) {
+          if (index < firstFolderIndex) return _scriptListItemExtent;
+          if (index < firstRegularIndex) return _folderListItemExtent;
+          return _scriptListItemExtent;
+        },
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: itemCount,
         itemBuilder: (context, index) {
@@ -1091,6 +1103,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
     return ReorderableListView.builder(
       buildDefaultDragHandles: false,
+      itemExtentBuilder: (index, _) {
+        if (index < firstFolderIndex) return _scriptListItemExtent;
+        if (index < firstRegularIndex) return _folderListItemExtent;
+        return _scriptListItemExtent;
+      },
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: itemCount,
       onReorderItem: (int oldIndex, int newIndex) {
@@ -1149,10 +1166,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
         borderRadius: BorderRadius.circular(16),
         onTap: () => _multiSelectMode
             ? setState(() {
-                if (selected)
+                if (selected) {
                   _selectedScripts.remove(script.name);
-                else
+                } else {
                   _selectedScripts.add(script.name);
+                }
               })
             : _openEditor(script.name),
         onLongPress: () => _multiSelectMode
@@ -1169,10 +1187,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
                   child: Checkbox(
                     value: selected,
                     onChanged: (_) => setState(() {
-                      if (selected)
+                      if (selected) {
                         _selectedScripts.remove(script.name);
-                      else
+                      } else {
                         _selectedScripts.add(script.name);
+                      }
                     }),
                   ),
                 )
@@ -1259,10 +1278,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
             ? () {}
             : () => _multiSelectMode
                 ? setState(() {
-                    if (selected)
+                    if (selected) {
                       _selectedScripts.remove(script.name);
-                    else
+                    } else {
                       _selectedScripts.add(script.name);
+                    }
                   })
                 : _openEditor(script.name),
         onLongPress: feedback
@@ -1390,10 +1410,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
           borderRadius: BorderRadius.circular(16),
           onTap: () => _multiSelectMode
               ? setState(() {
-                  if (selected)
+                  if (selected) {
                     _selectedScripts.remove(script.name);
-                  else
+                  } else {
                     _selectedScripts.add(script.name);
+                  }
                 })
               : _openEditor(script.name),
           onLongPress: () => _multiSelectMode
@@ -1410,10 +1431,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
                     child: Checkbox(
                       value: selected,
                       onChanged: (_) => setState(() {
-                        if (selected)
+                        if (selected) {
                           _selectedScripts.remove(script.name);
-                        else
+                        } else {
                           _selectedScripts.add(script.name);
+                        }
                       }),
                     ),
                   )
@@ -1484,6 +1506,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
     if (!canDrag) {
       return ListView.builder(
+        itemExtentBuilder: (_, __) => _scriptListItemExtent,
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: scripts.length,
         itemBuilder: (context, index) => buildItem(index),
@@ -1492,6 +1515,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
     return ReorderableListView.builder(
       buildDefaultDragHandles: false,
+      itemExtentBuilder: (_, __) => _scriptListItemExtent,
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: scripts.length,
       onReorderItem: (int oldIndex, int newIndex) {
@@ -1505,15 +1529,47 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   Widget _buildGridView(List<dynamic> scripts) {
     final canDrag = !_multiSelectMode && !_searchMode;
+    final indexByName = <String, int>{};
+    for (int i = 0; i < scripts.length; i++) {
+      indexByName[scripts[i].name] = i;
+    }
+
+    Widget buildStaticGridItem(int index) {
+      final script = scripts[index];
+      final selected = _selectedScripts.contains(script.name);
+      return _ScriptGridCard(
+        key: ValueKey('script_grid_static_${script.name}'),
+        name: _displayScriptName(script.name, index),
+        modifiedAt: script.modifiedAt,
+        runCount: script.runCount,
+        dateFormat: _dateFormat,
+        pinned: script.isPinned,
+        selected: _multiSelectMode ? selected : null,
+        onTap: () => _multiSelectMode
+            ? setState(() {
+                if (selected) {
+                  _selectedScripts.remove(script.name);
+                } else {
+                  _selectedScripts.add(script.name);
+                }
+              })
+            : _openEditor(script.name),
+        onLongPress: () => _multiSelectMode
+            ? null
+            : _showContextMenu(script.name, script.isPinned,
+                groupId: script.groupId),
+        onRun: _multiSelectMode ? null : () => _runScript(script.name),
+      );
+    }
 
     dynamic previewScriptForSlot(int index) {
       final draggedName = _gridDraggingScriptName;
       final targetName = _gridDragPreviewTargetName;
       if (draggedName == null || targetName == null) return scripts[index];
 
-      final originIndex = scripts.indexWhere((s) => s.name == draggedName);
-      final targetIndex = scripts.indexWhere((s) => s.name == targetName);
-      if (originIndex < 0 || targetIndex < 0) return scripts[index];
+      final originIndex = indexByName[draggedName];
+      final targetIndex = indexByName[targetName];
+      if (originIndex == null || targetIndex == null) return scripts[index];
 
       if (index == originIndex) return scripts[targetIndex];
       if (index == targetIndex) return null;
@@ -1538,8 +1594,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
           onWillAcceptWithDetails: (details) {
             final draggedName = details.data;
             if (draggedName == slotScript.name) return true;
-            final oldIndex = scripts.indexWhere((s) => s.name == draggedName);
-            if (oldIndex < 0 || oldIndex >= scripts.length) return false;
+            final oldIndex = indexByName[draggedName];
+            if (oldIndex == null || oldIndex >= scripts.length) return false;
             return !scripts[oldIndex].isPinned && !slotScript.isPinned;
           },
           onMove: (details) {
@@ -1573,10 +1629,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
               ? () {}
               : () => _multiSelectMode
                   ? setState(() {
-                      if (selected)
+                      if (selected) {
                         _selectedScripts.remove(displayScript.name);
-                      else
+                      } else {
                         _selectedScripts.add(displayScript.name);
+                      }
                     })
                   : _openEditor(displayScript.name),
           onLongPress: feedback
@@ -1630,8 +1687,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
         onWillAcceptWithDetails: (details) {
           final draggedName = details.data;
           if (draggedName == slotScript.name) return true;
-          final oldIndex = scripts.indexWhere((s) => s.name == draggedName);
-          if (oldIndex < 0 || oldIndex >= scripts.length) return false;
+          final oldIndex = indexByName[draggedName];
+          if (oldIndex == null || oldIndex >= scripts.length) return false;
           return !scripts[oldIndex].isPinned && !slotScript.isPinned;
         },
         onMove: (details) {
@@ -1659,6 +1716,17 @@ class _ScriptListPageState extends State<ScriptListPage> {
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
     );
+
+    if (!canDrag) {
+      return GridView.builder(
+        key: _gridViewKey,
+        controller: _gridScrollController,
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+        gridDelegate: gridDelegate,
+        itemCount: scripts.length,
+        itemBuilder: (context, index) => buildStaticGridItem(index),
+      );
+    }
 
     final generatedChildren =
         List.generate(scripts.length, (index) => buildGridItem(index));

@@ -6,11 +6,13 @@ class NativeBridge {
   static const _methodChannel = MethodChannel('com.daozhang.py/native_bridge');
   static const _logStreamChannel = EventChannel('com.daozhang.py/log_stream');
   static const _installProgressChannel = EventChannel('com.daozhang.py/install_progress');
+  static const _downloadProgressChannel = EventChannel('com.daozhang.py/download_progress');
   static const _executionStatusChannel = EventChannel('com.daozhang.py/execution_status');
   static const _stdinRequestChannel = EventChannel('com.daozhang.py/stdin_request');
 
   Stream<Map<dynamic, dynamic>>? _logStream;
   Stream<Map<dynamic, dynamic>>? _installProgressStream;
+  Stream<Map<dynamic, dynamic>>? _downloadProgressStream;
   Stream<Map<dynamic, dynamic>>? _executionStatusStream;
   Stream<Map<dynamic, dynamic>>? _stdinRequestStream;
 
@@ -19,6 +21,9 @@ class NativeBridge {
 
   Stream<Map<dynamic, dynamic>> get installProgressStream =>
       _installProgressStream ??= _installProgressChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+
+  Stream<Map<dynamic, dynamic>> get downloadProgressStream =>
+      _downloadProgressStream ??= _downloadProgressChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get executionStatusStream =>
       _executionStatusStream ??= _executionStatusChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
@@ -233,10 +238,38 @@ class NativeBridge {
   }
 
   Future<String> downloadAndInstallApk(String url, {required String fileName}) async {
-    final result = await _invoke('downloadAndInstallApk', {
+    return startApkDownload(url, fileName: fileName);
+  }
+
+  Future<String> startApkDownload(
+    String url, {
+    required String fileName,
+    String version = '',
+    String? sha256,
+  }) async {
+    final result = await _invoke('startApkDownload', {
       'url': url,
       'fileName': fileName,
+      'version': version,
+      'sha256': sha256 ?? '',
     });
+    return result?.toString() ?? '';
+  }
+
+  Future<bool> cancelDownload(String taskId) async {
+    final result = await _invoke('cancelDownload', {'taskId': taskId});
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<bool> retryDownload(String taskId) async {
+    final result = await _invoke('retryDownload', {'taskId': taskId});
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<String> installDownloadedApk(String taskId) async {
+    final result = await _invoke('installDownloadedApk', {'taskId': taskId});
     return result?.toString() ?? '';
   }
 

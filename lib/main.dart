@@ -104,8 +104,29 @@ class PythonRunnerApp extends StatefulWidget {
 
 class _PythonRunnerAppState extends State<PythonRunnerApp>
     with WidgetsBindingObserver {
+  static const _lightSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarContrastEnforced: false,
+  );
+  static const _darkSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  );
+
   ThemeMode _themeMode = ThemeMode.system;
   bool _materialYouEnabled = true;
+  ThemeData? _cachedLightTheme;
+  ThemeData? _cachedDarkTheme;
+  ColorScheme? _cachedLightScheme;
+  ColorScheme? _cachedDarkScheme;
 
   @override
   void initState() {
@@ -161,7 +182,14 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
 
   ThemeData _buildTheme(ColorScheme colorScheme) {
     final isDark = colorScheme.brightness == Brightness.dark;
-    return ThemeData(
+    final cachedTheme = isDark ? _cachedDarkTheme : _cachedLightTheme;
+    final cachedScheme = isDark ? _cachedDarkScheme : _cachedLightScheme;
+    if (cachedTheme != null &&
+        (identical(cachedScheme, colorScheme) || cachedScheme == colorScheme)) {
+      return cachedTheme;
+    }
+
+    final theme = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       cardTheme: CardThemeData(
@@ -196,6 +224,15 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
+
+    if (isDark) {
+      _cachedDarkTheme = theme;
+      _cachedDarkScheme = colorScheme;
+    } else {
+      _cachedLightTheme = theme;
+      _cachedLightScheme = colorScheme;
+    }
+    return theme;
   }
 
   @override
@@ -222,17 +259,9 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
           builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             return AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                systemNavigationBarColor: Colors.transparent,
-                statusBarIconBrightness:
-                    isDark ? Brightness.light : Brightness.dark,
-                statusBarBrightness:
-                    isDark ? Brightness.dark : Brightness.light,
-                systemNavigationBarIconBrightness:
-                    isDark ? Brightness.light : Brightness.dark,
-                systemNavigationBarContrastEnforced: false,
-              ),
+              value: isDark
+                  ? _darkSystemUiOverlayStyle
+                  : _lightSystemUiOverlayStyle,
               child: child ?? const SizedBox.shrink(),
             );
           },
@@ -272,6 +301,8 @@ class SplashGate extends StatefulWidget {
 
 class _SplashGateState extends State<SplashGate>
     with SingleTickerProviderStateMixin {
+  static const _minimumSplashDuration = Duration(milliseconds: 600);
+
   bool _ready = false;
   late AnimationController _animController;
   late Animation<double> _fadeIn;
@@ -293,7 +324,11 @@ class _SplashGateState extends State<SplashGate>
   }
 
   Future<void> _initialize() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final stopwatch = Stopwatch()..start();
+    final remaining = _minimumSplashDuration - stopwatch.elapsed;
+    if (remaining > Duration.zero) {
+      await Future.delayed(remaining);
+    }
     if (mounted) {
       setState(() => _ready = true);
     }
@@ -577,42 +612,27 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         appBar: null,
-        body: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.04),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
-          ),
-          child: KeyedSubtree(
-            key: ValueKey(_currentIndex),
-            child: [
-              ScriptListPage(
-                onSettingsTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SettingsPage(
-                      onThemeChanged: widget.onThemeChanged,
-                      currentThemeMode: widget.currentThemeMode,
-                      onMaterialYouChanged: widget.onMaterialYouChanged,
-                      currentMaterialYouEnabled:
-                          widget.currentMaterialYouEnabled,
-                    ),
-                    fullscreenDialog: true,
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            ScriptListPage(
+              onSettingsTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SettingsPage(
+                    onThemeChanged: widget.onThemeChanged,
+                    currentThemeMode: widget.currentThemeMode,
+                    onMaterialYouChanged: widget.onMaterialYouChanged,
+                    currentMaterialYouEnabled:
+                        widget.currentMaterialYouEnabled,
                   ),
+                  fullscreenDialog: true,
                 ),
               ),
-              const NetworkInspectorPage(),
-              const PackageManagerPage(),
-            ][_currentIndex],
-          ),
+            ),
+            const NetworkInspectorPage(),
+            const PackageManagerPage(),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,

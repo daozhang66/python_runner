@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/log_entry.dart';
 import '../providers/execution_provider.dart';
 import '../models/execution_state.dart';
 import '../providers/script_provider.dart';
@@ -62,124 +63,20 @@ class _RunConsolePageState extends State<RunConsolePage>
 
   @override
   Widget build(BuildContext context) {
-    final exec = context.watch<ExecutionProvider>();
-    final logs = exec.logs;
-    final isRunning =
-        exec.isRunning && exec.currentScriptName == widget.scriptName;
-    final waiting = exec.waitingForInput;
-    final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final statusColor = isRunning
-        ? (isDark ? Colors.greenAccent : Colors.green)
-        : (exec.state.status == ExecutionStatus.error
-            ? colors.error
-            : exec.state.status == ExecutionStatus.timeout
-                ? Colors.orange
-                : colors.onSurfaceVariant);
-    final statusText = isRunning
-        ? (waiting ? '等待输入' : '运行中')
-        : (exec.state.status == ExecutionStatus.error
-            ? '错误'
-            : exec.state.status == ExecutionStatus.timeout
-                ? '超时'
-                : '已结束');
-
-    final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
 
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0D1117) : const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        backgroundColor: appBarBg,
-        foregroundColor: isDark ? Colors.white : colors.onSurface,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-                boxShadow: isRunning
-                    ? [
-                        BoxShadow(
-                            color: statusColor.withValues(alpha: 0.5),
-                            blurRadius: 6)
-                      ]
-                    : null,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _displayName,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white : colors.onSurface,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: isRunning
-                    ? _RunningTimer(
-                        key: ValueKey(statusText),
-                        startTime: _runStartTime ?? DateTime.now(),
-                        label: waiting ? '等待输入' : '运行中',
-                        color: statusColor,
-                      )
-                    : Text(
-                        statusText,
-                        key: ValueKey(statusText),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: statusColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        actions: [
-          if (isRunning)
-            IconButton(
-              icon: Icon(Icons.stop_rounded, color: colors.error, size: 22),
-              onPressed: () => exec.stopExecution(),
-              tooltip: '停止',
-            )
-          else
-            IconButton(
-              icon: Icon(Icons.replay_rounded,
-                  color: isDark ? Colors.greenAccent : Colors.green, size: 22),
-              onPressed: _rerun,
-              tooltip: '重新运行',
-            ),
-        ],
+      appBar: _RunConsoleAppBar(
+        scriptName: widget.scriptName,
+        displayName: _displayName,
+        runStartTime: _runStartTime,
+        onRerun: _rerun,
       ),
-      body: TerminalView(
-        key: _terminalKey,
-        logs: logs,
-        isRunning: isRunning,
-        waitingForInput: waiting,
-        onStdin: (input) => exec.sendStdin(input),
-        onClear: logs.isEmpty ? null : () => exec.clearLogs(),
-        emptyMessage: isRunning ? '等待输出...' : '暂无输出',
-        showLineNumberToggle: false,
+      body: _RunConsoleTerminalPane(
+        terminalKey: _terminalKey,
+        scriptName: widget.scriptName,
       ),
     );
   }
@@ -188,6 +85,184 @@ class _RunConsolePageState extends State<RunConsolePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+}
+
+class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String scriptName;
+  final String displayName;
+  final DateTime? runStartTime;
+  final Future<void> Function() onRerun;
+
+  const _RunConsoleAppBar({
+    required this.scriptName,
+    required this.displayName,
+    required this.runStartTime,
+    required this.onRerun,
+  });
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentScriptName = context.select<ExecutionProvider, String?>(
+      (p) => p.currentScriptName,
+    );
+    final providerIsRunning = context.select<ExecutionProvider, bool>(
+      (p) => p.isRunning,
+    );
+    final waiting = context.select<ExecutionProvider, bool>(
+      (p) => p.waitingForInput,
+    );
+    final status = context.select<ExecutionProvider, ExecutionStatus>(
+      (p) => p.state.status,
+    );
+    final isRunning =
+        providerIsRunning && currentScriptName == scriptName;
+
+    final statusColor = isRunning
+        ? (isDark ? Colors.greenAccent : Colors.green)
+        : (status == ExecutionStatus.error
+            ? colors.error
+            : status == ExecutionStatus.timeout
+                ? Colors.orange
+                : colors.onSurfaceVariant);
+    final statusText = isRunning
+        ? (waiting ? '等待输入' : '运行中')
+        : (status == ExecutionStatus.error
+            ? '错误'
+            : status == ExecutionStatus.timeout
+                ? '超时'
+                : '已结束');
+    final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
+
+    return AppBar(
+      backgroundColor: appBarBg,
+      foregroundColor: isDark ? Colors.white : colors.onSurface,
+      elevation: 0,
+      titleSpacing: 0,
+      title: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+              boxShadow: isRunning
+                  ? [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.5),
+                        blurRadius: 6,
+                      ),
+                    ]
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              displayName,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white : colors.onSurface,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: isRunning
+                  ? _RunningTimer(
+                      key: ValueKey(statusText),
+                      startTime: runStartTime ?? DateTime.now(),
+                      label: waiting ? '等待输入' : '运行中',
+                      color: statusColor,
+                    )
+                  : Text(
+                      statusText,
+                      key: ValueKey(statusText),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: statusColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      actions: [
+        if (isRunning)
+          IconButton(
+            icon: Icon(Icons.stop_rounded, color: colors.error, size: 22),
+            onPressed: () => context.read<ExecutionProvider>().stopExecution(),
+            tooltip: '停止',
+          )
+        else
+          IconButton(
+            icon: Icon(Icons.replay_rounded,
+                color: isDark ? Colors.greenAccent : Colors.green, size: 22),
+            onPressed: onRerun,
+            tooltip: '重新运行',
+          ),
+      ],
+    );
+  }
+}
+
+class _RunConsoleTerminalPane extends StatelessWidget {
+  final GlobalKey<TerminalViewState> terminalKey;
+  final String scriptName;
+
+  const _RunConsoleTerminalPane({
+    required this.terminalKey,
+    required this.scriptName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    context.select<ExecutionProvider, int>((p) => p.logVersion);
+    final logs = context.select<ExecutionProvider, List<LogEntry>>(
+      (p) => p.logs,
+    );
+    final currentScriptName = context.select<ExecutionProvider, String?>(
+      (p) => p.currentScriptName,
+    );
+    final providerIsRunning = context.select<ExecutionProvider, bool>(
+      (p) => p.isRunning,
+    );
+    final waiting = context.select<ExecutionProvider, bool>(
+      (p) => p.waitingForInput,
+    );
+    final isRunning =
+        providerIsRunning && currentScriptName == scriptName;
+
+    return TerminalView(
+      key: terminalKey,
+      logs: logs,
+      isRunning: isRunning,
+      waitingForInput: waiting,
+      onStdin: (input) => context.read<ExecutionProvider>().sendStdin(input),
+      onClear: logs.isEmpty
+          ? null
+          : () => context.read<ExecutionProvider>().clearLogs(),
+      emptyMessage: isRunning ? '等待输出...' : '暂无输出',
+      showLineNumberToggle: false,
+    );
   }
 }
 

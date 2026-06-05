@@ -34,8 +34,8 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        _buildTestApp(
+          Scaffold(
             body: SizedBox.expand(
               child: TerminalView(
                 logs: [
@@ -69,6 +69,31 @@ void main() {
       expect(after, greaterThan(before));
     });
 
+    testWidgets('terminal view renders log lines with a virtualized list', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          Scaffold(
+            body: TerminalView(
+              logs: List.generate(
+                3,
+                (index) => LogEntry(
+                  type: LogType.stdout,
+                  content: 'line $index',
+                  timestamp: DateTime(2024),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListView), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsNothing);
+    });
+
     testWidgets('script editor uses pinch-to-zoom instead of format size menu',
         (
       WidgetTester tester,
@@ -91,8 +116,8 @@ void main() {
               create: (_) => ExecutionProvider(bridge),
             ),
           ],
-          child: const MaterialApp(
-            home: ScriptEditorPage(scriptName: 'demo.py'),
+          child: _buildTestApp(
+            const ScriptEditorPage(scriptName: 'demo.py'),
           ),
         ),
       );
@@ -127,8 +152,8 @@ void main() {
       });
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: NetworkInspectorPage(),
+        _buildTestApp(
+          const NetworkInspectorPage(),
         ),
       );
       await tester.pumpAndSettle();
@@ -156,6 +181,13 @@ void main() {
       expect(after, greaterThan(before));
     });
   });
+}
+
+Widget _buildTestApp(Widget home) {
+  return MaterialApp(
+    theme: ThemeData(splashFactory: NoSplash.splashFactory),
+    home: home,
+  );
 }
 
 double _selectableFontSize(WidgetTester tester, Finder finder) {
