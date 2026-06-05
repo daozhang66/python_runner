@@ -57,6 +57,54 @@ void main() {
       );
     });
 
+    test('parseReleaseLogsResponse extracts release history entries', () {
+      const body = '''
+[
+  {
+    "tag_name": "v1.4.4",
+    "name": "1.4.4 更新日志",
+    "body": "- 新增更新日志页面\\n- 优化设置入口",
+    "html_url": "https://github.com/daozhang66/python_runner/releases/tag/v1.4.4",
+    "published_at": "2026-06-05T12:00:00Z",
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "python_runner-v1.4.4.apk",
+        "browser_download_url": "https://example.com/python_runner-v1.4.4.apk",
+        "size": 456789,
+        "content_type": "application/vnd.android.package-archive"
+      }
+    ]
+  },
+  {
+    "tag_name": "v1.4.3",
+    "name": "",
+    "body": "修复更新检查",
+    "html_url": "https://github.com/daozhang66/python_runner/releases/tag/v1.4.3",
+    "published_at": "2026-06-04T10:00:00Z",
+    "prerelease": true,
+    "assets": []
+  }
+]
+''';
+
+      final entries = UpdateService.parseReleaseLogsResponse(
+        body: body,
+        limit: 1,
+      );
+
+      expect(entries, hasLength(1));
+      expect(entries.first.tagName, 'v1.4.4');
+      expect(entries.first.version, '1.4.4');
+      expect(entries.first.releaseName, '1.4.4 更新日志');
+      expect(entries.first.releaseNotes, contains('新增更新日志页面'));
+      expect(entries.first.htmlUrl, contains('/releases/tag/v1.4.4'));
+      expect(entries.first.publishedAt, DateTime.parse('2026-06-05T12:00:00Z'));
+      expect(entries.first.isPrerelease, isFalse);
+      expect(entries.first.apkAsset, isNotNull);
+      expect(entries.first.apkAsset!.name, 'python_runner-v1.4.4.apk');
+    });
+
     test('extractApiErrorMessage returns GitHub message when present', () {
       const body = '{"message":"API rate limit exceeded"}';
       expect(

@@ -51,6 +51,58 @@ class AppUpdateInfo {
       UpdateService.compareVersions(latestVersion, currentVersion) > 0;
 }
 
+class ReleaseLogEntry {
+  final String tagName;
+  final String version;
+  final String releaseName;
+  final String releaseNotes;
+  final String htmlUrl;
+  final DateTime? publishedAt;
+  final bool isPrerelease;
+  final ReleaseAssetInfo? apkAsset;
+
+  const ReleaseLogEntry({
+    required this.tagName,
+    required this.version,
+    required this.releaseName,
+    required this.releaseNotes,
+    required this.htmlUrl,
+    required this.publishedAt,
+    required this.isPrerelease,
+    required this.apkAsset,
+  });
+
+  factory ReleaseLogEntry.fromJson(Map<String, dynamic> json) {
+    final assets = ((json['assets'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => ReleaseAssetInfo.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+
+    ReleaseAssetInfo? apkAsset;
+    for (final asset in assets) {
+      if (asset.isApk) {
+        apkAsset = asset;
+        break;
+      }
+    }
+
+    final tagName = json['tag_name']?.toString() ?? '';
+    final name = json['name']?.toString().trim() ?? '';
+    return ReleaseLogEntry(
+      tagName: tagName,
+      version: UpdateService.normalizeVersion(tagName),
+      releaseName: name.isEmpty ? tagName : name,
+      releaseNotes: json['body']?.toString() ?? '',
+      htmlUrl: json['html_url']?.toString() ?? '',
+      publishedAt: DateTime.tryParse(json['published_at']?.toString() ?? ''),
+      isPrerelease: json['prerelease'] == true,
+      apkAsset: apkAsset,
+    );
+  }
+
+  bool get hasReleaseNotes => releaseNotes.trim().isNotEmpty;
+}
+
 class UpdateService {
   static const String _owner = 'daozhang66';
   static const String _repo = 'python_runner';
@@ -64,8 +116,10 @@ class UpdateService {
       final request = await client.getUrl(
         Uri.https('api.github.com', '/repos/$_owner/$_repo/releases/latest'),
       );
-      request.headers.set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
-      request.headers.set(HttpHeaders.userAgentHeader, 'python_runner/$currentVersion');
+      request.headers
+          .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
+      request.headers
+          .set(HttpHeaders.userAgentHeader, 'python_runner/$currentVersion');
       request.headers.set('X-GitHub-Api-Version', _apiVersion);
 
       final response = await request.close();
@@ -83,6 +137,43 @@ class UpdateService {
       return parseLatestReleaseResponse(
         body: body,
         currentVersion: currentVersion,
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<List<ReleaseLogEntry>> fetchReleaseLogs({int limit = 20}) async {
+    final normalizedLimit = limit.clamp(1, 100).toInt();
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(
+        Uri.https(
+          'api.github.com',
+          '/repos/$_owner/$_repo/releases',
+          {'per_page': '$normalizedLimit'},
+        ),
+      );
+      request.headers
+          .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
+      request.headers.set(HttpHeaders.userAgentHeader, 'python_runner');
+      request.headers.set('X-GitHub-Api-Version', _apiVersion);
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode != HttpStatus.ok) {
+        final apiMessage = extractApiErrorMessage(body);
+        throw HttpException(
+          apiMessage == null
+              ? 'Release log API failed: ${response.statusCode}'
+              : 'Release log API failed: ${response.statusCode} ($apiMessage)',
+          uri: request.uri,
+        );
+      }
+
+      return parseReleaseLogsResponse(
+        body: body,
+        limit: normalizedLimit,
       );
     } finally {
       client.close(force: true);
@@ -118,6 +209,23 @@ class UpdateService {
       publishedAt: DateTime.tryParse(json['published_at']?.toString() ?? ''),
       apkAsset: apkAsset,
     );
+  }
+
+  static List<ReleaseLogEntry> parseReleaseLogsResponse({
+    required String body,
+    int limit = 20,
+  }) {
+    final decoded = jsonDecode(body);
+    if (decoded is! List) {
+      throw const FormatException('Release logs response must be a list');
+    }
+
+    final normalizedLimit = limit.clamp(1, 100).toInt();
+    return decoded
+        .whereType<Map>()
+        .take(normalizedLimit)
+        .map((e) => ReleaseLogEntry.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   static String normalizeVersion(String raw) {
