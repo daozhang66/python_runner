@@ -12,7 +12,7 @@ class RequestOverrideConfig extends ChangeNotifier {
   bool _recordRequests = true;
   bool _recordResponseBody = false;
   String _globalUserAgent = '';
-  String _globalHeaders = '';  // JSON string: {"key":"value",...}
+  String _globalHeaders = ''; // JSON string: {"key":"value",...}
   String _globalCookie = '';
   int _defaultTimeout = 30;
   bool _followRedirects = true;

@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('settings page views full exported diagnostics instead of memory-only logs', () {
+  test(
+      'settings page views full exported diagnostics instead of memory-only logs',
+      () {
     final source = File('lib/pages/settings_page.dart').readAsStringSync();
     final viewBody = RegExp(
       r'Future<void> _viewSystemLogs\(\) async \{([\s\S]*?)\r?\n  }\r?\n\r?\n  Future<void> _exportSystemLogs',
@@ -13,22 +15,30 @@ void main() {
     expect(viewBody, isNot(contains('readRecentLogs')));
   });
 
-  test('system log export uses configured working directory and native fallback otherwise', () {
-    final settingsSource = File('lib/pages/settings_page.dart').readAsStringSync();
-    final bridgeSource = File('lib/services/native_bridge.dart').readAsStringSync();
-    final activitySource = File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
-        .readAsStringSync();
+  test(
+      'system log export uses configured working directory and native fallback otherwise',
+      () {
+    final settingsSource =
+        File('lib/pages/settings_page.dart').readAsStringSync();
+    final bridgeSource =
+        File('lib/services/native_bridge.dart').readAsStringSync();
+    final activitySource =
+        File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
+            .readAsStringSync();
 
     expect(settingsSource, contains("prefs.getString('working_dir')"));
     expect(settingsSource, contains('destDir: logExportDir'));
     expect(bridgeSource, contains('String? destDir'));
     expect(bridgeSource, contains("'destDir': destDir"));
-    expect(activitySource, contains('val destDir = call.argument<String>("destDir")'));
+    expect(activitySource,
+        contains('val destDir = call.argument<String>("destDir")'));
     expect(activitySource, contains('if (!destDir.isNullOrBlank())'));
     expect(activitySource, contains('Environment.DIRECTORY_DOWNLOADS'));
   });
 
-  test('app logger flushes before reading and exports rotated system logs with diagnostics', () {
+  test(
+      'app logger flushes before reading and exports rotated system logs with diagnostics',
+      () {
     final source = File('lib/services/app_logger.dart').readAsStringSync();
 
     expect(source, contains('Future<void> flush()'));
@@ -38,8 +48,24 @@ void main() {
     expect(source, contains('Log directory:'));
   });
 
-  test('app logger writes dated category logs without automatic history snapshots', () {
-    final loggerSource = File('lib/services/app_logger.dart').readAsStringSync();
+  test('app logger clearAll closes and reopens system log sink', () {
+    final source = File('lib/services/app_logger.dart').readAsStringSync();
+    final clearBody = RegExp(
+      r'Future<void> clearAll\(\) async \{([\s\S]*?)\r?\n  }\r?\n\r?\n  /// Export all logs',
+    ).firstMatch(source)!.group(1)!;
+
+    expect(clearBody, contains('await flush()'));
+    expect(clearBody, contains('await _systemLogSink?.close()'));
+    expect(clearBody, contains('_systemLogSink = null'));
+    expect(clearBody, contains('openWrite(mode: FileMode.append)'));
+    expect(clearBody, contains('_systemLogSize = 0'));
+  });
+
+  test(
+      'app logger writes dated category logs without automatic history snapshots',
+      () {
+    final loggerSource =
+        File('lib/services/app_logger.dart').readAsStringSync();
     final mainSource = File('lib/main.dart').readAsStringSync();
 
     expect(loggerSource, contains('_appLogFileName'));
@@ -56,28 +82,40 @@ void main() {
     expect(mainSource, isNot(contains('archiveToWorkingDirectory')));
   });
 
-  test('settings page has one complete log export and no snapshot or package actions', () {
-    final settingsSource = File('lib/pages/settings_page.dart').readAsStringSync();
+  test(
+      'settings page has one complete log export and no snapshot or package actions',
+      () {
+    final settingsSource =
+        File('lib/pages/settings_page.dart').readAsStringSync();
 
-    expect(settingsSource, contains("final timestamp = DateFormat('yyyyMMdd_HHmmss')"));
-    expect(settingsSource, contains("fileName: 'python_runner_logs_\$timestamp.txt'"));
+    expect(settingsSource,
+        contains("final timestamp = DateFormat('yyyyMMdd_HHmmss')"));
+    expect(settingsSource,
+        contains("fileName: 'python_runner_logs_\$timestamp.txt'"));
     expect(settingsSource, contains("title: const Text('导出完整日志')"));
     expect(settingsSource, isNot(contains("title: const Text('导出系统日志')")));
     expect(settingsSource, isNot(contains("title: const Text('导出诊断包')")));
     expect(settingsSource, isNot(contains("title: const Text('历史日志归档')")));
     expect(settingsSource, isNot(contains('Future<void> _viewArchivedLogs()')));
-    expect(settingsSource, isNot(contains('Future<void> _exportDiagnosticPackage()')));
+    expect(settingsSource,
+        isNot(contains('Future<void> _exportDiagnosticPackage()')));
     expect(settingsSource, isNot(contains('class _ArchivedLogListPage')));
-    expect(settingsSource, isNot(contains('python_runner_diagnostic_package.txt')));
+    expect(settingsSource,
+        isNot(contains('python_runner_diagnostic_package.txt')));
   });
 
-  test('settings page exposes searchable log viewer with unified dropdown borders', () {
-    final settingsSource = File('lib/pages/settings_page.dart').readAsStringSync();
+  test(
+      'settings page exposes searchable log viewer with unified dropdown borders',
+      () {
+    final settingsSource =
+        File('lib/pages/settings_page.dart').readAsStringSync();
 
-    expect(settingsSource, contains('class _SystemLogViewPage extends StatefulWidget'));
+    expect(settingsSource,
+        contains('class _SystemLogViewPage extends StatefulWidget'));
     expect(settingsSource, contains('TextField('));
-    final formFieldDropdowns =
-        RegExp(r'DropdownButtonFormField<String>').allMatches(settingsSource).length;
+    final formFieldDropdowns = RegExp(r'DropdownButtonFormField<String>')
+        .allMatches(settingsSource)
+        .length;
     expect(formFieldDropdowns, greaterThanOrEqualTo(2));
     expect(settingsSource, isNot(contains('child: DropdownButton<String>(')));
     expect(settingsSource, contains('_filteredLogContent'));

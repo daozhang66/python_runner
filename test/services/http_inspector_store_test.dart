@@ -34,7 +34,8 @@ void main() {
     test('trimRecords keeps newest records within count and body budget', () {
       HttpRecord makeRecord(String id, int chars) => HttpRecord(
             id: id,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(1710000000000 + chars),
+            timestamp:
+                DateTime.fromMillisecondsSinceEpoch(1710000000000 + chars),
             method: 'GET',
             url: 'https://example.com/$id',
             requestHeaders: const {},
@@ -55,8 +56,32 @@ void main() {
       expect(trimmed.map((r) => r.id).toList(), ['middle', 'newest']);
     });
 
+    test('trimRecords sanitizes a single record that exceeds body budget', () {
+      final trimmed = HttpInspectorStore.trimRecords(
+        [
+          HttpRecord(
+            id: 'huge-image',
+            timestamp: DateTime.fromMillisecondsSinceEpoch(1710000000000),
+            method: 'GET',
+            url: 'https://example.com/image.png',
+            requestHeaders: const {},
+            responseHeaders: const {'content-type': 'image/png'},
+            responseBodyPreview: 'data:image/png;base64,${'a' * 100}',
+            responseBodyBytes: 75,
+          ),
+        ],
+        maxCapturedBodyBytes: 32,
+      );
+
+      expect(trimmed, hasLength(1));
+      expect(trimmed.single.id, 'huge-image');
+      expect(trimmed.single.storedBodyBytes, lessThanOrEqualTo(32));
+      expect(trimmed.single.responseBodyTruncated, isTrue);
+    });
+
     test('flush persists records and restore loads them back', () async {
-      final tempDir = await Directory.systemTemp.createTemp('http_inspector_store_test_');
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_store_test_');
       try {
         final store = HttpInspectorStore.test(
           supportDirectoryProvider: () async => tempDir,

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('chaquopy package install fails when pip or import verification fails', () {
+  test('chaquopy package install fails when pip or import verification fails',
+      () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
@@ -36,7 +37,8 @@ void main() {
     ).readAsStringSync();
 
     expect(activity, contains('removedDependencies'));
-    expect(activity, contains('runner.callAttr("uninstall_package", packageName)'));
+    expect(activity,
+        contains('runner.callAttr("uninstall_package", packageName)'));
     expect(runner, contains('def uninstall_package(package_name):'));
     expect(runner, contains('removed_dependencies'));
     expect(runner, contains('return {'));

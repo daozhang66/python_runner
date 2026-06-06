@@ -18,6 +18,7 @@ class TerminalView extends StatefulWidget {
   final String? emptyMessage;
   final IconData? emptyIcon;
   final bool showLineNumberToggle;
+  final int logVersion;
 
   const TerminalView({
     super.key,
@@ -29,6 +30,7 @@ class TerminalView extends StatefulWidget {
     this.emptyMessage,
     this.emptyIcon,
     this.showLineNumberToggle = true,
+    this.logVersion = 0,
   });
 
   @override
@@ -162,7 +164,9 @@ class TerminalViewState extends State<TerminalView> {
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.logs.isEmpty && _ansiCache.isNotEmpty) _ansiCache.clear();
-    if (_autoScroll && widget.logs.length > _lastLogCount) {
+    if (_autoScroll &&
+        (widget.logs.length > _lastLogCount ||
+            widget.logVersion != oldWidget.logVersion)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
     _lastLogCount = widget.logs.length;
@@ -427,8 +431,8 @@ class TerminalViewState extends State<TerminalView> {
                         hintText: '搜索日志...',
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       ),
                       onChanged: (v) => setState(() => _searchQuery = v),
                     ),

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import '../models/execution_state.dart';
 import '../services/native_bridge.dart';
@@ -12,8 +12,7 @@ import 'runtime_stdin_request.dart';
 
 class LinuxLikeBackend implements RuntimeBackend {
   static const backendId = 'linux_like';
-  static const unavailableMessage =
-      'Linux-like 运行环境未安装，当前执行仍会回退到 Chaquopy';
+  static const unavailableMessage = 'Linux-like 运行环境未安装，当前执行仍会回退到 Chaquopy';
 
   final NativeBridge? _bridge;
 
@@ -224,7 +223,8 @@ class LinuxLikeRuntimeSession implements RuntimeSession {
     required this.request,
   }) {
     _stateSub = backend.stateStream.listen((state) {
-      if (state.executionId != null && state.executionId != request.executionId) {
+      if (state.executionId != null &&
+          state.executionId != request.executionId) {
         return;
       }
       if (isTerminalRuntimeState(state.status) && !_exitCompleter.isCompleted) {

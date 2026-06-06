@@ -21,7 +21,8 @@ class LogEntry {
       type: type,
       content: map['content'] as String? ?? '',
       timestamp: map['timestamp'] != null
-          ? DateTime.fromMillisecondsSinceEpoch((map['timestamp'] as num).toInt())
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (map['timestamp'] as num).toInt())
           : DateTime.now(),
     );
   }

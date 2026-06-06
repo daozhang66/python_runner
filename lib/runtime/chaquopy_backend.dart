@@ -124,6 +124,10 @@ class ChaquopyRuntimeSession implements RuntimeSession {
     required this.request,
   }) {
     _stateSub = backend.stateStream.listen((state) {
+      if (state.executionId != null &&
+          state.executionId != request.executionId) {
+        return;
+      }
       if (isTerminalRuntimeState(state.status) && !_exitCompleter.isCompleted) {
         _exitCompleter.complete(state.exitCode);
         _stateSub?.cancel();

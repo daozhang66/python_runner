@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 
 /// Parses ANSI escape codes in text and returns colored TextSpans.
 class AnsiParser {
-  static final _ansiRegex = RegExp(
-    r'\x1B\[(?:[0-9;]*[A-Za-z]|[0-9;]*[ -/]*[@-~])'
-    r'|\x1B[@-_]'
-    r'|\x1B\[[0-9;:]*m'
-  );
+  static final _ansiRegex =
+      RegExp(r'\x1B\[(?:[0-9;]*[A-Za-z]|[0-9;]*[ -/]*[@-~])'
+          r'|\x1B[@-_]'
+          r'|\x1B\[[0-9;:]*m');
 
   static const Map<int, Color> _fgColors = {
     30: Color(0xFF555555), // black
@@ -46,11 +45,9 @@ class AnsiParser {
     107: Color(0xFFFFFFFF),
   };
 
-  /// Standard 256-color palette (entries 16-255).
-  static final List<Color>? _color256Cache = null;
-
   /// Parse [text] containing ANSI codes into a list of [TextSpan].
-  static List<TextSpan> parse(String text, {Color defaultColor = Colors.white}) {
+  static List<TextSpan> parse(String text,
+      {Color defaultColor = Colors.white}) {
     if (!text.contains('\x1b')) {
       return [TextSpan(text: text, style: TextStyle(color: defaultColor))];
     }

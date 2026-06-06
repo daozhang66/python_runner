@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/models/execution_state.dart';
@@ -64,8 +64,7 @@ class _FakeRuntimeBackend implements RuntimeBackend {
   String get name => 'Fake';
 
   @override
-  Stream<RuntimeOutput> get outputStream =>
-      const Stream<RuntimeOutput>.empty();
+  Stream<RuntimeOutput> get outputStream => const Stream<RuntimeOutput>.empty();
 
   @override
   Stream<ExecutionState> get stateStream =>

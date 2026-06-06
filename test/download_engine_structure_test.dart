@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('download engine uses task based native bridge and dedicated progress stream',
+  test(
+      'download engine uses task based native bridge and dedicated progress stream',
       () {
-    final nativeBridge = File('lib/services/native_bridge.dart').readAsStringSync();
+    final nativeBridge =
+        File('lib/services/native_bridge.dart').readAsStringSync();
     final updateManager =
         File('lib/services/app_update_manager.dart').readAsStringSync();
     final mainActivity = File(
@@ -41,7 +43,8 @@ void main() {
     expect(mainActivity, contains('"cancelDownload"'));
     expect(mainActivity, contains('"retryDownload"'));
     expect(mainActivity, contains('"installDownloadedApk"'));
-    expect(mainActivity, isNot(contains('private fun handleDownloadAndInstallApk(')));
+    expect(mainActivity,
+        isNot(contains('private fun handleDownloadAndInstallApk(')));
     expect(mainActivity, isNot(contains('ByteArray(8192)')));
 
     expect(updateManager, contains('downloadProgressStream'));
@@ -54,7 +57,8 @@ void main() {
     expect(updateManager, contains('取消'));
   });
 
-  test('native download manager supports resume retry validation and state files',
+  test(
+      'native download manager supports resume retry validation and state files',
       () {
     final taskSource = File(
       'android/app/src/main/kotlin/com/daozhang/py/DownloadTask.kt',

@@ -53,8 +53,10 @@ class AppLogger {
       DateFormat('yyyy-MM-dd').format(value ?? DateTime.now());
 
   String _appLogFileName([DateTime? value]) => 'app-${_dateStamp(value)}.log';
-  String _scriptLogFileName([DateTime? value]) => 'script-${_dateStamp(value)}.log';
-  String _crashLogFileName([DateTime? value]) => 'crash-${_dateStamp(value)}.log';
+  String _scriptLogFileName([DateTime? value]) =>
+      'script-${_dateStamp(value)}.log';
+  String _crashLogFileName([DateTime? value]) =>
+      'crash-${_dateStamp(value)}.log';
 
   /// Initialize the logger, creating the log directory.
   Future<void> init() async {
@@ -107,29 +109,35 @@ class AppLogger {
   }
 
   /// Log a script execution error (persisted to separate file, survives restart).
-  void scriptError(String scriptName, String errorMessage, {String? stackTrace}) {
+  void scriptError(String scriptName, String errorMessage,
+      {String? stackTrace}) {
     final detail = StringBuffer();
     detail.writeln('Script: $scriptName');
     detail.writeln('Error: $errorMessage');
     if (stackTrace != null) detail.writeln('StackTrace:\n$stackTrace');
-    _log(AppLogLevel.error, '脚本执行错误: $scriptName', source: 'Script', detail: detail.toString());
-    final content = '=== ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())} ===\n'
+    _log(AppLogLevel.error, '脚本执行错误: $scriptName',
+        source: 'Script', detail: detail.toString());
+    final content =
+        '=== ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())} ===\n'
         'Script: $scriptName\nError: $errorMessage\n${stackTrace != null ? "StackTrace:\n$stackTrace\n" : ""}\n';
     _writeSyncToLog(_scriptErrorLogFile, content);
     _writeSyncToLog(_scriptLogFileName(), content);
   }
 
   /// Log an error from an exception/stack trace (crash-level).
-  void crash(String message, {Object? exception, StackTrace? stackTrace, String? source}) {
+  void crash(String message,
+      {Object? exception, StackTrace? stackTrace, String? source}) {
     final detail = StringBuffer();
     if (exception != null) detail.writeln('Exception: $exception');
     if (stackTrace != null) detail.writeln('StackTrace:\n$stackTrace');
-    _log(AppLogLevel.error, message, source: source ?? 'CRASH', detail: detail.toString());
+    _log(AppLogLevel.error, message,
+        source: source ?? 'CRASH', detail: detail.toString());
     // Synchronous write to ensure crash log survives app termination
     _writeSyncCrashLog(message, exception, stackTrace);
   }
 
-  void _log(AppLogLevel level, String message, {String? source, String? detail}) {
+  void _log(AppLogLevel level, String message,
+      {String? source, String? detail}) {
     final entry = AppLogEntry(
       level: level,
       message: message,
@@ -155,6 +163,8 @@ class AppLogger {
     if (_logDir == null) return;
     try {
       final line = '${entry.formatted}\n';
+      _systemLogSink ??= File('${_logDir!.path}/$_systemLogFile')
+          .openWrite(mode: FileMode.append);
       _systemLogSink?.write(line);
       _writeSyncToLog(_appLogFileName(entry.timestamp), line);
       _systemLogSize += line.length;
@@ -179,13 +189,10 @@ class AppLogger {
     int limit = 20,
   }) async {
     if (_logDir == null || !await _logDir!.exists()) return [];
-    final files = await _logDir!
-        .list()
-        .where((entity) {
-          final name = entity.path.split(Platform.pathSeparator).last;
-          return name.startsWith(prefix) && name.endsWith(suffix);
-        })
-        .toList();
+    final files = await _logDir!.list().where((entity) {
+      final name = entity.path.split(Platform.pathSeparator).last;
+      return name.startsWith(prefix) && name.endsWith(suffix);
+    }).toList();
     files.sort((a, b) => b.path.compareTo(a.path));
     return files.take(limit).toList();
   }
@@ -204,7 +211,8 @@ class AppLogger {
   }
 
   /// Synchronous crash log write — guaranteed to survive app termination.
-  void _writeSyncCrashLog(String message, Object? exception, StackTrace? stackTrace) {
+  void _writeSyncCrashLog(
+      String message, Object? exception, StackTrace? stackTrace) {
     if (_logDir == null) return;
     try {
       final ts = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
@@ -216,9 +224,11 @@ class AppLogger {
       buf.writeln();
 
       final file = File('${_logDir!.path}/$_crashLogFile');
-      file.writeAsStringSync(buf.toString(), mode: FileMode.append, flush: true);
+      file.writeAsStringSync(buf.toString(),
+          mode: FileMode.append, flush: true);
       final datedFile = File('${_logDir!.path}/${_crashLogFileName()}');
-      datedFile.writeAsStringSync(buf.toString(), mode: FileMode.append, flush: true);
+      datedFile.writeAsStringSync(buf.toString(),
+          mode: FileMode.append, flush: true);
     } catch (_) {}
   }
 
@@ -266,10 +276,7 @@ class AppLogger {
   /// Read recent N lines from memory buffer as text.
   String readRecentLogs({int count = 50}) {
     final start = _memoryLogs.length > count ? _memoryLogs.length - count : 0;
-    return _memoryLogs
-        .sublist(start)
-        .map((e) => e.formatted)
-        .join('\n');
+    return _memoryLogs.sublist(start).map((e) => e.formatted).join('\n');
   }
 
   /// Read crash log content.
@@ -319,6 +326,10 @@ class AppLogger {
     _memoryLogs.clear();
     if (_logDir == null) return;
     try {
+      await flush();
+      await _systemLogSink?.close();
+      _systemLogSink = null;
+      _systemLogSize = 0;
       final systemFile = File('${_logDir!.path}/$_systemLogFile');
       if (await systemFile.exists()) await systemFile.delete();
       final crashFile = File('${_logDir!.path}/$_crashLogFile');
@@ -327,15 +338,15 @@ class AppLogger {
       if (await scriptErrFile.exists()) await scriptErrFile.delete();
       await for (final entity in _logDir!.list()) {
         final name = entity.path.split(Platform.pathSeparator).last;
-        final isManagedLog =
-            (name.startsWith('app-') ||
-                    name.startsWith('script-') ||
-                    name.startsWith('crash-')) &&
-                name.endsWith('.log');
+        final isManagedLog = (name.startsWith('app-') ||
+                name.startsWith('script-') ||
+                name.startsWith('crash-')) &&
+            name.endsWith('.log');
         if (isManagedLog) {
           await File(entity.path).delete();
         }
       }
+      _systemLogSink = systemFile.openWrite(mode: FileMode.append);
     } catch (_) {}
   }
 
@@ -344,8 +355,10 @@ class AppLogger {
     await flush();
     final buf = StringBuffer();
     buf.writeln('====== 诊断信息 ======');
-    buf.writeln('Generated at: ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())}');
-    buf.writeln('Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+    buf.writeln(
+        'Generated at: ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())}');
+    buf.writeln(
+        'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
     buf.writeln('Log directory: ${logDirPath ?? "(日志系统未初始化)"}');
     buf.writeln('Recent memory entries: ${_memoryLogs.length}');
     buf.writeln();
@@ -372,9 +385,8 @@ class AppLogger {
       final appDir = await getApplicationDocumentsDirectory();
       final nativeDir = Directory('${appDir.parent.path}/script_error_logs');
       if (!await nativeDir.exists()) return '(暂无脚本错误日志)';
-      final files = await nativeDir.list()
-          .where((f) => f.path.endsWith('.txt'))
-          .toList();
+      final files =
+          await nativeDir.list().where((f) => f.path.endsWith('.txt')).toList();
       if (files.isEmpty) return '(暂无脚本错误日志)';
       files.sort((a, b) => b.path.compareTo(a.path)); // newest first
       final recent = files.take(10);
@@ -402,9 +414,8 @@ class AppLogger {
       // filesDir is the parent of the documents directory on Android
       final nativeDir = Directory('${appDir.parent.path}/crash_logs');
       if (!await nativeDir.exists()) return '(暂无原生崩溃日志)';
-      final files = await nativeDir.list()
-          .where((f) => f.path.endsWith('.txt'))
-          .toList();
+      final files =
+          await nativeDir.list().where((f) => f.path.endsWith('.txt')).toList();
       if (files.isEmpty) return '(暂无原生崩溃日志)';
       files.sort((a, b) => b.path.compareTo(a.path)); // newest first
       // Read up to 5 most recent crash files

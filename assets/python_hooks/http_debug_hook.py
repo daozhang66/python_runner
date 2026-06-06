@@ -169,7 +169,7 @@ def _detect_content_type(headers):
 
 def _safe_body_preview(body, response_headers=None):
     """Capture response body for preview.
-    - For image/* content types: full base64 encode (no size limit)
+    - For image/* content types: base64 encode up to body_limit
     - For audio/* and video/* content types: store metadata only (type + size)
     - For other types: use configured body_limit (default 2MB) to keep memory bounded
     """
@@ -181,7 +181,8 @@ def _safe_body_preview(body, response_headers=None):
         if ct and ct.startswith('image/'):
             if isinstance(body, bytes) and len(body) > 0:
                 import base64
-                return 'data:' + ct + ';base64,' + base64.b64encode(body).decode('ascii')
+                limit = _CFG.get('body_limit', 2 * 1024 * 1024)
+                return 'data:' + ct + ';base64,' + base64.b64encode(body[:limit]).decode('ascii')
             return None
 
         # Check if this is an audio/video response — store metadata only
@@ -229,7 +230,13 @@ def _is_preview_truncated(body, response_headers=None):
     if body is None:
         return False
     ct = _detect_content_type(response_headers)
-    if ct and (ct.startswith('image/') or ct.startswith('audio/') or ct.startswith('video/')):
+    if ct and ct.startswith('image/'):
+        limit = _CFG.get('body_limit', 2 * 1024 * 1024)
+        try:
+            return isinstance(body, bytes) and len(body) > limit
+        except Exception:
+            return False
+    if ct and (ct.startswith('audio/') or ct.startswith('video/')):
         return False
     limit = _CFG.get('body_limit', 2 * 1024 * 1024)
     try:

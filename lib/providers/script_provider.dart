@@ -3,6 +3,7 @@ import '../models/script_file.dart';
 import '../models/script_group.dart';
 import '../services/native_bridge.dart';
 import '../services/database_service.dart';
+import '../services/script_name_validator.dart';
 
 class ScriptProvider extends ChangeNotifier {
   final NativeBridge _bridge;
@@ -92,11 +93,12 @@ class ScriptProvider extends ChangeNotifier {
   Future<bool> createScript(String name,
       {String content = '', int? groupId}) async {
     try {
-      final path = await _bridge.createScript(name, content: content);
+      final safeName = ScriptNameValidator.normalize(name);
+      final path = await _bridge.createScript(safeName, content: content);
       final now = DateTime.now();
       final maxOrder = _maxSortOrderForGroup(groupId);
       final script = ScriptFile(
-        name: name,
+        name: safeName,
         path: path,
         createdAt: now,
         modifiedAt: now,
@@ -116,9 +118,10 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<bool> deleteScript(String name) async {
     try {
-      await _bridge.deleteScript(name);
-      await _db.deleteScript(name);
-      _scripts.removeWhere((s) => s.name == name);
+      final safeName = ScriptNameValidator.normalize(name);
+      await _bridge.deleteScript(safeName);
+      await _db.deleteScript(safeName);
+      _scripts.removeWhere((s) => s.name == safeName);
       notifyListeners();
       return true;
     } catch (e) {
@@ -129,12 +132,14 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<bool> renameScript(String oldName, String newName) async {
     try {
-      await _bridge.renameScript(oldName, newName);
-      await _db.renameScript(oldName, newName, newName);
-      final idx = _scripts.indexWhere((s) => s.name == oldName);
+      final safeOldName = ScriptNameValidator.normalize(oldName);
+      final safeNewName = ScriptNameValidator.normalize(newName);
+      await _bridge.renameScript(safeOldName, safeNewName);
+      await _db.renameScript(safeOldName, safeNewName, safeNewName);
+      final idx = _scripts.indexWhere((s) => s.name == safeOldName);
       if (idx >= 0) {
-        _scripts[idx] = _scripts[idx]
-            .copyWith(name: newName, path: newName, modifiedAt: DateTime.now());
+        _scripts[idx] = _scripts[idx].copyWith(
+            name: safeNewName, path: safeNewName, modifiedAt: DateTime.now());
         _sortScripts();
       }
       notifyListeners();
@@ -147,7 +152,8 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<String> readScript(String name) async {
     try {
-      return await _bridge.readScript(name);
+      final safeName = ScriptNameValidator.normalize(name);
+      return await _bridge.readScript(safeName);
     } catch (e) {
       debugPrint('readScript error: $e');
       return '';
@@ -156,9 +162,10 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<bool> saveScript(String name, String content) async {
     try {
-      await _bridge.saveScript(name, content);
+      final safeName = ScriptNameValidator.normalize(name);
+      await _bridge.saveScript(safeName, content);
       final now = DateTime.now();
-      final idx = _scripts.indexWhere((s) => s.name == name);
+      final idx = _scripts.indexWhere((s) => s.name == safeName);
       if (idx >= 0) {
         final updated = _scripts[idx].copyWith(modifiedAt: now);
         await _db.upsertScript(updated);
@@ -166,7 +173,7 @@ class ScriptProvider extends ChangeNotifier {
         _sortScripts();
         notifyListeners();
       } else {
-        final existing = await _db.getScript(name);
+        final existing = await _db.getScript(safeName);
         if (existing != null) {
           await _db.upsertScript(existing.copyWith(modifiedAt: now));
         }
@@ -180,11 +187,12 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<String?> importScript(String uri, String name, {int? groupId}) async {
     try {
-      final path = await _bridge.importScriptFromUri(uri, name);
+      final safeName = ScriptNameValidator.normalize(name);
+      final path = await _bridge.importScriptFromUri(uri, safeName);
       final now = DateTime.now();
       final maxOrder = _maxSortOrderForGroup(groupId);
       final script = ScriptFile(
-        name: name,
+        name: safeName,
         path: path,
         createdAt: now,
         modifiedAt: now,
