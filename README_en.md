@@ -13,6 +13,7 @@ Python Runner is a Flutter-based Android app for running Python scripts with scr
   - List / grid view
   - Long-press actions and multi-select batch operations
   - Pinned scripts support
+  - Support script grouping
 
 - **Code editor**
   - Syntax highlighting
