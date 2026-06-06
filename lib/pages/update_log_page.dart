@@ -234,6 +234,7 @@ class _ReleaseLogCard extends StatelessWidget {
       child: ExpansionTile(
         tilePadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        shape: const Border(),
         title: Row(
           children: [
             Text(
@@ -290,12 +291,6 @@ class _ReleaseLogCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              if (entry.apkAsset != null)
-                Text(
-                  'APK：${entry.apkAsset!.name}',
-                  style:
-                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-                ),
               const Spacer(),
               TextButton.icon(
                 onPressed: entry.htmlUrl.isEmpty ? null : onOpenRelease,
