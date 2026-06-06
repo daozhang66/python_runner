@@ -128,7 +128,9 @@ class AppUpdateManager {
                   constraints: const BoxConstraints(maxHeight: 240),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(dialogContext)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SelectableText(
@@ -144,7 +146,8 @@ class AppUpdateManager {
                     '这个发布没有上传 APK 资源，将打开 GitHub Release 页面。',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                      color:
+                          Theme.of(dialogContext).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -209,7 +212,8 @@ class AppUpdateManager {
 
     final progressNotifier = ValueNotifier<double>(0.0);
     final progressTextNotifier = ValueNotifier<String>('准备下载...');
-    final statusTitleNotifier = ValueNotifier<String>('正在下载 v${updateInfo.latestVersion}');
+    final statusTitleNotifier =
+        ValueNotifier<String>('正在下载 v${updateInfo.latestVersion}');
     final failedNotifier = ValueNotifier<bool>(false);
     final finished = Completer<void>();
     StreamSubscription? progressSub;
@@ -255,7 +259,9 @@ class AppUpdateManager {
 
     progressSub = _bridge.downloadProgressStream.listen((event) {
       final currentTaskId = event['taskId']?.toString() ?? '';
-      if (taskId != null && currentTaskId.isNotEmpty && currentTaskId != taskId) {
+      if (taskId != null &&
+          currentTaskId.isNotEmpty &&
+          currentTaskId != taskId) {
         return;
       }
 
@@ -296,7 +302,8 @@ class AppUpdateManager {
           closeDialog();
           completeOnce();
         case 'completed':
-          final completedTaskId = currentTaskId.isNotEmpty ? currentTaskId : taskId;
+          final completedTaskId =
+              currentTaskId.isNotEmpty ? currentTaskId : taskId;
           if (completedTaskId != null) {
             unawaited(installCompletedTask(completedTaskId));
           }

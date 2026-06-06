@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,10 +29,12 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+      setState(
+          () => _searchQuery = _searchController.text.trim().toLowerCase());
     });
+    final packageProvider = context.read<PackageProvider>();
     Future.microtask(() {
-      context.read<PackageProvider>().loadPackages();
+      packageProvider.loadPackages();
       _loadIndexUrl();
     });
   }
@@ -50,10 +52,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     if (name.isEmpty) return;
     final version = _versionController.text.trim();
     context.read<PackageProvider>().installPackage(
-      name,
-      version: version.isEmpty ? null : version,
-      indexUrl: _indexUrl,
-    );
+          name,
+          version: version.isEmpty ? null : version,
+          indexUrl: _indexUrl,
+        );
     _packageController.clear();
     _versionController.clear();
   }
@@ -228,7 +230,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                           reverse: true,
                           itemCount: provider.installLog.length,
                           itemBuilder: (_, i) => SelectableText(
-                            provider.installLog[provider.installLog.length - 1 - i],
+                            provider
+                                .installLog[provider.installLog.length - 1 - i],
                             style: const TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 11,
@@ -239,7 +242,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                           right: 0,
                           top: 0,
                           child: InkWell(
-                            onTap: () => _copyInstallLog(context, provider.installLog),
+                            onTap: () =>
+                                _copyInstallLog(context, provider.installLog),
                             borderRadius: BorderRadius.circular(4),
                             child: Container(
                               padding: const EdgeInsets.all(4),
@@ -253,7 +257,9 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                               child: Icon(
                                 Icons.copy,
                                 size: 14,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -280,7 +286,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                         onPressed: () => _searchController.clear(),
                       )
                     : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -299,7 +306,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                     Tab(text: '用户安装 (${userPackages.length})'),
                     Tab(text: '内置库 (${builtinPackages.length})'),
                   ],
-                  labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  labelStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
                   unselectedLabelStyle: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -314,8 +322,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildPackageList(context, userPackages, provider, canDelete: true),
-                _buildPackageList(context, builtinPackages, provider, canDelete: false),
+                _buildPackageList(context, userPackages, provider,
+                    canDelete: true),
+                _buildPackageList(context, builtinPackages, provider,
+                    canDelete: false),
               ],
             ),
           ),
@@ -334,7 +344,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       return Center(
         child: Text(
           _searchQuery.isNotEmpty ? '未找到匹配的库' : '暂无',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style:
+              TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
     }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -92,6 +93,33 @@ void main() {
 
       expect(find.byType(ListView), findsOneWidget);
       expect(find.byType(SingleChildScrollView), findsNothing);
+    });
+
+    test('terminal view uses logVersion to detect capped log replacement', () {
+      final terminalSource =
+          File('lib/widgets/terminal_view.dart').readAsStringSync();
+      final consoleSource =
+          File('lib/pages/run_console_page.dart').readAsStringSync();
+
+      expect(terminalSource, contains('final int logVersion;'));
+      expect(terminalSource, contains('this.logVersion = 0'));
+      expect(terminalSource,
+          contains('widget.logVersion != oldWidget.logVersion'));
+      expect(consoleSource, contains('logVersion: logVersion'));
+    });
+
+    test('rerun refreshes run start time after starting a new execution', () {
+      final consoleSource =
+          File('lib/pages/run_console_page.dart').readAsStringSync();
+      final rerunBody = RegExp(
+        r'Future<void> _rerun\(\) async \{([\s\S]*?)\r?\n  }\r?\n\r?\n  @override',
+      ).firstMatch(consoleSource)!.group(1)!;
+
+      expect(
+          rerunBody, contains('await exec.executeScript(widget.scriptName)'));
+      expect(rerunBody, contains('if (!mounted) return;'));
+      expect(rerunBody, contains('_captureStartTime()'));
+      expect(rerunBody, contains('setState('));
     });
 
     testWidgets('script editor uses pinch-to-zoom instead of format size menu',

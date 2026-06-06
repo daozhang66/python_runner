@@ -24,7 +24,9 @@ class ProgressIndicatorWidget extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+            Expanded(
+                child:
+                    Text(label, style: Theme.of(context).textTheme.bodyMedium)),
           ],
         ),
         if (logs.isNotEmpty) ...[

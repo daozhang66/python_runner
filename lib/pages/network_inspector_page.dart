@@ -1258,8 +1258,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: $e'),
-              duration: const Duration(seconds: 2)),
+              content: Text('导出失败: $e'), duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -1610,9 +1609,7 @@ class _JsonTreeNode extends StatefulWidget {
   final int depth;
   final double fontSize;
   const _JsonTreeNode(
-      {required this.data,
-      required this.depth,
-      required this.fontSize});
+      {required this.data, required this.depth, required this.fontSize});
 
   @override
   State<_JsonTreeNode> createState() => _JsonTreeNodeState();

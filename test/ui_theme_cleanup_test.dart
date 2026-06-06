@@ -233,7 +233,8 @@ void main() {
     expect(settingsSource, contains('widget.currentMaterialYouEnabled'));
   });
 
-  test('home page keeps tabs alive and splash/theme path avoids repeated rebuild work',
+  test(
+      'home page keeps tabs alive and splash/theme path avoids repeated rebuild work',
       () {
     final mainSource = File('lib/main.dart').readAsStringSync();
 

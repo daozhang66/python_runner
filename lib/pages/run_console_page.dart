@@ -51,6 +51,10 @@ class _RunConsolePageState extends State<RunConsolePage>
       await scriptProvider.incrementRunCount(widget.scriptName);
       exec.clearLogs();
       await exec.executeScript(widget.scriptName);
+      if (!mounted) return;
+      setState(() {
+        _captureStartTime();
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,8 +124,7 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
     final status = context.select<ExecutionProvider, ExecutionStatus>(
       (p) => p.state.status,
     );
-    final isRunning =
-        providerIsRunning && currentScriptName == scriptName;
+    final isRunning = providerIsRunning && currentScriptName == scriptName;
 
     final statusColor = isRunning
         ? (isDark ? Colors.greenAccent : Colors.green)
@@ -235,7 +238,9 @@ class _RunConsoleTerminalPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    context.select<ExecutionProvider, int>((p) => p.logVersion);
+    final logVersion = context.select<ExecutionProvider, int>(
+      (p) => p.logVersion,
+    );
     final logs = context.select<ExecutionProvider, List<LogEntry>>(
       (p) => p.logs,
     );
@@ -248,8 +253,7 @@ class _RunConsoleTerminalPane extends StatelessWidget {
     final waiting = context.select<ExecutionProvider, bool>(
       (p) => p.waitingForInput,
     );
-    final isRunning =
-        providerIsRunning && currentScriptName == scriptName;
+    final isRunning = providerIsRunning && currentScriptName == scriptName;
 
     return TerminalView(
       key: terminalKey,
@@ -262,6 +266,7 @@ class _RunConsoleTerminalPane extends StatelessWidget {
           : () => context.read<ExecutionProvider>().clearLogs(),
       emptyMessage: isRunning ? '等待输出...' : '暂无输出',
       showLineNumberToggle: false,
+      logVersion: logVersion,
     );
   }
 }

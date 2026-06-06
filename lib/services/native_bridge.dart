@@ -1,14 +1,19 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'app_logger.dart';
+import 'script_name_validator.dart';
 
 class NativeBridge {
   static const _methodChannel = MethodChannel('com.daozhang.py/native_bridge');
   static const _logStreamChannel = EventChannel('com.daozhang.py/log_stream');
-  static const _installProgressChannel = EventChannel('com.daozhang.py/install_progress');
-  static const _downloadProgressChannel = EventChannel('com.daozhang.py/download_progress');
-  static const _executionStatusChannel = EventChannel('com.daozhang.py/execution_status');
-  static const _stdinRequestChannel = EventChannel('com.daozhang.py/stdin_request');
+  static const _installProgressChannel =
+      EventChannel('com.daozhang.py/install_progress');
+  static const _downloadProgressChannel =
+      EventChannel('com.daozhang.py/download_progress');
+  static const _executionStatusChannel =
+      EventChannel('com.daozhang.py/execution_status');
+  static const _stdinRequestChannel =
+      EventChannel('com.daozhang.py/stdin_request');
 
   Stream<Map<dynamic, dynamic>>? _logStream;
   Stream<Map<dynamic, dynamic>>? _installProgressStream;
@@ -17,63 +22,93 @@ class NativeBridge {
   Stream<Map<dynamic, dynamic>>? _stdinRequestStream;
 
   Stream<Map<dynamic, dynamic>> get logStream =>
-      _logStream ??= _logStreamChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+      _logStream ??= _logStreamChannel
+          .receiveBroadcastStream()
+          .map((e) => e as Map<dynamic, dynamic>)
+          .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get installProgressStream =>
-      _installProgressStream ??= _installProgressChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+      _installProgressStream ??= _installProgressChannel
+          .receiveBroadcastStream()
+          .map((e) => e as Map<dynamic, dynamic>)
+          .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get downloadProgressStream =>
-      _downloadProgressStream ??= _downloadProgressChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+      _downloadProgressStream ??= _downloadProgressChannel
+          .receiveBroadcastStream()
+          .map((e) => e as Map<dynamic, dynamic>)
+          .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get executionStatusStream =>
-      _executionStatusStream ??= _executionStatusChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+      _executionStatusStream ??= _executionStatusChannel
+          .receiveBroadcastStream()
+          .map((e) => e as Map<dynamic, dynamic>)
+          .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get stdinRequestStream =>
-      _stdinRequestStream ??= _stdinRequestChannel.receiveBroadcastStream().map((e) => e as Map<dynamic, dynamic>).asBroadcastStream();
+      _stdinRequestStream ??= _stdinRequestChannel
+          .receiveBroadcastStream()
+          .map((e) => e as Map<dynamic, dynamic>)
+          .asBroadcastStream();
 
   Future<String> createScript(String name, {String content = ''}) async {
-    final result = await _invoke('createScript', {'name': name, 'content': content});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result =
+        await _invoke('createScript', {'name': safeName, 'content': content});
     if (result is Map) {
-      return result['path']?.toString() ?? name;
+      return result['path']?.toString() ?? safeName;
     }
     return result.toString();
   }
 
   Future<bool> deleteScript(String name) async {
-    final result = await _invoke('deleteScript', {'name': name});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result = await _invoke('deleteScript', {'name': safeName});
     if (result is bool) return result;
     return result == true;
   }
 
   Future<bool> renameScript(String oldName, String newName) async {
-    final result = await _invoke('renameScript', {'oldName': oldName, 'newName': newName});
+    final safeOldName = ScriptNameValidator.normalize(oldName);
+    final safeNewName = ScriptNameValidator.normalize(newName);
+    final result = await _invoke(
+        'renameScript', {'oldName': safeOldName, 'newName': safeNewName});
     if (result is bool) return result;
     return result == true;
   }
 
   Future<List<String>> listScripts() async {
     final result = await _invoke('listScripts', {});
-    return (result as List).map((e) {
-      if (e is Map) return e['name']?.toString() ?? '';
-      return e.toString();
-    }).where((n) => n.isNotEmpty).toList();
+    return (result as List)
+        .map((e) {
+          if (e is Map) return e['name']?.toString() ?? '';
+          return e.toString();
+        })
+        .where((n) => n.isNotEmpty)
+        .toList();
   }
 
   Future<String> readScript(String name) async {
-    final result = await _invoke('readScript', {'name': name});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result = await _invoke('readScript', {'name': safeName});
     return result?.toString() ?? '';
   }
 
   Future<bool> saveScript(String name, String content) async {
-    final result = await _invoke('saveScript', {'name': name, 'content': content});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result =
+        await _invoke('saveScript', {'name': safeName, 'content': content});
     if (result is bool) return result;
     return result == true;
   }
 
   Future<void> executeScript(String name, String executionId,
-      {String? workingDir, Map<String, String>? hookEnv, int? timeoutSeconds}) async {
+      {String? workingDir,
+      Map<String, String>? hookEnv,
+      int? timeoutSeconds}) async {
+    final safeName = ScriptNameValidator.normalize(name);
     await _invoke('executeScript', {
-      'name': name,
+      'name': safeName,
       'executionId': executionId,
       'workingDir': workingDir,
       'hookEnv': hookEnv,
@@ -89,7 +124,8 @@ class NativeBridge {
     await _invoke('sendStdin', {'input': input});
   }
 
-  Future<void> installPackage(String packageName, {String? version, String? indexUrl}) async {
+  Future<void> installPackage(String packageName,
+      {String? version, String? indexUrl}) async {
     await _invoke('installPackage', {
       'packageName': packageName,
       'version': version,
@@ -98,7 +134,8 @@ class NativeBridge {
   }
 
   Future<Map<String, dynamic>> uninstallPackage(String packageName) async {
-    final result = await _invoke('uninstallPackage', {'packageName': packageName});
+    final result =
+        await _invoke('uninstallPackage', {'packageName': packageName});
     return _dynamicMap(result);
   }
 
@@ -111,11 +148,14 @@ class NativeBridge {
   }
 
   Future<String> importScriptFromUri(String uri, String name) async {
-    final result = await _invoke('importScriptFromUri', {'uri': uri, 'name': name});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result =
+        await _invoke('importScriptFromUri', {'uri': uri, 'name': safeName});
     return result?.toString() ?? '';
   }
 
-  Future<String> exportLog(String content, {String fileName = 'log.txt', String? destDir}) async {
+  Future<String> exportLog(String content,
+      {String fileName = 'log.txt', String? destDir}) async {
     final result = await _invoke('exportLog', {
       'content': content,
       'fileName': fileName,
@@ -125,7 +165,9 @@ class NativeBridge {
   }
 
   Future<String> exportScript(String name, String destDir) async {
-    final result = await _invoke('exportScript', {'name': name, 'destDir': destDir});
+    final safeName = ScriptNameValidator.normalize(name);
+    final result =
+        await _invoke('exportScript', {'name': safeName, 'destDir': destDir});
     return result?.toString() ?? '';
   }
 
@@ -162,8 +204,9 @@ class NativeBridge {
       {String? workingDir,
       Map<String, String>? environment,
       int? timeoutSeconds}) async {
+    final safeName = ScriptNameValidator.normalize(name);
     await _invoke('executeLinuxLikeScript', {
-      'name': name,
+      'name': safeName,
       'executionId': executionId,
       'workingDir': workingDir,
       'environment': environment,
@@ -188,8 +231,10 @@ class NativeBridge {
     });
   }
 
-  Future<Map<String, dynamic>> uninstallLinuxLikePackage(String packageName) async {
-    final result = await _invoke('uninstallLinuxLikePackage', {'packageName': packageName});
+  Future<Map<String, dynamic>> uninstallLinuxLikePackage(
+      String packageName) async {
+    final result = await _invoke(
+        'uninstallLinuxLikePackage', {'packageName': packageName});
     return _dynamicMap(result);
   }
 
@@ -237,7 +282,8 @@ class NativeBridge {
     return result.toString();
   }
 
-  Future<String> downloadAndInstallApk(String url, {required String fileName}) async {
+  Future<String> downloadAndInstallApk(String url,
+      {required String fileName}) async {
     return startApkDownload(url, fileName: fileName);
   }
 

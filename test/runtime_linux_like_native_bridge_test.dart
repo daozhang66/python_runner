@@ -71,10 +71,13 @@ void main() {
     expect(activity, contains('REQUESTED'));
     expect(activity, contains('hostDistributions'));
     expect(activity, contains('removeMissingLinuxLikeExplicitPackages'));
-    expect(activity, contains('explicitPackages.contains(normalizedPackageName)'));
+    expect(
+        activity, contains('explicitPackages.contains(normalizedPackageName)'));
     expect(activity, contains('pipListedPackages'));
-    expect(activity,
-        contains('"source" to if (isExplicitUserPackage) "user" else "runtime"'));
+    expect(
+        activity,
+        contains(
+            '"source" to if (isExplicitUserPackage) "user" else "runtime"'));
   });
 
   test('linux-like package list migrates existing installs without metadata',
@@ -89,9 +92,12 @@ void main() {
     expect(activity, contains('metadataOwnedTopLevels'));
     expect(activity, contains('requestedPackages'));
     expect(activity, contains('topLevelPackages'));
-    expect(activity, isNot(contains('!linuxLikeImplicitDependencyPackages.contains(name)')));
-    expect(activity, contains('saveLinuxLikeExplicitPackages(requestedPackages)'));
-    expect(activity, contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
+    expect(activity,
+        isNot(contains('!linuxLikeImplicitDependencyPackages.contains(name)')));
+    expect(
+        activity, contains('saveLinuxLikeExplicitPackages(requestedPackages)'));
+    expect(
+        activity, contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
   });
 
   test('linux-like package install verifies pip actually installed package',
@@ -105,7 +111,8 @@ void main() {
     expect(activity, contains('result.error("1019"'));
   });
 
-  test('linux-like uninstall records explicit packages and removes orphans', () {
+  test('linux-like uninstall records explicit packages and removes orphans',
+      () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
@@ -135,7 +142,8 @@ void main() {
     expect(manager, contains('dir.deleteRecursively()'));
   });
 
-  test('linux-like scripts default to Download/PythonRunner and create cwd bind',
+  test(
+      'linux-like scripts default to Download/PythonRunner and create cwd bind',
       () {
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
@@ -143,7 +151,8 @@ void main() {
 
     expect(
       manager,
-      contains('const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"'),
+      contains(
+          'const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"'),
     );
     expect(manager, contains('fun resolveScriptWorkingDir('));
     expect(manager, contains('ensureWorkingDirExists = true'));
@@ -163,13 +172,10 @@ void main() {
     expect(manager, contains('userSitePackagesDir'));
     expect(manager, contains('userSitePackagesGuestPath'));
     expect(manager, contains('target["PYTHONPATH"]'));
-    expect(
-        manager,
-        contains(
-            '"userSitePackagesDir" to userSitePackagesDir.absolutePath'));
+    expect(manager,
+        contains('"userSitePackagesDir" to userSitePackagesDir.absolutePath'));
     expect(activity, contains('"--target"'));
-    expect(
-        activity,
+    expect(activity,
         contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
   });
 
@@ -196,13 +202,15 @@ void main() {
     expect(provider, contains("'TERM': 'xterm-256color'"));
   });
 
-  test('linux-like script execution HOME follows resolved working directory', () {
+  test('linux-like script execution HOME follows resolved working directory',
+      () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
 
     expect(activity, contains('resolveScriptWorkingDir(workingDir)'));
-    expect(activity, contains('executionEnvironment["HOME"] = resolvedWorkingDir'));
+    expect(activity,
+        contains('executionEnvironment["HOME"] = resolvedWorkingDir'));
     expect(activity, contains('processBuilder.environment(),'));
     expect(activity, contains('executionEnvironment'));
   });
@@ -227,7 +235,8 @@ void main() {
     expect(manager, contains('stdinRequestSentinel'));
     expect(manager, contains('_emit_stdin_request'));
     expect(manager, contains('sys.__stdout__.write'));
-    expect(manager, isNot(contains('sys.__stderr__.write(stdin_request_sentinel')));
+    expect(manager,
+        isNot(contains('sys.__stderr__.write(stdin_request_sentinel')));
     expect(manager, contains('class _PythonRunnerStdin'));
     expect(manager, contains('builtins.input = _patched_input'));
     expect(manager, contains("return sys.stdin.readline().rstrip('\\\\n')"));
@@ -249,7 +258,23 @@ void main() {
     expect(activity, contains('"prompt" to prompt'));
   });
 
-  test('execution provider only enters waiting-input state for active execution',
+  test('android script file operations use canonical safe script file guard',
+      () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('private fun normalizeScriptName('));
+    expect(activity, contains('private fun safeScriptFile('));
+    expect(activity, contains('canonicalFile'));
+    expect(activity, contains('startsWith(scriptsRoot.toPath())'));
+    expect(activity, isNot(contains('File(scriptsDir(), name)')));
+    expect(activity, isNot(contains('File(scriptsDir(), oldName)')));
+    expect(activity, isNot(contains('File(scriptsDir(), newName)')));
+  });
+
+  test(
+      'execution provider only enters waiting-input state for active execution',
       () {
     final provider = File(
       'lib/providers/execution_provider.dart',
@@ -272,8 +297,12 @@ void main() {
 
     expect(provider, contains('_currentInputPrompt = request.prompt;'));
     expect(provider, contains("content: _currentInputPrompt,"));
-    expect(provider, contains("final echoedInput = prompt.isNotEmpty ? '\$prompt\$input' : '> \$input';"));
-    expect(provider, contains('final mergedPromptLine = prompt.isNotEmpty &&'));
+    expect(
+        provider,
+        contains(
+            "final echoedInput = prompt.isNotEmpty ? '\$prompt\$input' : '> \$input';"));
+    expect(provider, contains('final mergedPromptLine ='));
+    expect(provider, contains('prompt.isNotEmpty && _logs.isNotEmpty'));
     expect(provider, contains('_logs[_logs.length - 1] = entry;'));
   });
 

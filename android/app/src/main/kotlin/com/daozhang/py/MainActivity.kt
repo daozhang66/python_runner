@@ -79,10 +79,16 @@ class MainActivity : FlutterActivity() {
     private fun handleRunScriptIntent(intent: Intent?) {
         val name = intent?.getStringExtra("run_script")
         if (!name.isNullOrBlank()) {
-            pendingRunScript = name
+            val safeName = try {
+                normalizeScriptName(name)
+            } catch (_: IllegalArgumentException) {
+                intent.removeExtra("run_script")
+                return
+            }
+            pendingRunScript = safeName
             getSharedPreferences(FLOATING_BALL_PREFS_NAME, MODE_PRIVATE)
                 .edit()
-                .putString(KEY_PENDING_RUN_SCRIPT, name)
+                .putString(KEY_PENDING_RUN_SCRIPT, safeName)
                 .apply()
             intent.removeExtra("run_script")
         }
@@ -128,6 +134,29 @@ class MainActivity : FlutterActivity() {
         val dir = File(filesDir, "scripts")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    private fun normalizeScriptName(name: String): String {
+        val safeName = name.trim()
+        require(safeName.isNotEmpty()) { "脚本名称不能为空" }
+        require(safeName != "." && safeName != "..") { "非法脚本名称" }
+        require(!safeName.contains('/') && !safeName.contains('\\')) {
+            "脚本名称不能包含路径分隔符"
+        }
+        require(safeName.none { it.code < 32 || it.code == 127 }) {
+            "脚本名称不能包含控制字符"
+        }
+        return safeName
+    }
+
+    private fun safeScriptFile(name: String): File {
+        val safeName = normalizeScriptName(name)
+        val scriptsRoot = scriptsDir().canonicalFile
+        val target = File(scriptsRoot, safeName).canonicalFile
+        require(target.toPath().startsWith(scriptsRoot.toPath()) && target.name == safeName) {
+            "脚本路径越界"
+        }
+        return target
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -368,7 +397,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleCreateScript(name: String, content: String, result: MethodChannel.Result) {
         try {
-            val file = File(scriptsDir(), name)
+            val file = safeScriptFile(name)
             if (file.exists()) {
                 result.error("1001", "脚本已存在 $name", null)
                 return
@@ -382,7 +411,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleDeleteScript(name: String, result: MethodChannel.Result) {
         try {
-            val file = File(scriptsDir(), name)
+            val file = safeScriptFile(name)
             if (!file.exists()) {
                 result.error("1001", "脚本不存在 $name", null)
                 return
@@ -396,8 +425,8 @@ class MainActivity : FlutterActivity() {
 
     private fun handleRenameScript(oldName: String, newName: String, result: MethodChannel.Result) {
         try {
-            val oldFile = File(scriptsDir(), oldName)
-            val newFile = File(scriptsDir(), newName)
+            val oldFile = safeScriptFile(oldName)
+            val newFile = safeScriptFile(newName)
             if (!oldFile.exists()) {
                 result.error("1001", "脚本不存在 $oldName", null)
                 return
@@ -432,7 +461,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleReadScript(name: String, result: MethodChannel.Result) {
         try {
-            val file = File(scriptsDir(), name)
+            val file = safeScriptFile(name)
             if (!file.exists()) {
                 result.error("1001", "脚本不存在 $name", null)
                 return
@@ -445,7 +474,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleSaveScript(name: String, content: String, result: MethodChannel.Result) {
         try {
-            val file = File(scriptsDir(), name)
+            val file = safeScriptFile(name)
             file.writeText(content)
             result.success(true)
         } catch (e: Exception) {
@@ -478,7 +507,12 @@ class MainActivity : FlutterActivity() {
             currentExecutionId = null
         }
 
-        val file = File(scriptsDir(), name)
+        val file = try {
+            safeScriptFile(name)
+        } catch (e: IllegalArgumentException) {
+            result.error("1001", e.message ?: "非法脚本名称", null)
+            return
+        }
         if (!file.exists()) {
             result.error("1001", "脚本不存在 $name", null)
             return
@@ -656,7 +690,12 @@ class MainActivity : FlutterActivity() {
             } catch (_: Exception) {}
         }
 
-        val file = File(scriptsDir(), name)
+        val file = try {
+            safeScriptFile(name)
+        } catch (e: IllegalArgumentException) {
+            result.error("1001", e.message ?: "非法脚本名称", null)
+            return
+        }
         if (!file.exists()) {
             result.error("1001", "脚本不存在 $name", null)
             return
@@ -1528,7 +1567,7 @@ class MainActivity : FlutterActivity() {
                 return
             }
             val content = BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
-            val targetFile = File(scriptsDir(), name)
+            val targetFile = safeScriptFile(name)
             targetFile.writeText(content)
             result.success(mapOf("name" to name, "path" to targetFile.absolutePath))
         } catch (e: Exception) {
@@ -1565,7 +1604,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleExportScript(name: String, destDir: String?, result: MethodChannel.Result) {
         try {
-            val srcFile = File(scriptsDir(), name)
+            val srcFile = safeScriptFile(name)
             if (!srcFile.exists()) {
                 result.error("1001", "脚本不存在 $name", null)
                 return

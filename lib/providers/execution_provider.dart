@@ -10,6 +10,7 @@ import '../services/app_logger.dart';
 import '../services/http_inspector_store.dart';
 import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
+import '../services/script_name_validator.dart';
 import '../runtime/runtime_manager.dart';
 import '../runtime/runtime_request.dart';
 import 'package:intl/intl.dart';
@@ -158,6 +159,9 @@ class ExecutionProvider extends ChangeNotifier {
 
     try {
       _statusSub = _runtimeManager.stateStream.listen((state) {
+        if (!_isCurrentExecutionState(state)) {
+          return;
+        }
         _state = state;
         final isTerminal = _state.status != ExecutionStatus.running &&
             _state.status != ExecutionStatus.stopping;
@@ -213,6 +217,23 @@ class ExecutionProvider extends ChangeNotifier {
       _logger.error('Failed to listen stdinRequestStream: $e',
           source: 'Execution');
     }
+  }
+
+  bool _isCurrentExecutionState(ExecutionState state) {
+    final nextExecutionId = state.executionId;
+    final activeExecutionId = _state.executionId;
+    if (nextExecutionId != null &&
+        activeExecutionId != null &&
+        nextExecutionId != activeExecutionId) {
+      return false;
+    }
+    if (nextExecutionId == null &&
+        activeExecutionId != null &&
+        (_state.status == ExecutionStatus.running ||
+            _state.status == ExecutionStatus.stopping)) {
+      return false;
+    }
+    return true;
   }
 
   void _selectRuntimeManager(String backendId) {
@@ -282,7 +303,33 @@ class ExecutionProvider extends ChangeNotifier {
     return '$micros-$seq';
   }
 
+  Future<String> _resolveExecutableBackendId(String preferredBackendId) async {
+    final resolvedBackendId =
+        RuntimeManager.resolveBackendId(preferredBackendId);
+    if (_runtimeManagerLocked ||
+        resolvedBackendId != RuntimeManager.linuxLikeBackendId) {
+      return resolvedBackendId;
+    }
+    try {
+      final health = await RuntimeManager.linuxLike(_bridge).checkHealth();
+      if (health.ok) {
+        return resolvedBackendId;
+      }
+      _logger.warn(
+        '运行引擎 $preferredBackendId 未就绪: ${health.message}',
+        source: 'Execution',
+      );
+    } catch (e) {
+      _logger.warn(
+        '运行引擎 $preferredBackendId 健康检查失败: $e',
+        source: 'Execution',
+      );
+    }
+    return RuntimeManager.fallbackBackendId;
+  }
+
   Future<void> executeScript(String name) async {
+    final safeName = ScriptNameValidator.normalize(name);
     // If a previous execution is still marked as running, clean it up
     if (_state.status == ExecutionStatus.running) {
       try {
@@ -295,7 +342,7 @@ class ExecutionProvider extends ChangeNotifier {
     }
 
     final executionId = _nextExecutionId();
-    _currentScriptName = name;
+    _currentScriptName = safeName;
     _clearCurrentLogs();
     _waitingForInput = false;
     _currentInputPrompt = '';
@@ -318,13 +365,13 @@ class ExecutionProvider extends ChangeNotifier {
         prefs.getString(RuntimeManager.prefsKey),
       );
       runtimeBackendId =
-          RuntimeManager.resolveBackendId(preferredRuntimeBackendId);
+          await _resolveExecutableBackendId(preferredRuntimeBackendId);
     } catch (_) {}
     _selectRuntimeManager(runtimeBackendId);
 
     // Create a new log history record
     _logHistory.add(ScriptLogRecord(
-      scriptName: name,
+      scriptName: safeName,
       startTime: DateTime.now(),
     ));
     _trimListToMax(_logHistory, maxHistoryRecords);
@@ -372,7 +419,7 @@ class ExecutionProvider extends ChangeNotifier {
       }
 
       await _runtimeManager.startScript(RuntimeRequest(
-        scriptName: name,
+        scriptName: safeName,
         executionId: executionId,
         workingDirectory: workingDir,
         environment: environment,
@@ -381,14 +428,14 @@ class ExecutionProvider extends ChangeNotifier {
             : null,
       ));
       _logger.info(
-        '脚本开始执行: $name (id: $executionId, runtime: $runtimeBackendId)',
+        '脚本开始执行: $safeName (id: $executionId, runtime: $runtimeBackendId)',
         source: 'Execution',
       );
 
       // Show floating ball if enabled and permitted
-      _showFloatingBallIfNeeded(name);
+      _showFloatingBallIfNeeded(safeName);
     } catch (e) {
-      _logger.error('脚本启动失败: $name, error: $e', source: 'Execution');
+      _logger.error('脚本启动失败: $safeName, error: $e', source: 'Execution');
       _appendLiveLog(LogEntry(
         type: LogType.error,
         content: 'Failed to start: $e',
@@ -412,9 +459,8 @@ class ExecutionProvider extends ChangeNotifier {
       await _runtimeManager.sendStdin(input);
       final prompt = _currentInputPrompt;
       final echoedInput = prompt.isNotEmpty ? '$prompt$input' : '> $input';
-      final mergedPromptLine = prompt.isNotEmpty &&
-          _logs.isNotEmpty &&
-          _logs.last.content == prompt;
+      final mergedPromptLine =
+          prompt.isNotEmpty && _logs.isNotEmpty && _logs.last.content == prompt;
       final entry = LogEntry(
         type: mergedPromptLine ? LogType.stdout : LogType.info,
         content: echoedInput,
@@ -537,15 +583,18 @@ class ExecutionProvider extends ChangeNotifier {
       _pollingPending = true;
       try {
         final name = await _bridge.consumePendingRunScript();
-        if (name != null && name.isNotEmpty) {
-          executeScript(name);
+        final safeName =
+            name == null ? null : ScriptNameValidator.tryNormalize(name);
+        if (safeName != null && safeName.isNotEmpty) {
+          executeScript(safeName);
           if (onNavigateToConsole != null) {
-            onNavigateToConsole!.call(name);
+            onNavigateToConsole!.call(safeName);
           } else {
-            _pendingNavigateScriptName = name;
+            _pendingNavigateScriptName = safeName;
           }
         }
-      } catch (_) {} finally {
+      } catch (_) {
+      } finally {
         _pollingPending = false;
       }
     });

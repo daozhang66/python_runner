@@ -13,7 +13,11 @@ class PackageInfo {
     this.isUserPackage = false,
   });
 
-  PackageInfo copyWith({String? name, String? version, PackageStatus? status, bool? isUserPackage}) {
+  PackageInfo copyWith(
+      {String? name,
+      String? version,
+      PackageStatus? status,
+      bool? isUserPackage}) {
     return PackageInfo(
       name: name ?? this.name,
       version: version ?? this.version,

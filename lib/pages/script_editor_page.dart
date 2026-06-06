@@ -217,7 +217,8 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('运行失败: $e'), duration: const Duration(seconds: 3)),
+          SnackBar(
+              content: Text('运行失败: $e'), duration: const Duration(seconds: 3)),
         );
       }
     }

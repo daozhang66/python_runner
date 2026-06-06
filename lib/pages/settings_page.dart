@@ -576,7 +576,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       final hasPermission =
                           await _bridge.checkOverlayPermission();
                       if (!hasPermission) {
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
@@ -612,6 +612,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   }
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.setBool('floating_ball_enabled', v);
+                  if (!mounted) return;
                   setState(() => _floatingBallEnabled = v);
                   if (v) {
                     // Show idle ball immediately
@@ -638,7 +639,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: DropdownButtonFormField<String>(
                   key: ValueKey('$_runtimeBackend-$_engineDropdownKey'),
-                  value: _runtimeBackend,
+                  initialValue: _runtimeBackend,
                   borderRadius: BorderRadius.circular(16),
                   dropdownColor:
                       Theme.of(context).colorScheme.surfaceContainerHigh,
@@ -649,14 +650,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   decoration: InputDecoration(
                     labelText: '运行引擎',
-                    prefixIcon: Icon(Icons.memory),
-                    border: OutlineInputBorder(gapPadding: 0),
+                    prefixIcon: const Icon(Icons.memory),
+                    border: const OutlineInputBorder(gapPadding: 0),
                     isDense: true,
                     filled: true,
                     fillColor:
                         Theme.of(context).colorScheme.surfaceContainerLow,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                   ),
                   items: const [
                     DropdownMenuItem(
@@ -1148,7 +1149,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onPressed: () async {
                               await RequestOverrideConfig.instance
                                   .setGlobalUserAgent(_globalUaController.text);
-                              if (mounted) {
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content: Text('User-Agent 已保存'),
@@ -1194,7 +1195,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   final _ = Map<String, dynamic>.from(
                                       const JsonDecoder().convert(text) as Map);
                                 } catch (_) {
-                                  if (mounted) {
+                                  if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                           content: Text('JSON 格式错误'),
@@ -1206,7 +1207,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               }
                               await RequestOverrideConfig.instance
                                   .setGlobalHeaders(text);
-                              if (mounted) {
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content: Text('全局请求头已保存'),
@@ -1247,7 +1248,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               await RequestOverrideConfig.instance
                                   .setGlobalCookie(
                                       _globalCookieController.text);
-                              if (mounted) {
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content: Text('Cookie 已保存'),
@@ -1687,7 +1688,7 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _levelFilter,
+                    initialValue: _levelFilter,
                     decoration: const InputDecoration(labelText: '级别'),
                     items: const ['ALL', 'INFO', 'WARN', 'ERROR']
                         .map((level) =>
@@ -1700,7 +1701,7 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _sectionFilter,
+                    initialValue: _sectionFilter,
                     decoration: const InputDecoration(labelText: '区块'),
                     items: _sectionFilters
                         .map((section) => DropdownMenuItem(
@@ -1737,16 +1738,15 @@ class _UserManualPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('使用手册')),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
+        children: const [
           _ManualSection(
             icon: Icons.code,
             title: '脚本列表',
-            items: const [
+            items: [
               _ManualItem(Icons.add, '新建脚本', '右上角菜单进入添加脚本，可创建空白 Python 脚本'),
               _ManualItem(
                   Icons.file_open, '导入脚本', '右上角菜单进入添加脚本，可从设备选择 .py 文件导入'),
@@ -1770,11 +1770,11 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.more_vert, '长按脚本', '重命名、复制、导出、删除'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.edit_note,
             title: '代码编辑器',
-            items: const [
+            items: [
               _ManualItem(Icons.lock, '只读/编辑', '锁图标切换，默认只读防误触'),
               _ManualItem(Icons.search, '代码搜索', '搜索关键字，上下跳转匹配'),
               _ManualItem(Icons.pinch, '字体大小', '双指捏合缩放编辑器字号'),
@@ -1784,11 +1784,11 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.undo, '编辑工具栏', '编辑模式下底部工具栏提供缩进、撤回、重做'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.terminal,
             title: '全屏终端',
-            items: const [
+            items: [
               _ManualItem(Icons.play_arrow, '运行/停止', '运行中显示停止按钮和计时，结束后显示重运行按钮'),
               _ManualItem(Icons.search, '搜索日志', '点击搜索按钮，实时过滤日志内容'),
               _ManualItem(
@@ -1800,11 +1800,11 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.notifications, '运行通知', '前台通知显示脚本名称和运行时长'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.bubble_chart,
             title: '悬浮球',
-            items: const [
+            items: [
               _ManualItem(Icons.play_arrow, '状态指示',
                   '灰色=空闲，绿色脉冲=运行中，红色=报错，橙色=等待输入；不同状态显示不同图标（Py/▶/×/?）'),
               _ManualItem(Icons.touch_app, '点击操作', '折叠时点击展开悬浮球；展开时点击显示/隐藏信息面板'),
@@ -1819,11 +1819,11 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.security, '权限', '首次开启需授予「显示在其他应用上层」权限'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.http,
             title: '网络请求调试',
-            items: const [
+            items: [
               _ManualItem(Icons.visibility_outlined, '请求查看器',
                   '底部「网络」Tab 查看所有 Python HTTP 请求'),
               _ManualItem(Icons.search, '搜索 URL', '顶部搜索栏实时搜索 URL / 域名关键字'),
@@ -1838,11 +1838,11 @@ class _UserManualPage extends StatelessWidget {
                   '配合 Charles/Fiddler 外部抓包工具使用'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.inventory_2_outlined,
             title: '库管理',
-            items: const [
+            items: [
               _ManualItem(Icons.search, '搜索', '按名称过滤已安装的包'),
               _ManualItem(Icons.tab, '分类查看', '用户安装/内置库两个 Tab 分开显示'),
               _ManualItem(Icons.add, '安装包', '输入包名安装，可指定版本和 PyPI 源；留空使用官方源'),
@@ -1852,11 +1852,11 @@ class _UserManualPage extends StatelessWidget {
                   '仅显示顶层安装包，不显示 certifi、urllib3 等自动依赖'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.settings,
             title: '设置',
-            items: const [
+            items: [
               _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
               _ManualItem(Icons.color_lens_outlined, 'Material You',
                   'Android 12+ 可跟随系统壁纸动态取色'),
@@ -1880,26 +1880,26 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.article_outlined, '系统日志', '查看、导出或清空运行日志和崩溃日志'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ManualSection(
             icon: Icons.extension_outlined,
             title: '自定义 Python 库',
             items: [
-              const _ManualItem(Icons.folder_outlined, '添加存储',
+              _ManualItem(Icons.folder_outlined, '添加存储',
                   'MT管理器侧拉栏点击 ⋮ → 添加本地存储 → 点击 ≡ 找到 Python运行器 → 使用此文件夹'),
-              const _ManualItem(Icons.code, 'Chaquopy 库目录',
+              _ManualItem(Icons.code, 'Chaquopy 库目录',
                   '添加后进入 files → chaquopy → pip，pip 安装的包和自定义库都在这里'),
-              const _ManualItem(Icons.code, 'Linux-like 库目录',
+              _ManualItem(Icons.code, 'Linux-like 库目录',
                   '添加后进入 files → linux_like → user_site_packages，Linux-like 用户安装库和自定义库都在这里'),
-              const _ManualItem(Icons.create_new_folder, '创建库文件',
+              _ManualItem(Icons.create_new_folder, '创建库文件',
                   '在库目录中新建 .py 文件（如 mylib.py），编写代码保存即可'),
-              const _ManualItem(Icons.play_arrow, '脚本中引用',
+              _ManualItem(Icons.play_arrow, '脚本中引用',
                   '直接 import mylib 即可使用，无需额外配置，也可创建包目录 mylib/__init__.py'),
-              const _ManualItem(Icons.warning_amber, '注意事项',
+              _ManualItem(Icons.warning_amber, '注意事项',
                   '两个引擎的库目录互相独立，切换引擎后需进入对应目录操作；修改后无需重启 APP'),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
         ],
       ),
     );
@@ -2114,23 +2114,22 @@ class _AboutPageState extends State<_AboutPage> {
           ),
           const SizedBox(height: 12),
           // ── 技术架构 ──
-          _AboutCard(
+          const _AboutCard(
             icon: Icons.architecture_rounded,
             title: '技术架构',
             children: [
-              const _AboutItem(
+              _AboutItem(
                   label: '框架', value: 'Flutter + Dart · Material 3 · Provider'),
-              const _AboutItem(
+              _AboutItem(
                   label: '运行引擎',
                   value:
                       'Chaquopy (Python 3.11) / Linux-like (Debian proot) 可切换'),
-              const _AboutItem(
+              _AboutItem(
                   label: '原生层',
                   value: 'Kotlin · MethodChannel + EventChannel 双向通信'),
-              const _AboutItem(
+              _AboutItem(
                   label: '存储', value: 'SharedPreferences + SQLite + 文件系统'),
-              const _AboutItem(
-                  label: '运行要求', value: 'Android 8.0+ · arm64-v8a'),
+              _AboutItem(label: '运行要求', value: 'Android 8.0+ · arm64-v8a'),
             ],
           ),
         ],

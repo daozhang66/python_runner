@@ -47,8 +47,47 @@ class HttpRecord {
     this.durationMs,
   });
 
-  bool get isError => statusCode == null || statusCode! >= 400 || errorType != null;
-  bool get isSuccess => statusCode != null && statusCode! >= 200 && statusCode! < 400;
+  HttpRecord copyWith({
+    String? requestBody,
+    bool clearRequestBody = false,
+    int? statusCode,
+    Map<String, String>? responseHeaders,
+    String? responseBodyPreview,
+    bool clearResponseBodyPreview = false,
+    int? responseBodyBytes,
+    bool? responseBodyTruncated,
+    String? errorType,
+    String? errorMessage,
+    int? durationMs,
+  }) {
+    return HttpRecord(
+      id: id,
+      timestamp: timestamp,
+      method: method,
+      url: url,
+      requestHeaders: requestHeaders,
+      requestBody: clearRequestBody ? null : (requestBody ?? this.requestBody),
+      usedProxy: usedProxy,
+      sslVerify: sslVerify,
+      library: library,
+      statusCode: statusCode ?? this.statusCode,
+      responseHeaders: responseHeaders ?? this.responseHeaders,
+      responseBodyPreview: clearResponseBodyPreview
+          ? null
+          : (responseBodyPreview ?? this.responseBodyPreview),
+      responseBodyBytes: responseBodyBytes ?? this.responseBodyBytes,
+      responseBodyTruncated:
+          responseBodyTruncated ?? this.responseBodyTruncated,
+      errorType: errorType ?? this.errorType,
+      errorMessage: errorMessage ?? this.errorMessage,
+      durationMs: durationMs ?? this.durationMs,
+    );
+  }
+
+  bool get isError =>
+      statusCode == null || statusCode! >= 400 || errorType != null;
+  bool get isSuccess =>
+      statusCode != null && statusCode! >= 200 && statusCode! < 400;
 
   /// Whether the response body is a base64-encoded image (data URI).
   bool get isImageBody {
@@ -121,20 +160,26 @@ class HttpRecord {
   factory HttpRecord.fromJson(Map<String, dynamic> json) {
     Map<String, String> parseHeaders(dynamic h) {
       if (h == null) return {};
-      if (h is Map) return h.map((k, v) => MapEntry(k.toString(), v.toString()));
+      if (h is Map) {
+        return h.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
       if (h is String && h.isNotEmpty) {
         try {
           final decoded = jsonDecode(h);
-          if (decoded is Map) return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+          if (decoded is Map) {
+            return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+          }
         } catch (_) {}
       }
       return {};
     }
 
     return HttpRecord(
-      id: json['id']?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      id: json['id']?.toString() ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
       timestamp: json['timestamp'] != null
-          ? DateTime.fromMillisecondsSinceEpoch((json['timestamp'] as num).toInt())
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['timestamp'] as num).toInt())
           : DateTime.now(),
       method: (json['method'] as String?)?.toUpperCase() ?? 'GET',
       url: json['url'] as String? ?? '',
@@ -148,7 +193,9 @@ class HttpRecord {
       responseBodyPreview: json['response_body_preview'] as String?,
       responseBodyBytes: (json['response_body_size'] as num?)?.toInt(),
       responseBodyTruncated: json['response_body_truncated'] == true ||
-          ((json['response_body_preview'] as String?)?.endsWith('... (truncated)') ?? false),
+          ((json['response_body_preview'] as String?)
+                  ?.endsWith('... (truncated)') ??
+              false),
       errorType: json['error_type'] as String?,
       errorMessage: json['error_message'] as String?,
       durationMs: json['duration_ms'] as int?,
@@ -182,7 +229,8 @@ class HttpRecord {
     final buf = StringBuffer();
     final ts = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(timestamp);
     buf.writeln('[$ts] $method $url');
-    buf.writeln('Library: $library | Proxy: $usedProxy | SSL Verify: $sslVerify | Duration: $durationText');
+    buf.writeln(
+        'Library: $library | Proxy: $usedProxy | SSL Verify: $sslVerify | Duration: $durationText');
     buf.writeln('--- Request Headers ---');
     requestHeaders.forEach((k, v) => buf.writeln('  $k: $v'));
     if (requestBody != null && requestBody!.isNotEmpty) {
@@ -196,10 +244,13 @@ class HttpRecord {
       responseHeaders!.forEach((k, v) => buf.writeln('  $k: $v'));
     }
     if (responseBodyPreview != null && responseBodyPreview!.isNotEmpty) {
-      final label = responseBodyTruncated ? '--- Response Body Preview ---' : '--- Response Body ---';
+      final label = responseBodyTruncated
+          ? '--- Response Body Preview ---'
+          : '--- Response Body ---';
       buf.writeln(label);
       if (responseBodyTruncated && responseBodyBytes != null) {
-        buf.writeln('  [captured $capturedResponseBodyBytes / $responseBodyBytes bytes]');
+        buf.writeln(
+            '  [captured $capturedResponseBodyBytes / $responseBodyBytes bytes]');
       }
       buf.writeln('  $responseBodyPreview');
     }
@@ -265,8 +316,9 @@ class HttpInspectorStore extends ChangeNotifier {
         'total': _totalCount,
         'success': _successCount,
         'error': _errorCount,
-        'avgMs':
-            _durationCount > 0 ? (_totalDurationMs / _durationCount).round() : null,
+        'avgMs': _durationCount > 0
+            ? (_totalDurationMs / _durationCount).round()
+            : null,
       };
 
   /// Get filtered records (newest first).
@@ -277,17 +329,20 @@ class HttpInspectorStore extends ChangeNotifier {
       list = list.where((r) => r.url.toLowerCase().contains(d)).toList();
     }
     if (_filterMethod.isNotEmpty) {
-      list = list.where((r) => r.method == _filterMethod.toUpperCase()).toList();
+      list =
+          list.where((r) => r.method == _filterMethod.toUpperCase()).toList();
     }
     if (_filterStatus != null) {
       if (_filterStatus == 0) {
         list = list.where((r) => r.isError).toList();
       } else {
         final base = _filterStatus!;
-        list = list.where((r) =>
-            r.statusCode != null &&
-            r.statusCode! >= base &&
-            r.statusCode! < base + 100).toList();
+        list = list
+            .where((r) =>
+                r.statusCode != null &&
+                r.statusCode! >= base &&
+                r.statusCode! < base + 100)
+            .toList();
       }
     }
     return list;
@@ -513,17 +568,37 @@ class HttpInspectorStore extends ChangeNotifier {
       trimmed.removeRange(0, trimmed.length - maxRecords);
     }
 
-    var totalBytes = trimmed.fold<int>(0, (sum, record) => sum + record.storedBodyBytes);
+    var totalBytes =
+        trimmed.fold<int>(0, (sum, record) => sum + record.storedBodyBytes);
     while (totalBytes > maxCapturedBodyBytes && trimmed.length > 1) {
       totalBytes -= trimmed.first.storedBodyBytes;
       trimmed.removeAt(0);
+    }
+    if (totalBytes > maxCapturedBodyBytes && trimmed.isNotEmpty) {
+      final record = trimmed.last;
+      trimmed[trimmed.length - 1] = record.copyWith(
+        clearRequestBody: true,
+        clearResponseBodyPreview: true,
+        responseBodyBytes:
+            record.responseBodyBytes ?? record.capturedResponseBodyBytes,
+        responseBodyTruncated: true,
+      );
     }
     return trimmed;
   }
 
   void _applyLimits() {
     final trimmed = trimRecords(_records);
-    if (trimmed.length == _records.length) return;
+    var changed = trimmed.length != _records.length;
+    if (!changed) {
+      for (var i = 0; i < trimmed.length; i++) {
+        if (!identical(trimmed[i], _records[i])) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) return;
     final removedCount = _records.length - trimmed.length;
     for (final removed in _records.take(removedCount)) {
       _removeFromStats(removed);
@@ -603,7 +678,8 @@ class HttpInspectorStore extends ChangeNotifier {
   }
 
   Future<void> _persistNow() async {
-    final snapshot = _records.map((record) => record.toJson()).toList(growable: false);
+    final snapshot =
+        _records.map((record) => record.toJson()).toList(growable: false);
     _persistChain = _persistChain.then((_) async {
       try {
         final file = await _storageFile();

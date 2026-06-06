@@ -623,8 +623,7 @@ class _HomePageState extends State<HomePage> {
                     onThemeChanged: widget.onThemeChanged,
                     currentThemeMode: widget.currentThemeMode,
                     onMaterialYouChanged: widget.onMaterialYouChanged,
-                    currentMaterialYouEnabled:
-                        widget.currentMaterialYouEnabled,
+                    currentMaterialYouEnabled: widget.currentMaterialYouEnabled,
                   ),
                   fullscreenDialog: true,
                 ),
