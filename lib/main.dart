@@ -24,6 +24,7 @@ import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/run_console_page.dart';
 import 'utils/app_page_transitions.dart';
+import 'ui/app_design_tokens.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -196,7 +197,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         elevation: 0,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
           side: BorderSide(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.08)
@@ -209,19 +210,50 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
-      navigationBarTheme: const NavigationBarThemeData(
+      navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         height: 60,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        indicatorColor: colorScheme.primaryContainer.withValues(alpha: 0.35),
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      dialogTheme: DialogThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        ),
+        showDragHandle: true,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
 
@@ -562,6 +594,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   final _appUpdateManager = AppUpdateManager();
+  final _scriptListController = ScriptListPageController();
 
   @override
   void initState() {
@@ -606,6 +639,9 @@ class _HomePageState extends State<HomePage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
+          if (_currentIndex == 0 && _scriptListController.handleBack()) {
+            return;
+          }
           const MethodChannel('com.daozhang.py/native_bridge')
               .invokeMethod('moveToBackground');
         }
@@ -616,6 +652,7 @@ class _HomePageState extends State<HomePage> {
           index: _currentIndex,
           children: [
             ScriptListPage(
+              controller: _scriptListController,
               onSettingsTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(

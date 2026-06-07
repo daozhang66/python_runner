@@ -317,6 +317,110 @@ class TerminalViewState extends State<TerminalView> {
     );
   }
 
+  Widget _buildTerminalToolbar(
+    ColorScheme colors,
+    Color barColor,
+    List<LogEntry> logs,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: barColor,
+        border: Border(
+          bottom: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (widget.showLineNumberToggle)
+            IconButton(
+              icon: Icon(Icons.format_list_numbered,
+                  size: 18,
+                  color: _showLineNumbers
+                      ? colors.primary
+                      : colors.onSurfaceVariant),
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  setState(() => _showLineNumbers = !_showLineNumbers),
+              tooltip: _showLineNumbers ? '隐藏行号' : '显示行号',
+            ),
+          IconButton(
+            icon: Icon(Icons.search,
+                size: 18,
+                color: _searchVisible || _filterErrors
+                    ? colors.primary
+                    : colors.onSurfaceVariant),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() {
+              _searchVisible = !_searchVisible;
+              if (!_searchVisible) {
+                _searchQuery = '';
+                _searchController.clear();
+              }
+            }),
+            tooltip: '搜索',
+          ),
+          if (_filterErrors)
+            IconButton(
+              icon: Icon(Icons.error_outline, size: 18, color: colors.error),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => setState(() => _filterErrors = false),
+              tooltip: '显示全部',
+            ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.format_size, size: 18),
+            visualDensity: VisualDensity.compact,
+            onPressed: _showFontSizeSlider,
+            tooltip: '字体大小',
+          ),
+          if (logs.isNotEmpty)
+            TextButton.icon(
+              onPressed: _copyAll,
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('全部复制', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+          if (widget.onClear != null && logs.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              visualDensity: VisualDensity.compact,
+              onPressed: widget.onClear,
+              tooltip: '清空',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStdinPrompt(ColorScheme colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: widget.waitingForInput
+            ? colors.primary.withValues(alpha: 0.15)
+            : colors.onSurface.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '>',
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: widget.waitingForInput
+              ? colors.primary
+              : colors.onSurface.withValues(alpha: 0.2),
+        ),
+      ),
+    );
+  }
+
   // --- Build ---
 
   @override
@@ -338,80 +442,7 @@ class TerminalViewState extends State<TerminalView> {
       onScaleEnd: _handleScaleEnd,
       child: Column(
         children: [
-          // Toolbar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: barColor,
-              border: Border(
-                  bottom: BorderSide(
-                      color: colors.outlineVariant.withValues(alpha: 0.3))),
-            ),
-            child: Row(
-              children: [
-                if (widget.showLineNumberToggle)
-                  IconButton(
-                    icon: Icon(Icons.format_list_numbered,
-                        size: 18,
-                        color: _showLineNumbers
-                            ? colors.primary
-                            : colors.onSurfaceVariant),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () =>
-                        setState(() => _showLineNumbers = !_showLineNumbers),
-                    tooltip: _showLineNumbers ? '隐藏行号' : '显示行号',
-                  ),
-                IconButton(
-                  icon: Icon(Icons.search,
-                      size: 18,
-                      color: _searchVisible || _filterErrors
-                          ? colors.primary
-                          : colors.onSurfaceVariant),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() {
-                    _searchVisible = !_searchVisible;
-                    if (!_searchVisible) {
-                      _searchQuery = '';
-                      _searchController.clear();
-                    }
-                  }),
-                  tooltip: '搜索',
-                ),
-                if (_filterErrors)
-                  IconButton(
-                    icon: Icon(Icons.error_outline,
-                        size: 18, color: colors.error),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => setState(() => _filterErrors = false),
-                    tooltip: '显示全部',
-                  ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.format_size, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _showFontSizeSlider,
-                  tooltip: '字体大小',
-                ),
-                if (logs.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: _copyAll,
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('全部复制', style: TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                if (widget.onClear != null && logs.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: widget.onClear,
-                    tooltip: '清空',
-                  ),
-              ],
-            ),
-          ),
+          _buildTerminalToolbar(colors, barColor, logs),
 
           // Search bar
           if (_searchVisible)
@@ -555,27 +586,7 @@ class TerminalViewState extends State<TerminalView> {
                   padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: widget.waitingForInput
-                              ? colors.primary.withValues(alpha: 0.15)
-                              : colors.onSurface.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '>',
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: widget.waitingForInput
-                                ? colors.primary
-                                : colors.onSurface.withValues(alpha: 0.2),
-                          ),
-                        ),
-                      ),
+                      _buildStdinPrompt(colors),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(

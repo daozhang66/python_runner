@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/http_inspector_store.dart';
 import '../services/native_bridge.dart';
+import '../ui/app_badges.dart';
+import '../ui/app_empty_state.dart';
+import '../ui/app_surfaces.dart';
+import '../ui/app_toolbars.dart';
 
 class NetworkInspectorPage extends StatefulWidget {
   const NetworkInspectorPage({super.key});
@@ -46,51 +50,29 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
       body: Column(
         children: [
-          // --- Search bar ---
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            color: colors.surfaceContainerHighest,
-            child: Row(
-              children: [
-                const Icon(Icons.search, size: 18, color: Colors.grey),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      hintText: '搜索 URL / 域名...',
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                    ),
-                    onChanged: (v) => _store.setFilterDomain(v.trim()),
-                  ),
-                ),
-                if (_store.filterDomain.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      _searchController.clear();
-                      _store.setFilterDomain('');
-                    },
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.filter_list, size: 20),
-                  onPressed: () => _showFilterSheet(context),
-                  tooltip: '筛选',
-                  visualDensity: VisualDensity.compact,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed:
-                      _store.count == 0 ? null : () => _confirmClear(context),
-                  tooltip: '清空',
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
+          AppSearchBar(
+            controller: _searchController,
+            hintText: '搜索 URL / 域名...',
+            onChanged: (v) => _store.setFilterDomain(v.trim()),
+            onClear: () {
+              _searchController.clear();
+              _store.setFilterDomain('');
+            },
+            trailingActions: [
+              IconButton(
+                icon: const Icon(Icons.filter_list, size: 20),
+                onPressed: () => _showFilterSheet(context),
+                tooltip: '筛选',
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed:
+                    _store.count == 0 ? null : () => _confirmClear(context),
+                tooltip: '清空',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
           // --- Active filters ---
           if (_store.filterDomain.isNotEmpty ||
@@ -174,71 +156,17 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 ),
               );
             }),
-          // --- Stats bar ---
-          if (_store.count > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-              child: Row(
-                children: [
-                  _StatBadge(
-                      label: '${stats['total']}',
-                      icon: Icons.http,
-                      color: colors.primary),
-                  const SizedBox(width: 12),
-                  _StatBadge(
-                      label: '${stats['success']}',
-                      icon: Icons.check_circle,
-                      color: Colors.green),
-                  const SizedBox(width: 12),
-                  _StatBadge(
-                      label: '${stats['error']}',
-                      icon: Icons.error_outline,
-                      color: colors.error),
-                  const SizedBox(width: 12),
-                  if (stats['avgMs'] != null)
-                    _StatBadge(
-                        label: '${stats['avgMs']}ms',
-                        icon: Icons.speed,
-                        color: colors.onSurfaceVariant),
-                  const Spacer(),
-                  Text('全部 ${_store.count}',
-                      style: TextStyle(
-                          fontSize: 11, color: colors.onSurfaceVariant)),
-                ],
-              ),
-            ),
+          if (_store.count > 0) _buildRequestDashboard(stats),
 
           // --- Request list ---
           Expanded(
             child: records.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.wifi_find,
-                            size: 48,
-                            color:
-                                colors.onSurfaceVariant.withValues(alpha: 0.3)),
-                        const SizedBox(height: 12),
-                        Text(
-                          _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                        if (_store.count == 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '运行包含 HTTP 请求的脚本后\n请求将自动显示在这里',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.onSurfaceVariant
-                                      .withValues(alpha: 0.6)),
-                            ),
-                          ),
-                      ],
-                    ),
+                ? AppEmptyState(
+                    icon: Icons.wifi_find,
+                    title: _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
+                    subtitle: _store.count == 0
+                        ? '运行包含 HTTP 请求的脚本后，请求将自动显示在这里'
+                        : '尝试清空筛选条件',
                   )
                 : ListView.builder(
                     itemCount: records.length,
@@ -365,6 +293,43 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             builder: (_) => _HttpRecordDetailPage(record: record)));
   }
 
+  Widget _buildRequestDashboard(Map<String, dynamic> stats) {
+    final colors = Theme.of(context).colorScheme;
+    return AppSurface(
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            _StatBadge(
+                label: '${stats['total']}',
+                icon: Icons.http,
+                color: colors.primary),
+            const SizedBox(width: 12),
+            _StatBadge(
+                label: '${stats['success']}',
+                icon: Icons.check_circle,
+                color: Colors.green),
+            const SizedBox(width: 12),
+            _StatBadge(
+                label: '${stats['error']}',
+                icon: Icons.error_outline,
+                color: colors.error),
+            const SizedBox(width: 12),
+            if (stats['avgMs'] != null)
+              _StatBadge(
+                  label: '${stats['avgMs']}ms',
+                  icon: Icons.speed,
+                  color: colors.onSurfaceVariant),
+            const Spacer(),
+            Text('全部 ${_store.count}',
+                style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _confirmClear(BuildContext context) {
     showDialog(
       context: context,
@@ -400,19 +365,6 @@ class _HttpRecordTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final timeFmt = DateFormat('HH:mm:ss.SSS');
 
-    Color statusColor;
-    if (record.errorType != null) {
-      statusColor = colors.error;
-    } else if (record.statusCode == null) {
-      statusColor = colors.onSurfaceVariant;
-    } else if (record.statusCode! >= 200 && record.statusCode! < 300) {
-      statusColor = Colors.green.shade700;
-    } else if (record.statusCode! >= 300 && record.statusCode! < 400) {
-      statusColor = Colors.orange;
-    } else {
-      statusColor = colors.error;
-    }
-
     // Extract domain from URL
     String domain;
     try {
@@ -425,40 +377,13 @@ class _HttpRecordTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         child: Row(
           children: [
-            // Status badge
-            Container(
-              width: 44,
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                record.statusText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Method
-            SizedBox(
-              width: 36,
-              child: Text(
-                record.method,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: colors.primary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
+            _buildStatusBadge(context),
+            const SizedBox(width: 3),
+            _buildMethodBadge(context),
+            const SizedBox(width: 8),
             // URL + meta
             Expanded(
               child: Column(
@@ -502,6 +427,31 @@ class _HttpRecordTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMethodBadge(BuildContext context) {
+    return AppStatusBadge(
+      label: record.method,
+      tone: AppBadgeTone.info,
+      fontSize: 8.5,
+    );
+  }
+
+  Widget _buildStatusBadge(BuildContext context) {
+    final tone = record.errorType != null
+        ? AppBadgeTone.error
+        : record.statusCode == null
+            ? AppBadgeTone.neutral
+            : record.statusCode! >= 200 && record.statusCode! < 300
+                ? AppBadgeTone.success
+                : record.statusCode! >= 300 && record.statusCode! < 400
+                    ? AppBadgeTone.warning
+                    : AppBadgeTone.error;
+    return AppStatusBadge(
+      label: record.statusText,
+      tone: tone,
+      fontSize: 8.5,
     );
   }
 }
@@ -585,7 +535,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         children: [
           // --- Overview ---
-          _SectionCard(
+          AppSectionCard(
             title: '概览',
             icon: Icons.info_outline,
             children: [
@@ -600,7 +550,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           // --- Request Headers ---
-          _SectionCard(
+          AppSectionCard(
             title: '请求头 (${record.requestHeaders.length})',
             icon: Icons.arrow_upward,
             children: record.requestHeaders.entries
@@ -609,7 +559,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           ),
           if (record.requestBody != null && record.requestBody!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _SectionCard(
+            AppSectionCard(
               title: '请求体',
               icon: Icons.upload,
               children: [_CodeBlock(record.requestBody!)],
@@ -617,7 +567,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           ],
           const SizedBox(height: 8),
           // --- Response ---
-          _SectionCard(
+          AppSectionCard(
             title: '响应',
             icon: Icons.arrow_downward,
             children: [
@@ -633,7 +583,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           if (record.responseHeaders != null &&
               record.responseHeaders!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _SectionCard(
+            AppSectionCard(
               title: '响应头 (${record.responseHeaders!.length})',
               icon: Icons.arrow_downward,
               children: record.responseHeaders!.entries
@@ -644,7 +594,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           if (record.responseBodyPreview != null &&
               record.responseBodyPreview!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _SectionCard(
+            AppSectionCard(
               title: record.isImageBody
                   ? '响应图片'
                   : record.isMediaBody
@@ -735,47 +685,6 @@ class _HttpRecordDetailPage extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
-
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: colors.primary),
-                const SizedBox(width: 6),
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -786,23 +695,54 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(label,
-                style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hasLongValue = value.length > 24;
+        final useStackedLayout = constraints.maxWidth < 360 || hasLongValue;
+        final labelStyle =
+            TextStyle(fontSize: 11, color: colors.onSurfaceVariant);
+        final valueStyle = TextStyle(
+          fontSize: 11,
+          height: 1.35,
+          color: valueColor,
+          fontFamily: _looksTechnical(value) ? 'monospace' : null,
+        );
+
+        if (useStackedLayout) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: labelStyle),
+                const SizedBox(height: 2),
+                SelectableText(value, style: valueStyle),
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 90, child: Text(label, style: labelStyle)),
+              Expanded(child: SelectableText(value, style: valueStyle)),
+            ],
           ),
-          Expanded(
-            child: SelectableText(value,
-                style: TextStyle(fontSize: 11, color: valueColor)),
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  bool _looksTechnical(String text) {
+    return text.contains('/') ||
+        text.contains(':') ||
+        text.contains(';') ||
+        text.contains('_') ||
+        text.contains('-') ||
+        text.length > 32;
   }
 }
 

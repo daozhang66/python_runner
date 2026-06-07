@@ -1,0 +1,28 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('package manager uses compact install strip and package badges', () {
+    final source =
+        File('lib/pages/package_manager_page.dart').readAsStringSync();
+
+    expect(source, contains('Widget _buildInstallPanel('));
+    expect(source, contains('Widget _buildPackageListTile('));
+    expect(source, contains('AppSearchBar('));
+    expect(source, contains('AppStatusBadge('));
+    expect(source, contains('Widget _buildCompactInstallFields('));
+    expect(source, contains("hintText: '包名'"));
+    expect(source, contains("hintText: '版本'"));
+    expect(source, contains('SizedBox(width: 88'));
+    expect(source, contains('width: 76'));
+    expect(source, contains('height: 40'));
+    expect(source, contains('_buildInstallPanel(provider),'));
+    expect(source, isNot(contains('useStackedLayout')));
+    expect(source, isNot(contains('constraints.maxWidth < 720')));
+    expect(source, isNot(contains("hintText: '包名 (如 requests)'")));
+    expect(source, isNot(contains('if (false) _buildInstallPanel')));
+    expect(source, isNot(contains('ignore: dead_code')));
+    expect(source, isNot(contains('onChanged: (v) {}')));
+  });
+}

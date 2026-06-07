@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/log_entry.dart';
 import '../providers/execution_provider.dart';
 import '../models/execution_state.dart';
 import '../providers/script_provider.dart';
+import '../ui/app_badges.dart';
 import '../widgets/terminal_view.dart';
 
 class RunConsolePage extends StatefulWidget {
@@ -126,13 +126,6 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
     final isRunning = providerIsRunning && currentScriptName == scriptName;
 
-    final statusColor = isRunning
-        ? (isDark ? Colors.greenAccent : Colors.green)
-        : (status == ExecutionStatus.error
-            ? colors.error
-            : status == ExecutionStatus.timeout
-                ? Colors.orange
-                : colors.onSurfaceVariant);
     final statusText = isRunning
         ? (waiting ? '等待输入' : '运行中')
         : (status == ExecutionStatus.error
@@ -141,6 +134,7 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ? '超时'
                 : '已结束');
     final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
+    final statusColor = _statusColor(context, isRunning, waiting, status);
 
     return AppBar(
       backgroundColor: appBarBg,
@@ -149,20 +143,24 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 0,
       title: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: statusColor,
-              shape: BoxShape.circle,
-              boxShadow: isRunning
-                  ? [
-                      BoxShadow(
-                        color: statusColor.withValues(alpha: 0.5),
-                        blurRadius: 6,
-                      ),
-                    ]
-                  : null,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: Container(
+              key: ValueKey('$statusText-$isRunning'),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+                boxShadow: isRunning
+                    ? [
+                        BoxShadow(
+                          color: statusColor.withValues(alpha: 0.5),
+                          blurRadius: 6,
+                        ),
+                      ]
+                    : null,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -177,33 +175,12 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: isRunning
-                  ? _RunningTimer(
-                      key: ValueKey(statusText),
-                      startTime: runStartTime ?? DateTime.now(),
-                      label: waiting ? '等待输入' : '运行中',
-                      color: statusColor,
-                    )
-                  : Text(
-                      statusText,
-                      key: ValueKey(statusText),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: statusColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-            ),
+          _buildRunStatusBadge(
+            context,
+            isRunning: isRunning,
+            waiting: waiting,
+            status: status,
+            statusText: statusText,
           ),
           const SizedBox(width: 8),
         ],
@@ -223,6 +200,51 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
             tooltip: '重新运行',
           ),
       ],
+    );
+  }
+
+  Color _statusColor(
+    BuildContext context,
+    bool isRunning,
+    bool waiting,
+    ExecutionStatus status,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isRunning) {
+      return waiting
+          ? Colors.amber.shade700
+          : (isDark ? Colors.greenAccent : Colors.green);
+    }
+    return switch (status) {
+      ExecutionStatus.error => colors.error,
+      ExecutionStatus.timeout => Colors.orange,
+      _ => colors.onSurfaceVariant,
+    };
+  }
+
+  Widget _buildRunStatusBadge(
+    BuildContext context, {
+    required bool isRunning,
+    required bool waiting,
+    required ExecutionStatus status,
+    required String statusText,
+  }) {
+    final tone = isRunning
+        ? (waiting ? AppBadgeTone.warning : AppBadgeTone.success)
+        : switch (status) {
+            ExecutionStatus.error => AppBadgeTone.error,
+            ExecutionStatus.timeout => AppBadgeTone.warning,
+            _ => AppBadgeTone.neutral,
+          };
+
+    return AppStatusBadge(
+      label: statusText,
+      tone: tone,
+      icon: isRunning
+          ? (waiting ? Icons.keyboard_outlined : Icons.play_circle_outline)
+          : Icons.circle_outlined,
+      fontSize: 11,
     );
   }
 }
@@ -268,75 +290,5 @@ class _RunConsoleTerminalPane extends StatelessWidget {
       showLineNumberToggle: false,
       logVersion: logVersion,
     );
-  }
-}
-
-/// A real-time running timer widget that updates every second.
-class _RunningTimer extends StatefulWidget {
-  final DateTime startTime;
-  final String label;
-  final Color color;
-  const _RunningTimer({
-    super.key,
-    required this.startTime,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  State<_RunningTimer> createState() => _RunningTimerState();
-}
-
-class _RunningTimerState extends State<_RunningTimer> {
-  late DateTime _startTime;
-  Duration _elapsed = Duration.zero;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startTime = widget.startTime;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        _elapsed = DateTime.now().difference(_startTime);
-      });
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _RunningTimer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.startTime != widget.startTime) {
-      _startTime = widget.startTime;
-    }
-  }
-
-  String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60);
-    final s = d.inSeconds.remainder(60);
-    if (h > 0) {
-      return '${h}h${m.toString().padLeft(2, '0')}m';
-    }
-    if (m > 0) {
-      return '${m}m${s.toString().padLeft(2, '0')}s';
-    }
-    return '${s}s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '${widget.label} ${_formatDuration(_elapsed)}',
-      style: TextStyle(
-          fontSize: 11, color: widget.color, fontWeight: FontWeight.w500),
-    );
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
   }
 }
