@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/script_group.dart';
 import '../models/log_entry.dart';
 import '../models/execution_state.dart';
 import '../services/native_bridge.dart';
@@ -10,6 +11,7 @@ import '../services/app_logger.dart';
 import '../services/http_inspector_store.dart';
 import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
+import '../services/project_path_validator.dart';
 import '../services/script_name_validator.dart';
 import '../runtime/runtime_manager.dart';
 import '../runtime/runtime_request.dart';
@@ -439,6 +441,136 @@ class ExecutionProvider extends ChangeNotifier {
       _appendLiveLog(LogEntry(
         type: LogType.error,
         content: 'Failed to start: $e',
+        timestamp: DateTime.now(),
+      ));
+      _state = ExecutionState(
+        executionId: executionId,
+        status: ExecutionStatus.error,
+        exitCode: -1,
+      );
+      if (_logHistory.isNotEmpty) {
+        _logHistory.last.status = ExecutionStatus.error;
+        _logHistory.last.exitCode = -1;
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> executeScriptProject(ScriptGroup group) async {
+    if (!group.isProject) {
+      throw StateError('普通分组不能作为项目运行');
+    }
+
+    final projectKey =
+        ProjectPathValidator.normalizeProjectKey(group.projectKey ?? '');
+    final mainFilePath =
+        ProjectPathValidator.validateMainFilePath(group.mainFilePath ?? '');
+    final displayName = group.name.trim().isEmpty ? projectKey : group.name;
+
+    if (_state.status == ExecutionStatus.running) {
+      try {
+        await _runtimeManager.stopExecution();
+      } catch (_) {}
+      if (_logHistory.isNotEmpty) {
+        _logHistory.last.status = ExecutionStatus.error;
+        _logHistory.last.exitCode = 1;
+      }
+    }
+
+    final executionId = _nextExecutionId();
+    _currentScriptName = displayName;
+    _clearCurrentLogs();
+    _waitingForInput = false;
+    _currentInputPrompt = '';
+    _state = ExecutionState(
+      executionId: executionId,
+      status: ExecutionStatus.running,
+    );
+
+    int? timeoutSeconds;
+    String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
+      timeoutSeconds = prefs.getInt('execution_timeout');
+      preferredRuntimeBackendId = RuntimeManager.normalizePreferredBackendId(
+        prefs.getString(RuntimeManager.prefsKey),
+      );
+    } catch (_) {}
+
+    _logHistory.add(ScriptLogRecord(
+      scriptName: displayName,
+      startTime: DateTime.now(),
+    ));
+    _trimListToMax(_logHistory, maxHistoryRecords);
+    notifyListeners();
+
+    try {
+      if (preferredRuntimeBackendId != RuntimeManager.linuxLikeBackendId) {
+        throw StateError('项目只能在 Linux-like 引擎下运行，请先切换运行引擎');
+      }
+      if (_runtimeManagerLocked &&
+          _runtimeManager.activeBackendId !=
+              RuntimeManager.linuxLikeBackendId) {
+        throw StateError('当前执行引擎不支持项目运行');
+      }
+
+      final health = await RuntimeManager.linuxLike(_bridge).checkHealth();
+      if (!health.ok) {
+        throw StateError(health.message);
+      }
+      _selectRuntimeManager(RuntimeManager.linuxLikeBackendId);
+
+      final offset = DateTime.now().timeZoneOffset;
+      final totalMinutes = offset.inMinutes;
+      final absMinutes = totalMinutes.abs();
+      final h = absMinutes ~/ 60;
+      final m = absMinutes % 60;
+      final tzSign = totalMinutes >= 0 ? '-' : '+';
+      final tzValue = m > 0
+          ? 'UTC$tzSign$h:${m.toString().padLeft(2, '0')}'
+          : 'UTC$tzSign$h';
+
+      final environment = <String, String>{
+        'PYRUNNER_RUNTIME_BACKEND': RuntimeManager.linuxLikeBackendId,
+        'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
+        'TERM': 'xterm-256color',
+        'TZ': tzValue,
+      };
+
+      final overrideConfig = RequestOverrideConfig.instance;
+      final netDebugConfig = NetworkDebugConfig.instance;
+      if (overrideConfig.recordRequests || overrideConfig.overrideEnabled) {
+        environment.addAll({
+          'PYRUNNER_HTTP_HOOK_CONFIG': overrideConfig.toJsonString(),
+          'PYRUNNER_PROXY_HOST': netDebugConfig.proxyHost,
+          'PYRUNNER_PROXY_PORT': netDebugConfig.proxyPort > 0
+              ? netDebugConfig.proxyPort.toString()
+              : '',
+          'PYRUNNER_SSL_VERIFY': netDebugConfig.allowInsecureCerts ? '0' : '1',
+        });
+      }
+
+      await _runtimeManager.startScript(RuntimeRequest(
+        scriptName: displayName,
+        executionId: executionId,
+        environment: environment,
+        timeout: timeoutSeconds != null && timeoutSeconds > 0
+            ? Duration(seconds: timeoutSeconds)
+            : null,
+        projectKey: projectKey,
+        projectMainFilePath: mainFilePath,
+      ));
+      _logger.info(
+        '项目开始执行: $displayName (id: $executionId, runtime: linux_like)',
+        source: 'Execution',
+      );
+      _showFloatingBallIfNeeded(displayName);
+    } catch (e) {
+      _logger.error('项目启动失败: $displayName, error: $e', source: 'Execution');
+      _appendLiveLog(LogEntry(
+        type: LogType.error,
+        content: 'Failed to start project: $e',
         timestamp: DateTime.now(),
       ));
       _state = ExecutionState(

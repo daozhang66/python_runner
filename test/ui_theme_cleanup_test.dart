@@ -113,7 +113,7 @@ void main() {
     expect(
         modelSource, contains("isPinned: (map['isPinned'] as int? ?? 0) == 1"));
 
-    expect(dbSource, contains('version: 4'));
+    expect(dbSource, contains('version: 5'));
     expect(dbSource, contains('onUpgrade: _onUpgrade'));
     expect(dbSource, contains('isPinned INTEGER DEFAULT 0'));
     expect(dbSource, contains('sortOrder INTEGER DEFAULT 0'));
@@ -154,8 +154,8 @@ void main() {
     expect(pageSource, contains('onMove: (details)'));
     expect(pageSource, contains('ReorderableBuilder('));
     expect(pageSource, contains('enableDraggable: false'));
-    expect(pageSource,
-        contains('swapScriptPositionsByName(draggedName, targetName)'));
+    expect(pageSource, contains('swapScriptPositionsByName('));
+    expect(pageSource, contains('groupId: groupId'));
     expect(pageSource, isNot(contains('longPressDelay: Duration.zero')));
 
     expect(providerSource, contains('if (isPinned) return;'));

@@ -16,8 +16,12 @@ import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.BufferedReader
+import java.io.BufferedInputStream
 import java.io.InputStreamReader
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -159,6 +163,76 @@ class MainActivity : FlutterActivity() {
         return target
     }
 
+    private fun scriptProjectsDir(): File {
+        val dir = File(filesDir, "script_projects")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    private fun normalizeProjectKey(projectKey: String): String {
+        val safeKey = projectKey.trim()
+        require(safeKey.isNotEmpty()) { "项目标识不能为空" }
+        require(safeKey.all { it.isLetterOrDigit() || it == '_' || it == '-' }) {
+            "项目标识只能包含英文、数字、下划线和短横线"
+        }
+        require(!safeKey.contains('/') && !safeKey.contains('\\')) {
+            "项目标识不能包含路径分隔符"
+        }
+        require(safeKey.none { it.code < 32 || it.code == 127 }) {
+            "项目标识不能包含控制字符"
+        }
+        return safeKey
+    }
+
+    private fun normalizeProjectRelativePath(path: String): String {
+        val raw = path.trim()
+        require(raw.isNotEmpty()) { "项目路径不能为空" }
+        require(!raw.contains('\\')) { "项目路径不能包含反斜杠" }
+        require(!raw.startsWith("/") && !Regex("^[A-Za-z]:").containsMatchIn(raw)) {
+            "项目路径不能是绝对路径"
+        }
+        val parts = raw.split('/')
+        require(parts.none { it.isBlank() || it == "." || it == ".." }) {
+            "项目路径包含非法段"
+        }
+        require(raw.none { it.code < 32 || it.code == 127 }) {
+            "项目路径不能包含控制字符"
+        }
+        return parts.joinToString("/")
+    }
+
+    private fun normalizeProjectMainFilePath(path: String): String {
+        val safePath = normalizeProjectRelativePath(path)
+        require(safePath.endsWith(".py")) { "项目主程序必须是 .py 文件" }
+        return safePath
+    }
+
+    private fun safeProjectRoot(projectKey: String): File {
+        val safeKey = normalizeProjectKey(projectKey)
+        val projectsRoot = scriptProjectsDir().canonicalFile
+        val root = File(projectsRoot, safeKey).canonicalFile
+        require(root.toPath().startsWith(projectsRoot.toPath()) && root.name == safeKey) {
+            "项目目录越界"
+        }
+        return root
+    }
+
+    private fun safeProjectFile(projectKey: String, path: String): File {
+        val root = safeProjectRoot(projectKey)
+        val safePath = normalizeProjectRelativePath(path)
+        val target = File(root, safePath).canonicalFile
+        require(target.toPath().startsWith(root.toPath())) {
+            "项目文件路径越界"
+        }
+        return target
+    }
+
+    private fun projectRelativePath(root: File, file: File): String {
+        return root.canonicalFile.toPath()
+            .relativize(file.canonicalFile.toPath())
+            .joinToString("/")
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -249,6 +323,55 @@ class MainActivity : FlutterActivity() {
                         val content = call.argument<String>("content") ?: ""
                         handleSaveScript(name, content, result)
                     }
+                    "createScriptProject" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        handleCreateScriptProject(projectKey, result)
+                    }
+                    "deleteScriptProject" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        handleDeleteScriptProject(projectKey, result)
+                    }
+                    "listProjectFiles" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        handleListProjectFiles(projectKey, result)
+                    }
+                    "readProjectFile" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val path = call.argument<String>("path") ?: ""
+                        handleReadProjectFile(projectKey, path, result)
+                    }
+                    "saveProjectFile" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val path = call.argument<String>("path") ?: ""
+                        val content = call.argument<String>("content") ?: ""
+                        handleSaveProjectFile(projectKey, path, content, result)
+                    }
+                    "createProjectDirectory" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val path = call.argument<String>("path") ?: ""
+                        handleCreateProjectDirectory(projectKey, path, result)
+                    }
+                    "deleteProjectEntry" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val path = call.argument<String>("path") ?: ""
+                        handleDeleteProjectEntry(projectKey, path, result)
+                    }
+                    "renameProjectEntry" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val oldPath = call.argument<String>("oldPath") ?: ""
+                        val newPath = call.argument<String>("newPath") ?: ""
+                        handleRenameProjectEntry(projectKey, oldPath, newPath, result)
+                    }
+                    "importScriptProjectZip" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val uri = call.argument<String>("uri") ?: ""
+                        handleImportScriptProjectZip(projectKey, uri, result)
+                    }
+                    "exportScriptProjectZip" -> {
+                        val projectKey = call.argument<String>("projectKey") ?: ""
+                        val destDir = call.argument<String>("destDir")
+                        handleExportScriptProjectZip(projectKey, destDir, result)
+                    }
                     "executeScript" -> {
                         val name = call.argument<String>("name") ?: ""
                         val executionId = call.argument<String>("executionId") ?: ""
@@ -331,9 +454,20 @@ class MainActivity : FlutterActivity() {
                         val executionId = call.argument<String>("executionId") ?: ""
                         val workingDir = call.argument<String>("workingDir")
                         val timeoutSeconds = call.argument<Int>("timeoutSeconds") ?: 0
+                        val projectKey = call.argument<String>("projectKey")
+                        val projectMainFilePath = call.argument<String>("projectMainFilePath")
                         @Suppress("UNCHECKED_CAST")
                         val environment = call.argument<Map<String, String>>("environment")
-                        handleExecuteLinuxLikeScript(name, executionId, workingDir, environment, timeoutSeconds, result)
+                        handleExecuteLinuxLikeScript(
+                            name,
+                            executionId,
+                            workingDir,
+                            environment,
+                            timeoutSeconds,
+                            projectKey,
+                            projectMainFilePath,
+                            result
+                        )
                     }
                     "sendLinuxLikeStdin" -> {
                         val input = call.argument<String>("input") ?: ""
@@ -479,6 +613,265 @@ class MainActivity : FlutterActivity() {
             result.success(true)
         } catch (e: Exception) {
             result.error("1002", "保存脚本失败: ${e.message}", null)
+        }
+    }
+
+    // --- Project File Management ---
+
+    private fun handleCreateScriptProject(projectKey: String, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            if (!root.exists()) root.mkdirs()
+            result.success(mapOf("projectKey" to normalizeProjectKey(projectKey), "path" to root.absolutePath))
+        } catch (e: Exception) {
+            result.error("1021", "创建项目失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleDeleteScriptProject(projectKey: String, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            if (root.exists()) root.deleteRecursively()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1022", "删除项目失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleListProjectFiles(projectKey: String, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            if (!root.exists()) {
+                result.success(emptyList<Map<String, Any>>())
+                return
+            }
+            val files = root.walkTopDown()
+                .drop(1)
+                .map { file ->
+                    mapOf(
+                        "path" to projectRelativePath(root, file),
+                        "name" to file.name,
+                        "isDirectory" to file.isDirectory,
+                        "size" to if (file.isFile) file.length() else 0L,
+                        "modifiedAt" to file.lastModified()
+                    )
+                }
+                .sortedWith(compareBy<Map<String, Any>> { it["path"].toString().lowercase(Locale.US) }
+                    .thenBy { it["name"].toString() })
+                .toList()
+            result.success(files)
+        } catch (e: Exception) {
+            result.error("1023", "列出项目文件失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleReadProjectFile(projectKey: String, path: String, result: MethodChannel.Result) {
+        try {
+            val file = safeProjectFile(projectKey, path)
+            if (!file.isFile) {
+                result.error("1024", "项目文件不存在: $path", null)
+                return
+            }
+            result.success(file.readText())
+        } catch (e: Exception) {
+            result.error("1024", "读取项目文件失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleSaveProjectFile(projectKey: String, path: String, content: String, result: MethodChannel.Result) {
+        try {
+            val file = safeProjectFile(projectKey, path)
+            file.parentFile?.mkdirs()
+            file.writeText(content)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1025", "保存项目文件失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleCreateProjectDirectory(projectKey: String, path: String, result: MethodChannel.Result) {
+        try {
+            val dir = safeProjectFile(projectKey, path)
+            if (!dir.exists()) dir.mkdirs()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1026", "创建项目目录失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleDeleteProjectEntry(projectKey: String, path: String, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            val target = safeProjectFile(projectKey, path)
+            if (target.canonicalFile == root.canonicalFile) {
+                result.error("1027", "不能通过条目删除项目根目录", null)
+                return
+            }
+            if (target.exists()) target.deleteRecursively()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1027", "删除项目条目失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleRenameProjectEntry(projectKey: String, oldPath: String, newPath: String, result: MethodChannel.Result) {
+        try {
+            val source = safeProjectFile(projectKey, oldPath)
+            val target = safeProjectFile(projectKey, newPath)
+            if (!source.exists()) {
+                result.error("1028", "项目条目不存在: $oldPath", null)
+                return
+            }
+            if (target.exists()) {
+                result.error("1028", "目标条目已存在: $newPath", null)
+                return
+            }
+            target.parentFile?.mkdirs()
+            if (!source.renameTo(target)) {
+                throw IllegalStateException("系统拒绝重命名")
+            }
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("1028", "重命名项目条目失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleImportScriptProjectZip(projectKey: String, uriString: String, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            if (!root.exists()) root.mkdirs()
+            val input = openInputStreamFromPathOrUri(uriString)
+                ?: throw IllegalArgumentException("无法读取ZIP文件")
+            val importedFiles = mutableListOf<Map<String, Any>>()
+            var entryCount = 0
+            var totalBytes = 0L
+            val maxEntries = 2000
+            val maxEntryBytes = 20L * 1024L * 1024L
+            val maxTotalBytes = 200L * 1024L * 1024L
+
+            BufferedInputStream(input).use { buffered ->
+                ZipInputStream(buffered).use { zip ->
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        entryCount++
+                        if (entryCount > maxEntries) {
+                            throw IllegalArgumentException("ZIP条目过多")
+                        }
+                        val relativePath = normalizeZipEntryPath(entry.name)
+                        if (relativePath == null) {
+                            zip.closeEntry()
+                            continue
+                        }
+                        if (entry.size > maxEntryBytes) {
+                            throw IllegalArgumentException("ZIP条目过大: ${entry.name}")
+                        }
+                        val target = safeProjectFile(projectKey, relativePath)
+                        if (entry.isDirectory) {
+                            target.mkdirs()
+                        } else {
+                            target.parentFile?.mkdirs()
+                            var entryBytes = 0L
+                            target.outputStream().use { output ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val bytesRead = zip.read(buffer)
+                                    if (bytesRead == -1) break
+                                    entryBytes += bytesRead
+                                    totalBytes += bytesRead
+                                    if (entryBytes > maxEntryBytes) {
+                                        throw IllegalArgumentException("ZIP条目过大: ${entry.name}")
+                                    }
+                                    if (totalBytes > maxTotalBytes) {
+                                        throw IllegalArgumentException("ZIP总大小过大")
+                                    }
+                                    output.write(buffer, 0, bytesRead)
+                                }
+                            }
+                            importedFiles.add(
+                                mapOf(
+                                    "path" to projectRelativePath(root, target),
+                                    "name" to target.name,
+                                    "isDirectory" to false,
+                                    "size" to target.length(),
+                                    "modifiedAt" to target.lastModified()
+                                )
+                            )
+                        }
+                        zip.closeEntry()
+                    }
+                }
+            }
+            result.success(importedFiles.sortedBy { it["path"].toString().lowercase(Locale.US) })
+        } catch (e: Exception) {
+            result.error("1029", "导入项目ZIP失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleExportScriptProjectZip(projectKey: String, destDir: String?, result: MethodChannel.Result) {
+        try {
+            val root = safeProjectRoot(projectKey)
+            if (!root.isDirectory) {
+                result.error("1030", "项目目录不存在", null)
+                return
+            }
+            val targetDir = if (!destDir.isNullOrBlank()) {
+                File(destDir)
+            } else {
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "PythonRunner")
+            }
+            if (!targetDir.exists()) targetDir.mkdirs()
+            val zipFile = File(targetDir, "${normalizeProjectKey(projectKey)}.zip")
+            ZipOutputStream(zipFile.outputStream()).use { zip ->
+                root.walkTopDown()
+                    .drop(1)
+                    .filter { file -> file.isFile && !shouldSkipProjectZipEntry(projectRelativePath(root, file)) }
+                    .forEach { file ->
+                        val relativePath = projectRelativePath(root, file)
+                        zip.putNextEntry(ZipEntry(relativePath))
+                        file.inputStream().use { input -> input.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+            }
+            result.success(zipFile.absolutePath)
+        } catch (e: Exception) {
+            result.error("1030", "导出项目ZIP失败: ${e.message}", null)
+        }
+    }
+
+    private fun openInputStreamFromPathOrUri(value: String): java.io.InputStream? {
+        val text = value.trim()
+        if (text.isEmpty()) return null
+        if (text.startsWith("content://") || text.startsWith("file://")) {
+            return contentResolver.openInputStream(Uri.parse(text))
+        }
+        val file = File(text)
+        if (file.isFile) return file.inputStream()
+        return try {
+            contentResolver.openInputStream(Uri.parse(text))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun normalizeZipEntryPath(entryName: String): String? {
+        val raw = entryName.trim().removePrefix("./")
+        if (raw.isBlank()) return null
+        if (raw.startsWith("__MACOSX/") || raw.endsWith(".DS_Store")) return null
+        if (raw.contains('\\')) {
+            throw IllegalArgumentException("ZIP路径不能包含反斜杠: $entryName")
+        }
+        val directoryTrimmed = raw.trimEnd('/')
+        if (directoryTrimmed.isBlank()) return null
+        return normalizeProjectRelativePath(directoryTrimmed)
+    }
+
+    private fun shouldSkipProjectZipEntry(relativePath: String): Boolean {
+        val parts = relativePath.split('/')
+        return parts.any {
+            it == "__pycache__" ||
+                it == ".pytest_cache" ||
+                it == ".python_runner_sync" ||
+                it == ".python_runner_linux_like"
         }
     }
 
@@ -673,6 +1066,8 @@ class MainActivity : FlutterActivity() {
         workingDir: String?,
         environment: Map<String, String>?,
         timeoutSeconds: Int,
+        projectKey: String?,
+        projectMainFilePath: String?,
         result: MethodChannel.Result
     ) {
         val info = linuxLikeRuntimeManager.getInfo()
@@ -690,30 +1085,65 @@ class MainActivity : FlutterActivity() {
             } catch (_: Exception) {}
         }
 
-        val file = try {
-            safeScriptFile(name)
+        val executionTarget = try {
+            if (!projectKey.isNullOrBlank()) {
+                val safeMainPath = normalizeProjectMainFilePath(
+                    projectMainFilePath ?: throw IllegalArgumentException("项目主程序未设置")
+                )
+                val projectRoot = safeProjectRoot(projectKey)
+                val mainFile = safeProjectFile(projectKey, safeMainPath)
+                if (!projectRoot.isDirectory) {
+                    throw IllegalArgumentException("项目目录不存在: $projectKey")
+                }
+                if (!mainFile.isFile) {
+                    throw IllegalArgumentException("项目主程序不存在: $safeMainPath")
+                }
+                LinuxLikeExecutionTarget(
+                    displayName = name.trim().ifBlank { normalizeProjectKey(projectKey) },
+                    scriptFile = mainFile,
+                    workingDir = projectRoot.absolutePath,
+                    pythonPathEntries = listOf(
+                        projectRoot.absolutePath,
+                        mainFile.parentFile?.absolutePath
+                    ).filterNotNull().distinct()
+                )
+            } else {
+                val scriptFile = safeScriptFile(name)
+                if (!scriptFile.exists()) {
+                    throw IllegalArgumentException("脚本不存在 $name")
+                }
+                LinuxLikeExecutionTarget(
+                    displayName = name,
+                    scriptFile = scriptFile,
+                    workingDir = linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir),
+                    pythonPathEntries = emptyList()
+                )
+            }
         } catch (e: IllegalArgumentException) {
-            result.error("1001", e.message ?: "非法脚本名称", null)
-            return
-        }
-        if (!file.exists()) {
-            result.error("1001", "脚本不存在 $name", null)
+            result.error("1001", e.message ?: "非法执行目标", null)
             return
         }
 
         currentExecutionId = executionId
         currentExecutionStopRequested = false
-        startForegroundServiceSafely(PythonForegroundService.TASK_EXECUTE, scriptName = name)
+        startForegroundServiceSafely(PythonForegroundService.TASK_EXECUTE, scriptName = executionTarget.displayName)
 
         sendStatus(executionId, "running", null)
         result.success(mapOf("executionId" to executionId, "status" to "started"))
 
-        val resolvedWorkingDir = linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)
         val executionEnvironment = environment?.toMutableMap() ?: mutableMapOf()
+        val resolvedWorkingDir = executionTarget.workingDir
         executionEnvironment["HOME"] = resolvedWorkingDir
+        if (executionTarget.pythonPathEntries.isNotEmpty()) {
+            val existingPythonPath = executionEnvironment["PYTHONPATH"]?.takeIf { it.isNotBlank() }
+            executionEnvironment["PYTHONPATH"] =
+                (executionTarget.pythonPathEntries + listOfNotNull(existingPythonPath))
+                    .distinct()
+                    .joinToString(":")
+        }
 
         val command = linuxLikeRuntimeManager.buildPythonCommand(
-            file.absolutePath,
+            executionTarget.scriptFile.absolutePath,
             resolvedWorkingDir,
             executionEnvironment
         )
@@ -768,7 +1198,7 @@ class MainActivity : FlutterActivity() {
                 }
                 if (status == "error" || status == "timeout") {
                     _writeScriptErrorLog(
-                        name,
+                        executionTarget.displayName,
                         "Linux-like process exited with code $exitCode",
                         "stdout:\n${stdout.takeLast(4000)}\n\nstderr:\n${stderr.takeLast(4000)}"
                     )
@@ -777,7 +1207,7 @@ class MainActivity : FlutterActivity() {
                 sendLog("stderr", "Linux-like执行错误: ${e.message}")
                 status = if (currentExecutionStopRequested) "stopped" else "error"
                 exitCode = 1
-                _writeScriptErrorLog(name, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
+                _writeScriptErrorLog(executionTarget.displayName, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
             } finally {
                 currentExecutionProcess = null
                 currentExecutionThread = null
@@ -1811,6 +2241,13 @@ class MainActivity : FlutterActivity() {
         val exitCode: Int,
         val stdout: String,
         val stderr: String
+    )
+
+    private data class LinuxLikeExecutionTarget(
+        val displayName: String,
+        val scriptFile: File,
+        val workingDir: String,
+        val pythonPathEntries: List<String>
     )
 
     private fun runLinuxLikeCommandBlocking(

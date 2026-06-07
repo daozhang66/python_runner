@@ -6,9 +6,12 @@ import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import '../models/script_group.dart';
 import '../providers/script_provider.dart';
 import '../providers/execution_provider.dart';
+import '../runtime/runtime_manager.dart';
 import '../services/native_bridge.dart';
+import '../services/script_project_service.dart';
 import '../utils/app_page_transitions.dart';
 import '../widgets/confirm_dialog.dart';
+import 'script_project_page.dart';
 import 'script_editor_page.dart';
 import 'run_console_page.dart';
 import 'package:file_picker/file_picker.dart';
@@ -28,6 +31,10 @@ class ScriptListPageController {
   }
 
   bool handleBack() => _state?._handleBackNavigation() ?? false;
+
+  void refreshRuntimePreference() {
+    _state?._loadProjectAvailability();
+  }
 }
 
 class ScriptListPage extends StatefulWidget {
@@ -61,9 +68,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
   String _searchQuery = '';
   bool _searchMode = false;
   bool _multiSelectMode = false;
+  bool _linuxLikeSelected = false;
+  bool _linuxLikeAvailable = false;
   int? _activeGroupId;
   String? _activeGroupName;
   final Set<String> _selectedScripts = {};
+
+  bool get _canUseProjects => _linuxLikeSelected && _linuxLikeAvailable;
 
   @override
   void initState() {
@@ -72,6 +83,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
     context.read<ScriptProvider>().loadScripts();
     _loadViewMode();
     _loadScriptNameMaskPreference();
+    _loadProjectAvailability();
   }
 
   @override
@@ -125,6 +137,29 @@ class _ScriptListPageState extends State<ScriptListPage> {
     await prefs.setBool('script_name_mask_enabled', nextValue);
   }
 
+  Future<void> _loadProjectAvailability() async {
+    var selected = false;
+    var available = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      selected = RuntimeManager.normalizePreferredBackendId(
+            prefs.getString(RuntimeManager.prefsKey),
+          ) ==
+          RuntimeManager.linuxLikeBackendId;
+      if (selected) {
+        final info = await _bridge.getLinuxLikeRuntimeInfo();
+        available = info['available'] == 'true';
+      }
+    } catch (_) {
+      available = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _linuxLikeSelected = selected;
+      _linuxLikeAvailable = available;
+    });
+  }
+
   String _displayScriptName(String name, int _) {
     if (!_maskScriptNames) return name.replaceAll('.py', '');
     return _maskedScriptName;
@@ -156,9 +191,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
     int? groupId,
   ) {
     if (!_canAcceptListDrop(draggedName, targetName, groupId)) return;
-    context
-        .read<ScriptProvider>()
-        .swapScriptPositionsByName(draggedName, targetName);
+    context.read<ScriptProvider>().swapScriptPositionsByName(
+          draggedName,
+          targetName,
+          groupId: groupId,
+        );
   }
 
   Widget _buildListDragTarget({
@@ -257,6 +294,22 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   void _openGroup(ScriptGroup group) {
     if (group.id == null) return;
+    if (group.isProject) {
+      if (!_canUseProjects) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('项目只能在 Linux-like 引擎下使用')),
+        );
+        _loadProjectAvailability();
+        return;
+      }
+      Navigator.push(
+        context,
+        AppPageTransitions.sharedAxisLeftRight(
+          ScriptProjectPage(group: group),
+        ),
+      );
+      return;
+    }
     setState(() {
       _activeGroupId = group.id;
       _activeGroupName = group.name;
@@ -285,6 +338,12 @@ class _ScriptListPageState extends State<ScriptListPage> {
         break;
       case 'add_group':
         _showCreateGroupDialog();
+        break;
+      case 'add_project':
+        _showCreateProjectDialog();
+        break;
+      case 'import_project_zip':
+        _importProjectZip();
         break;
       case 'search':
         setState(() => _searchMode = true);
@@ -372,6 +431,192 @@ class _ScriptListPageState extends State<ScriptListPage> {
               );
             },
             child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _generateProjectKey() =>
+      'project_${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+
+  void _showCreateProjectDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('新建项目'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '项目名称',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+          maxLength: 30,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              await _createProject(name);
+            },
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createProject(String name) async {
+    final projectKey = _generateProjectKey();
+    final service = ScriptProjectService(_bridge);
+    final scriptProvider = context.read<ScriptProvider>();
+    try {
+      await service.createProject(projectKey, name);
+      final group = await scriptProvider.createProjectGroup(
+        name,
+        projectKey: projectKey,
+        mainFilePath: 'main.py',
+      );
+      if (group == null) {
+        await service.deleteProject(projectKey);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('项目名称已存在或创建失败')),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        AppPageTransitions.sharedAxisLeftRight(
+          ScriptProjectPage(group: group),
+        ),
+      );
+    } catch (e) {
+      await service.deleteProject(projectKey);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('创建项目失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importProjectZip() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+      withData: false,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法读取 ZIP 路径')),
+        );
+      }
+      return;
+    }
+    final defaultName =
+        file.name.replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
+    final name =
+        await _askProjectName(defaultName.isEmpty ? '导入项目' : defaultName);
+    if (name == null || name.isEmpty) return;
+    if (!mounted) return;
+
+    final projectKey = _generateProjectKey();
+    final service = ScriptProjectService(_bridge);
+    final scriptProvider = context.read<ScriptProvider>();
+    try {
+      await service.createEmptyProject(projectKey);
+      final group = await scriptProvider.createProjectGroup(
+        name,
+        projectKey: projectKey,
+      );
+      if (group == null) {
+        await service.deleteProject(projectKey);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('项目名称已存在或创建失败')),
+          );
+        }
+        return;
+      }
+      await _bridge.importScriptProjectZip(projectKey, path);
+      final files = await service.loadProjectFiles(group);
+      if (!mounted) return;
+      final selected = await showDialog<String>(
+        context: context,
+        builder: (ctx) => MainFileDialog(
+          files: service.pythonFilePaths(files),
+          recommendedFiles: service.recommendedMainFilePaths(files),
+          currentPath: null,
+        ),
+      );
+      if (selected != null) {
+        await scriptProvider.updateProjectMainFile(
+          group,
+          selected.isEmpty ? null : selected,
+        );
+      }
+      final updated = scriptProvider.groups.firstWhere(
+        (item) => item.id == group.id,
+        orElse: () => group,
+      );
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        AppPageTransitions.sharedAxisLeftRight(
+          ScriptProjectPage(group: updated),
+        ),
+      );
+    } catch (e) {
+      final matches = scriptProvider.groups
+          .where((group) => group.projectKey == projectKey);
+      final createdGroup = matches.isEmpty ? null : matches.first;
+      if (createdGroup?.id != null) {
+        await scriptProvider.deleteGroup(createdGroup!.id!);
+      }
+      await service.deleteProject(projectKey);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入项目失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _askProjectName(String defaultName) {
+    final controller = TextEditingController(text: defaultName);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('项目名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 30,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('确认'),
           ),
         ],
       ),
@@ -620,7 +865,9 @@ class _ScriptListPageState extends State<ScriptListPage> {
                   },
                 ),
               for (final group in provider.groups)
-                if (group.id != null && group.id != _activeGroupId)
+                if (!group.isProject &&
+                    group.id != null &&
+                    group.id != _activeGroupId)
                   ListTile(
                     leading: const Icon(Icons.folder_outlined),
                     title: Text(
@@ -813,7 +1060,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('重命名分组'),
+              title: Text(group.isProject ? '重命名项目' : '重命名分组'),
               onTap: () {
                 Navigator.pop(ctx);
                 _renameGroup(group);
@@ -822,9 +1069,9 @@ class _ScriptListPageState extends State<ScriptListPage> {
             ListTile(
               leading: Icon(Icons.delete_outline,
                   color: Theme.of(context).colorScheme.error),
-              title: Text('删除分组',
+              title: Text(group.isProject ? '删除项目' : '删除分组',
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              subtitle: const Text('分组内脚本会回到首页'),
+              subtitle: Text(group.isProject ? '项目文件会一并删除' : '分组内脚本会回到首页'),
               onTap: () {
                 Navigator.pop(ctx);
                 _deleteGroup(group);
@@ -842,7 +1089,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名分组'),
+        title: Text(group.isProject ? '重命名项目' : '重命名分组'),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -878,8 +1125,10 @@ class _ScriptListPageState extends State<ScriptListPage> {
     if (group.id == null) return;
     final confirmed = await ConfirmDialog.show(
       context,
-      title: '删除分组',
-      content: '确定要删除「${group.name}」吗？分组内脚本会回到首页。',
+      title: group.isProject ? '删除项目' : '删除分组',
+      content: group.isProject
+          ? '确定要删除项目「${group.name}」吗？项目文件会一并删除。'
+          : '确定要删除「${group.name}」吗？分组内脚本会回到首页。',
       confirmText: '删除',
       confirmColor: Theme.of(context).colorScheme.error,
     );
@@ -941,6 +1190,24 @@ class _ScriptListPageState extends State<ScriptListPage> {
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        if (_canUseProjects)
+          const PopupMenuItem(
+            value: 'add_project',
+            child: ListTile(
+              leading: Icon(Icons.account_tree_outlined),
+              title: Text('新建项目'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        if (_canUseProjects)
+          const PopupMenuItem(
+            value: 'import_project_zip',
+            child: ListTile(
+              leading: Icon(Icons.archive_outlined),
+              title: Text('导入项目 ZIP'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
         const PopupMenuItem(
           value: 'search',
           child: ListTile(
@@ -1147,17 +1414,103 @@ class _ScriptListPageState extends State<ScriptListPage> {
     );
   }
 
+  DateTime _homeRecentTime(dynamic item) {
+    if (item is ScriptGroup) return item.modifiedAt;
+    return item.modifiedAt as DateTime;
+  }
+
+  int _homeRecentSortOrder(dynamic item) {
+    if (item is ScriptGroup) return item.sortOrder;
+    return item.sortOrder as int;
+  }
+
+  int _compareHomeRecentItems(dynamic a, dynamic b) {
+    final timeCompare = _homeRecentTime(b).compareTo(_homeRecentTime(a));
+    if (timeCompare != 0) return timeCompare;
+    return _homeRecentSortOrder(a).compareTo(_homeRecentSortOrder(b));
+  }
+
+  double _homeItemExtent(dynamic item) {
+    return item is ScriptGroup ? _folderListItemExtent : _scriptListItemExtent;
+  }
+
+  Widget _buildHomeGroupCard(
+    ScriptProvider provider,
+    ScriptGroup group, {
+    required String keyPrefix,
+    required bool grid,
+  }) {
+    return _ScriptFolderCard(
+      key: ValueKey('${keyPrefix}_${group.id}'),
+      name: _displayGroupName(group.name),
+      masked: _maskScriptNames,
+      count: group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
+      isProject: group.isProject,
+      hasMainFile: group.mainFilePath != null,
+      grid: grid,
+      onTap: _multiSelectMode ? null : () => _openGroup(group),
+      onLongPress: _multiSelectMode ? null : () => _showGroupContextMenu(group),
+    );
+  }
+
+  Widget _buildHomeRecentGridItem(
+    ScriptProvider provider,
+    dynamic item,
+    int index,
+  ) {
+    if (item is ScriptGroup) {
+      return _buildHomeGroupCard(
+        provider,
+        item,
+        keyPrefix: 'home_project_grid',
+        grid: true,
+      );
+    }
+    return _buildFolderHomeGridScriptCard(
+      item,
+      index,
+      draggable: !_multiSelectMode && !_searchMode,
+    );
+  }
+
+  Widget _buildHomeRecentListItem(
+    ScriptProvider provider,
+    dynamic item,
+    int index, {
+    required int? reorderIndex,
+    required String keyPrefix,
+  }) {
+    if (item is ScriptGroup) {
+      return _buildHomeGroupCard(
+        provider,
+        item,
+        keyPrefix: keyPrefix,
+        grid: false,
+      );
+    }
+    return _buildFolderHomeScriptListItem(
+      item,
+      index,
+      reorderIndex: reorderIndex,
+    );
+  }
+
   Widget _buildFolderHome(ScriptProvider provider, List<dynamic> scripts) {
-    final groups = provider.groups;
+    final regularGroups =
+        provider.groups.where((group) => !group.isProject).toList();
+    final projectGroups =
+        provider.groups.where((group) => group.isProject).toList();
     final visibleScripts =
         scripts.where((script) => script.groupId == null).toList();
     final pinnedScripts =
         visibleScripts.where((script) => script.isPinned).toList();
     final regularScripts =
         visibleScripts.where((script) => !script.isPinned).toList();
+    final recentItems = <dynamic>[...regularScripts, ...projectGroups]
+      ..sort(_compareHomeRecentItems);
     final firstFolderIndex = pinnedScripts.length;
-    final firstRegularIndex = pinnedScripts.length + groups.length;
-    final itemCount = firstRegularIndex + regularScripts.length;
+    final firstRecentIndex = pinnedScripts.length + regularGroups.length;
+    final itemCount = firstRecentIndex + recentItems.length;
 
     if (_isGridView) {
       return GridView.builder(
@@ -1179,26 +1532,19 @@ class _ScriptListPageState extends State<ScriptListPage> {
             );
           }
 
-          if (index < firstRegularIndex) {
-            final group = groups[index - firstFolderIndex];
-            return _ScriptFolderCard(
-              key: ValueKey('home_group_grid_${group.id}'),
-              name: _displayGroupName(group.name),
-              masked: _maskScriptNames,
-              count:
-                  group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
+          if (index < firstRecentIndex) {
+            return _buildHomeGroupCard(
+              provider,
+              regularGroups[index - firstFolderIndex],
+              keyPrefix: 'home_group_grid',
               grid: true,
-              onTap: _multiSelectMode ? null : () => _openGroup(group),
-              onLongPress:
-                  _multiSelectMode ? null : () => _showGroupContextMenu(group),
             );
           }
 
-          final script = regularScripts[index - firstRegularIndex];
-          return _buildFolderHomeGridScriptCard(
-            script,
-            index - groups.length,
-            draggable: !_multiSelectMode && !_searchMode,
+          return _buildHomeRecentGridItem(
+            provider,
+            recentItems[index - firstRecentIndex],
+            index - regularGroups.length,
           );
         },
       );
@@ -1209,8 +1555,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
       return ListView.builder(
         itemExtentBuilder: (index, _) {
           if (index < firstFolderIndex) return _scriptListItemExtent;
-          if (index < firstRegularIndex) return _folderListItemExtent;
-          return _scriptListItemExtent;
+          if (index < firstRecentIndex) return _folderListItemExtent;
+          return _homeItemExtent(recentItems[index - firstRecentIndex]);
         },
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: itemCount,
@@ -1223,25 +1569,21 @@ class _ScriptListPageState extends State<ScriptListPage> {
             );
           }
 
-          if (index < firstRegularIndex) {
-            final group = groups[index - firstFolderIndex];
-            return _ScriptFolderCard(
-              key: ValueKey('home_group_list_${group.id}'),
-              name: _displayGroupName(group.name),
-              masked: _maskScriptNames,
-              count:
-                  group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
+          if (index < firstRecentIndex) {
+            return _buildHomeGroupCard(
+              provider,
+              regularGroups[index - firstFolderIndex],
+              keyPrefix: 'home_group_list',
               grid: false,
-              onTap: _multiSelectMode ? null : () => _openGroup(group),
-              onLongPress:
-                  _multiSelectMode ? null : () => _showGroupContextMenu(group),
             );
           }
 
-          return _buildFolderHomeScriptListItem(
-            regularScripts[index - firstRegularIndex],
-            index - groups.length,
+          return _buildHomeRecentListItem(
+            provider,
+            recentItems[index - firstRecentIndex],
+            index - regularGroups.length,
             reorderIndex: null,
+            keyPrefix: 'home_project_list',
           );
         },
       );
@@ -1250,8 +1592,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
     return ListView.builder(
       itemExtentBuilder: (index, _) {
         if (index < firstFolderIndex) return _scriptListItemExtent;
-        if (index < firstRegularIndex) return _folderListItemExtent;
-        return _scriptListItemExtent;
+        if (index < firstRecentIndex) return _folderListItemExtent;
+        return _homeItemExtent(recentItems[index - firstRecentIndex]);
       },
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: itemCount,
@@ -1264,25 +1606,23 @@ class _ScriptListPageState extends State<ScriptListPage> {
           );
         }
 
-        if (index < firstRegularIndex) {
-          final group = groups[index - firstFolderIndex];
-          return _ScriptFolderCard(
-            key: ValueKey('home_group_reorder_${group.id}'),
-            name: _displayGroupName(group.name),
-            masked: _maskScriptNames,
-            count:
-                group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
+        if (index < firstRecentIndex) {
+          return _buildHomeGroupCard(
+            provider,
+            regularGroups[index - firstFolderIndex],
+            keyPrefix: 'home_group_reorder',
             grid: false,
-            onTap: _multiSelectMode ? null : () => _openGroup(group),
-            onLongPress:
-                _multiSelectMode ? null : () => _showGroupContextMenu(group),
           );
         }
 
-        return _buildFolderHomeScriptListItem(
-          regularScripts[index - firstRegularIndex],
-          index - groups.length,
-          reorderIndex: index,
+        return _buildHomeRecentListItem(
+          provider,
+          recentItems[index - firstRecentIndex],
+          index - regularGroups.length,
+          reorderIndex: recentItems[index - firstRecentIndex] is ScriptGroup
+              ? null
+              : index,
+          keyPrefix: 'home_project_reorder',
         );
       },
     );
@@ -1490,9 +1830,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
       },
       onAcceptWithDetails: (details) {
         if (details.data == script.name) return;
-        context
-            .read<ScriptProvider>()
-            .swapScriptPositionsByName(details.data, script.name);
+        context.read<ScriptProvider>().swapScriptPositionsByName(
+              details.data,
+              script.name,
+              groupId: null,
+            );
       },
       builder: (context, candidateData, rejectedData) {
         return AnimatedScale(
@@ -1531,9 +1873,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   void _commitGridDragTarget(String draggedName, String targetName) {
     if (draggedName != targetName) {
-      context
-          .read<ScriptProvider>()
-          .swapScriptPositionsByName(draggedName, targetName);
+      context.read<ScriptProvider>().swapScriptPositionsByName(
+            draggedName,
+            targetName,
+            groupId: _activeGroupId,
+          );
     }
     _endGridDrag();
   }
@@ -1902,6 +2246,8 @@ class _ScriptFolderCard extends StatelessWidget {
   final String name;
   final bool masked;
   final int count;
+  final bool isProject;
+  final bool hasMainFile;
   final bool grid;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -1911,6 +2257,8 @@ class _ScriptFolderCard extends StatelessWidget {
     required this.name,
     required this.masked,
     required this.count,
+    this.isProject = false,
+    this.hasMainFile = false,
     required this.grid,
     this.onTap,
     this.onLongPress,
@@ -1919,6 +2267,10 @@ class _ScriptFolderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final icon = isProject ? Icons.account_tree_rounded : Icons.folder_rounded;
+    final subtitle = isProject
+        ? (hasMainFile ? '项目 · 已设置主程序' : '项目 · 未设置主程序')
+        : '$count 个脚本';
     final content = InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
@@ -1929,7 +2281,7 @@ class _ScriptFolderCard extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.folder_rounded, size: 42, color: colors.primary),
+                  Icon(icon, size: 42, color: colors.primary),
                   const Spacer(),
                   Text(
                     name,
@@ -1944,7 +2296,7 @@ class _ScriptFolderCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    '$count 个脚本',
+                    subtitle,
                     style:
                         TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                   ),
@@ -1959,8 +2311,7 @@ class _ScriptFolderCard extends StatelessWidget {
                       color: colors.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.folder_rounded,
-                        color: colors.onPrimaryContainer),
+                    child: Icon(icon, color: colors.onPrimaryContainer),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1983,7 +2334,7 @@ class _ScriptFolderCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          '$count 个脚本',
+                          subtitle,
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.onSurfaceVariant,

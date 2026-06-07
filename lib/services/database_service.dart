@@ -21,7 +21,7 @@ class DatabaseService {
     final path = join(dbPath, 'python_runner.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async => _createTables(db),
       onUpgrade: _onUpgrade,
     );
@@ -46,9 +46,13 @@ class DatabaseService {
         name TEXT NOT NULL UNIQUE,
         sortOrder INTEGER DEFAULT 0,
         createdAt INTEGER NOT NULL,
-        modifiedAt INTEGER NOT NULL
+        modifiedAt INTEGER NOT NULL,
+        projectKey TEXT,
+        mainFilePath TEXT,
+        isProject INTEGER DEFAULT 0
       )
     ''');
+    await _createProjectGroupIndexes(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -73,6 +77,22 @@ class DatabaseService {
       ''');
       await db.execute('ALTER TABLE scripts ADD COLUMN groupId INTEGER');
     }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE script_groups ADD COLUMN projectKey TEXT');
+      await db
+          .execute('ALTER TABLE script_groups ADD COLUMN mainFilePath TEXT');
+      await db.execute(
+          'ALTER TABLE script_groups ADD COLUMN isProject INTEGER DEFAULT 0');
+      await _createProjectGroupIndexes(db);
+    }
+  }
+
+  Future<void> _createProjectGroupIndexes(Database db) async {
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_script_groups_project_key
+      ON script_groups(projectKey)
+      WHERE projectKey IS NOT NULL
+    ''');
   }
 
   Future<void> _migrateSortOrder(Database db) async {
@@ -179,6 +199,29 @@ class DatabaseService {
         'name': name,
         'modifiedAt': DateTime.now().millisecondsSinceEpoch,
       },
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+  }
+
+  Future<void> updateProjectMainFile(int groupId, String? mainFilePath) async {
+    final db = await database;
+    await db.update(
+      'script_groups',
+      {
+        'mainFilePath': mainFilePath,
+        'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+  }
+
+  Future<void> touchGroup(int groupId) async {
+    final db = await database;
+    await db.update(
+      'script_groups',
+      {'modifiedAt': DateTime.now().millisecondsSinceEpoch},
       where: 'id = ?',
       whereArgs: [groupId],
     );

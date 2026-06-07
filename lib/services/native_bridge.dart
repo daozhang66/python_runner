@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'app_logger.dart';
+import '../models/script_project_file.dart';
+import 'project_path_validator.dart';
 import 'script_name_validator.dart';
 
 class NativeBridge {
@@ -171,6 +173,115 @@ class NativeBridge {
     return result?.toString() ?? '';
   }
 
+  Future<String> createScriptProject(String projectKey) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final result =
+        await _invoke('createScriptProject', {'projectKey': safeKey});
+    if (result is Map) {
+      return result['path']?.toString() ?? '';
+    }
+    return result?.toString() ?? '';
+  }
+
+  Future<bool> deleteScriptProject(String projectKey) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final result =
+        await _invoke('deleteScriptProject', {'projectKey': safeKey});
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<List<ScriptProjectFile>> listProjectFiles(String projectKey) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final result = await _invoke('listProjectFiles', {'projectKey': safeKey});
+    return (result as List)
+        .map((item) => ScriptProjectFile.fromMap(item as Map))
+        .toList();
+  }
+
+  Future<String> readProjectFile(String projectKey, String path) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safePath = ProjectPathValidator.normalizeRelativePath(path);
+    final result = await _invoke(
+      'readProjectFile',
+      {'projectKey': safeKey, 'path': safePath},
+    );
+    return result?.toString() ?? '';
+  }
+
+  Future<bool> saveProjectFile(
+      String projectKey, String path, String content) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safePath = ProjectPathValidator.normalizeRelativePath(path);
+    final result = await _invoke(
+      'saveProjectFile',
+      {'projectKey': safeKey, 'path': safePath, 'content': content},
+    );
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<bool> createProjectDirectory(String projectKey, String path) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safePath = ProjectPathValidator.normalizeRelativePath(path);
+    final result = await _invoke(
+      'createProjectDirectory',
+      {'projectKey': safeKey, 'path': safePath},
+    );
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<bool> deleteProjectEntry(String projectKey, String path) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safePath = ProjectPathValidator.normalizeRelativePath(path);
+    final result = await _invoke(
+      'deleteProjectEntry',
+      {'projectKey': safeKey, 'path': safePath},
+    );
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<bool> renameProjectEntry(
+      String projectKey, String oldPath, String newPath) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safeOldPath = ProjectPathValidator.normalizeRelativePath(oldPath);
+    final safeNewPath = ProjectPathValidator.normalizeRelativePath(newPath);
+    final result = await _invoke(
+      'renameProjectEntry',
+      {
+        'projectKey': safeKey,
+        'oldPath': safeOldPath,
+        'newPath': safeNewPath,
+      },
+    );
+    if (result is bool) return result;
+    return result == true;
+  }
+
+  Future<List<ScriptProjectFile>> importScriptProjectZip(
+      String projectKey, String uri) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final result = await _invoke(
+      'importScriptProjectZip',
+      {'projectKey': safeKey, 'uri': uri},
+    );
+    return (result as List)
+        .map((item) => ScriptProjectFile.fromMap(item as Map))
+        .toList();
+  }
+
+  Future<String> exportScriptProjectZip(String projectKey,
+      {String? destDir}) async {
+    final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
+    final result = await _invoke(
+      'exportScriptProjectZip',
+      {'projectKey': safeKey, 'destDir': destDir},
+    );
+    return result?.toString() ?? '';
+  }
+
   Future<Map<String, String>> getPythonInfo() async {
     final result = await _invoke('getPythonInfo', {});
     return _stringMap(result);
@@ -203,14 +314,25 @@ class NativeBridge {
   Future<void> executeLinuxLikeScript(String name, String executionId,
       {String? workingDir,
       Map<String, String>? environment,
-      int? timeoutSeconds}) async {
-    final safeName = ScriptNameValidator.normalize(name);
+      int? timeoutSeconds,
+      String? projectKey,
+      String? projectMainFilePath}) async {
+    final safeName =
+        projectKey == null ? ScriptNameValidator.normalize(name) : name.trim();
+    final safeProjectKey = projectKey == null
+        ? null
+        : ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safeProjectMainFilePath = projectMainFilePath == null
+        ? null
+        : ProjectPathValidator.validateMainFilePath(projectMainFilePath);
     await _invoke('executeLinuxLikeScript', {
       'name': safeName,
       'executionId': executionId,
       'workingDir': workingDir,
       'environment': environment,
       'timeoutSeconds': timeoutSeconds,
+      'projectKey': safeProjectKey,
+      'projectMainFilePath': safeProjectMainFilePath,
     });
   }
 
