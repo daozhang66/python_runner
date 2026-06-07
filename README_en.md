@@ -13,7 +13,14 @@ Python Runner is a Flutter-based Android app for running Python scripts with scr
   - List / grid view
   - Long-press actions and multi-select batch operations
   - Pinned scripts support
-  - Support script grouping
+  - Regular groups and Linux-like project groups
+
+- **Project script groups**
+  - Available only with the Linux-like runtime
+  - Create an empty project with a default `main.py`
+  - Import projects from ZIP files and let the user confirm or choose the main file
+  - Browse, edit, rename, and delete files or folders inside a project
+  - Run with the project root as the working directory, making project-local modules and resources easy to import
 
 - **Code editor**
   - Syntax highlighting
@@ -74,6 +81,9 @@ Python Runner is a Flutter-based Android app for running Python scripts with scr
 ### Linux-like
 
 - Based on Debian rootfs + proot
+- Supports regular scripts and project script groups
+- Project execution adds the project root and the main file directory to Python's search path, so project-local modules can be imported directly
+- ZIP imports scan `.py` files and recommend main-file candidates, but the final main file must be confirmed or selected by the user
 - Runtime files are installed under:
 
 ```text
