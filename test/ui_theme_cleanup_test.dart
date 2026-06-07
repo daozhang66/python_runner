@@ -43,7 +43,10 @@ void main() {
     expect(source, contains("'隐藏脚本名'"));
     expect(source, contains("'显示脚本名'"));
     expect(source, contains('_displayScriptName('));
-    expect(source, contains("'脚本 '"));
+    expect(source, contains('_displayGroupName('));
+    expect(source, contains("'●●●●●●'"));
+    expect(source, contains('const Color(0xFF050505)'));
+    expect(source, contains('masked: _maskScriptNames'));
     expect(source, contains('_buildScriptNameVisibilityButton(),'));
     expect(source.indexOf('_buildScriptNameVisibilityButton(),'),
         lessThan(source.indexOf('Icons.settings_outlined')));
@@ -138,9 +141,11 @@ void main() {
     final providerSource =
         File('lib/providers/script_provider.dart').readAsStringSync();
 
-    expect(pageSource, contains('buildDefaultDragHandles: false'));
     expect(pageSource,
         contains('final canDragScript = canDrag && !script.isPinned'));
+    expect(pageSource, contains('Widget _buildListDragTarget('));
+    expect(pageSource, contains('Widget _buildListDragHandle('));
+    expect(pageSource, contains('void _commitListDragTarget('));
     expect(pageSource, contains('Draggable<String>'));
     expect(
         pageSource, contains('dragAnchorStrategy: pointerDragAnchorStrategy'));

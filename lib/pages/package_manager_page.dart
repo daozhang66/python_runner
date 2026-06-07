@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/package_info.dart';
 import '../providers/package_provider.dart';
 import '../runtime/runtime_package.dart';
+import '../ui/app_badges.dart';
+import '../ui/app_empty_state.dart';
+import '../ui/app_surfaces.dart';
+import '../ui/app_toolbars.dart';
 import '../widgets/confirm_dialog.dart';
 
 class PackageManagerPage extends StatefulWidget {
@@ -97,7 +101,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
   Widget build(BuildContext context) {
     final provider = context.watch<PackageProvider>();
     final packages = provider.packages;
-    final installResult = _getInstallResult(provider.installLog);
 
     final userPackages = packages
         .where((p) => p.isUserPackage && _matchesSearch(p.name))
@@ -115,185 +118,15 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _packageController,
-                        enableSuggestions: false,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                          hintText: '包名 (如 requests)',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                        ),
-                        onSubmitted: (_) => _install(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 1,
-                      child: TextField(
-                        controller: _versionController,
-                        enableSuggestions: false,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                          hintText: '版本',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: provider.installing ? null : _install,
-                      child: const Text('安装'),
-                    ),
-                  ],
-                ),
-                if (provider.installing) ...[
-                  const SizedBox(height: 8),
-                  const LinearProgressIndicator(),
-                ],
-                if (provider.installLog.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  if (!provider.installing && installResult != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: installResult == _InstallResult.success
-                            ? Colors.green.withValues(alpha: 0.1)
-                            : Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: installResult == _InstallResult.success
-                              ? Colors.green.withValues(alpha: 0.4)
-                              : Colors.red.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            installResult == _InstallResult.success
-                                ? Icons.check_circle
-                                : Icons.error,
-                            size: 18,
-                            color: installResult == _InstallResult.success
-                                ? Colors.green
-                                : Colors.red,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: SelectableText(
-                              provider.installLog.last,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: installResult == _InstallResult.success
-                                    ? Colors.green.shade700
-                                    : Colors.red.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 100),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    child: Stack(
-                      children: [
-                        ListView.builder(
-                          shrinkWrap: true,
-                          reverse: true,
-                          itemCount: provider.installLog.length,
-                          itemBuilder: (_, i) => SelectableText(
-                            provider
-                                .installLog[provider.installLog.length - 1 - i],
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: InkWell(
-                            onTap: () =>
-                                _copyInstallLog(context, provider.installLog),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surface
-                                    .withValues(alpha: 0.8),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Icon(
-                                Icons.copy,
-                                size: 14,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          _buildInstallPanel(provider),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: TextField(
+            child: AppSearchBar(
               controller: _searchController,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: InputDecoration(
-                hintText: '搜索已安装的库...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-              ),
+              hintText: '搜索已安装的库...',
+              onChanged: (v) =>
+                  setState(() => _searchQuery = v.trim().toLowerCase()),
+              onClear: () => _searchController.clear(),
             ),
           ),
           const SizedBox(height: 8),
@@ -334,6 +167,127 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     );
   }
 
+  Widget _buildInstallPanel(PackageProvider provider) {
+    final result = _getInstallResult(provider.installLog);
+    final colors = Theme.of(context).colorScheme;
+
+    return AppSectionCard(
+      icon: Icons.add_box_outlined,
+      title: '安装库',
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          child: _buildCompactInstallFields(provider),
+        ),
+        if (provider.installing)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: LinearProgressIndicator(minHeight: 3),
+          ),
+        if (provider.installLog.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (!provider.installing && result != null)
+                      AppStatusBadge(
+                        label: result == _InstallResult.success ? '成功' : '失败',
+                        tone: result == _InstallResult.success
+                            ? AppBadgeTone.success
+                            : AppBadgeTone.error,
+                      )
+                    else
+                      const AppStatusBadge(
+                        label: '安装中',
+                        tone: AppBadgeTone.info,
+                      ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 16),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () =>
+                          _copyInstallLog(context, provider.installLog),
+                      tooltip: '复制日志',
+                    ),
+                  ],
+                ),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 72),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:
+                        colors.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    provider.installLog.reversed.take(3).join('\n'),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10.5,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCompactInstallFields(PackageProvider provider) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _packageController,
+            enableSuggestions: false,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              hintText: '包名',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            ),
+            onSubmitted: (_) => _install(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(width: 88, child: _buildVersionField()),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 76,
+          height: 40,
+          child: FilledButton(
+            onPressed: provider.installing ? null : _install,
+            style: FilledButton.styleFrom(
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('安装'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVersionField() {
+    return TextField(
+      controller: _versionController,
+      enableSuggestions: false,
+      autocorrect: false,
+      decoration: const InputDecoration(
+        hintText: '版本',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      ),
+      onSubmitted: (_) => _install(),
+    );
+  }
+
   Widget _buildPackageList(
     BuildContext context,
     List<PackageInfo> packages,
@@ -341,12 +295,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     required bool canDelete,
   }) {
     if (packages.isEmpty) {
-      return Center(
-        child: Text(
-          _searchQuery.isNotEmpty ? '未找到匹配的库' : '暂无',
-          style:
-              TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+      return AppEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: _searchQuery.isNotEmpty ? '未找到匹配的库' : '暂无库',
+        subtitle: canDelete ? '可在上方安装 Python 包' : '当前运行环境未返回内置库',
       );
     }
 
@@ -354,40 +306,68 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       itemCount: packages.length,
       itemBuilder: (context, index) {
         final pkg = packages[index];
-        return ListTile(
-          dense: true,
-          title: Text(pkg.name),
-          subtitle: Text(pkg.version, style: const TextStyle(fontSize: 12)),
-          trailing: canDelete
-              ? IconButton(
-                  icon: Icon(
-                    Icons.delete_outline,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  onPressed: () async {
-                    final confirmed = await ConfirmDialog.show(
-                      context,
-                      title: '卸载库',
-                      content: '确定要卸载 "${pkg.name}" 吗？',
-                      confirmText: '卸载',
-                      confirmColor: Theme.of(context).colorScheme.error,
-                    );
-                    if (!confirmed || !context.mounted) return;
-
-                    final result = await provider.uninstallPackage(pkg.name);
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(_buildUninstallMessage(pkg.name, result)),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                )
-              : null,
+        return _buildPackageListTile(
+          context,
+          pkg,
+          provider,
+          canDelete: canDelete,
         );
       },
+    );
+  }
+
+  Widget _buildPackageListTile(
+    BuildContext context,
+    PackageInfo pkg,
+    PackageProvider provider, {
+    required bool canDelete,
+  }) {
+    return AppSurface(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: ListTile(
+        dense: true,
+        title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(pkg.version, style: const TextStyle(fontSize: 12)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppStatusBadge(
+              label: pkg.isUserPackage ? '用户' : '内置',
+              tone:
+                  pkg.isUserPackage ? AppBadgeTone.info : AppBadgeTone.neutral,
+            ),
+            if (canDelete) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: () async {
+                  final confirmed = await ConfirmDialog.show(
+                    context,
+                    title: '卸载库',
+                    content: '确定要卸载 "${pkg.name}" 吗？',
+                    confirmText: '卸载',
+                    confirmColor: Theme.of(context).colorScheme.error,
+                  );
+                  if (!confirmed || !context.mounted) return;
+
+                  final result = await provider.uninstallPackage(pkg.name);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(_buildUninstallMessage(pkg.name, result)),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

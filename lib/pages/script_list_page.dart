@@ -14,9 +14,31 @@ import 'run_console_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
+class ScriptListPageController {
+  _ScriptListPageState? _state;
+
+  void _attach(_ScriptListPageState state) {
+    _state = state;
+  }
+
+  void _detach(_ScriptListPageState state) {
+    if (identical(_state, state)) {
+      _state = null;
+    }
+  }
+
+  bool handleBack() => _state?._handleBackNavigation() ?? false;
+}
+
 class ScriptListPage extends StatefulWidget {
   final VoidCallback? onSettingsTap;
-  const ScriptListPage({super.key, this.onSettingsTap});
+  final ScriptListPageController? controller;
+
+  const ScriptListPage({
+    super.key,
+    this.onSettingsTap,
+    this.controller,
+  });
 
   @override
   State<ScriptListPage> createState() => _ScriptListPageState();
@@ -25,6 +47,7 @@ class ScriptListPage extends StatefulWidget {
 class _ScriptListPageState extends State<ScriptListPage> {
   static const double _scriptListItemExtent = 94;
   static const double _folderListItemExtent = 84;
+  static const String _maskedScriptName = '●●●●●●';
 
   final _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
   bool _isGridView = false;
@@ -45,13 +68,24 @@ class _ScriptListPageState extends State<ScriptListPage> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(this);
     context.read<ScriptProvider>().loadScripts();
     _loadViewMode();
     _loadScriptNameMaskPreference();
   }
 
   @override
+  void didUpdateWidget(covariant ScriptListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller?._detach(this);
     _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
@@ -91,10 +125,114 @@ class _ScriptListPageState extends State<ScriptListPage> {
     await prefs.setBool('script_name_mask_enabled', nextValue);
   }
 
-  String _displayScriptName(String name, int index) {
+  String _displayScriptName(String name, int _) {
     if (!_maskScriptNames) return name.replaceAll('.py', '');
-    const maskedPrefix = '脚本 ';
-    return '$maskedPrefix${(index + 1).toString().padLeft(2, '0')}';
+    return _maskedScriptName;
+  }
+
+  String _displayGroupName(String name) {
+    if (!_maskScriptNames) return name;
+    return _maskedScriptName;
+  }
+
+  TextStyle? get _maskedNameStyle =>
+      _maskScriptNames ? const TextStyle(color: Color(0xFF050505)) : null;
+
+  bool _canAcceptListDrop(String draggedName, String targetName, int? groupId) {
+    if (draggedName == targetName) return false;
+    final groupScripts = context.read<ScriptProvider>().scriptsInGroup(groupId);
+    final draggedIndex =
+        groupScripts.indexWhere((script) => script.name == draggedName);
+    final targetIndex =
+        groupScripts.indexWhere((script) => script.name == targetName);
+    if (draggedIndex < 0 || targetIndex < 0) return false;
+    return !groupScripts[draggedIndex].isPinned &&
+        !groupScripts[targetIndex].isPinned;
+  }
+
+  void _commitListDragTarget(
+    String draggedName,
+    String targetName,
+    int? groupId,
+  ) {
+    if (!_canAcceptListDrop(draggedName, targetName, groupId)) return;
+    context
+        .read<ScriptProvider>()
+        .swapScriptPositionsByName(draggedName, targetName);
+  }
+
+  Widget _buildListDragTarget({
+    required String scriptName,
+    required int? groupId,
+    required Widget child,
+  }) {
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) =>
+          _canAcceptListDrop(details.data, scriptName, groupId),
+      onAcceptWithDetails: (details) =>
+          _commitListDragTarget(details.data, scriptName, groupId),
+      builder: (context, candidateData, rejectedData) {
+        return AnimatedScale(
+          scale: candidateData.isEmpty ? 1 : 0.985,
+          duration: const Duration(milliseconds: 100),
+          child: child,
+        );
+      },
+    );
+  }
+
+  Widget _buildListDragHandle(String scriptName, Color color) {
+    return Draggable<String>(
+      data: scriptName,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Icon(Icons.drag_indicator, size: 24, color: color),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.35,
+        child: Icon(Icons.drag_indicator, size: 22, color: color),
+      ),
+      child: Icon(Icons.drag_indicator, size: 22, color: color),
+    );
+  }
+
+  bool _handleBackNavigation() {
+    if (_multiSelectMode) {
+      setState(() {
+        _multiSelectMode = false;
+        _selectedScripts.clear();
+      });
+      return true;
+    }
+    if (_searchMode) {
+      _exitSearch();
+      return true;
+    }
+    if (_activeGroupId != null) {
+      _closeGroup();
+      return true;
+    }
+    return false;
+  }
+
+  Widget _buildMaskedScriptNameText(
+    String text, {
+    required double fontSize,
+    required FontWeight fontWeight,
+    required int maxLines,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: _maskScriptNames ? const Color(0xFF050505) : colors.onSurface,
+      ),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   void _clearSearch() {
@@ -425,7 +563,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
       SnackBar(
         content: Text(groupId == null
             ? '已将 ${names.length} 个脚本移出到首页'
-            : '已将 ${names.length} 个脚本移动到「$targetLabel」'),
+            : '已将 ${names.length} 个脚本移动到「${_maskScriptNames ? _maskedScriptName : targetLabel}」'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -485,7 +623,10 @@ class _ScriptListPageState extends State<ScriptListPage> {
                 if (group.id != null && group.id != _activeGroupId)
                   ListTile(
                     leading: const Icon(Icons.folder_outlined),
-                    title: Text(group.name),
+                    title: Text(
+                      _displayGroupName(group.name),
+                      style: _maskedNameStyle,
+                    ),
                     onTap: () {
                       Navigator.pop(ctx);
                       _moveScriptsToGroup(names, group.id, group.name);
@@ -937,7 +1078,10 @@ class _ScriptListPageState extends State<ScriptListPage> {
                         ),
                   title: _activeGroupId == null
                       ? _buildScriptTitleBadge(allScripts.length)
-                      : Text(_activeGroupName ?? '分组'),
+                      : Text(
+                          _displayGroupName(_activeGroupName ?? '分组'),
+                          style: _maskedNameStyle,
+                        ),
                   actions: _activeGroupId == null
                       ? [
                           _buildScriptNameVisibilityButton(),
@@ -1039,7 +1183,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
             final group = groups[index - firstFolderIndex];
             return _ScriptFolderCard(
               key: ValueKey('home_group_grid_${group.id}'),
-              name: group.name,
+              name: _displayGroupName(group.name),
+              masked: _maskScriptNames,
               count:
                   group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
               grid: true,
@@ -1082,7 +1227,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
             final group = groups[index - firstFolderIndex];
             return _ScriptFolderCard(
               key: ValueKey('home_group_list_${group.id}'),
-              name: group.name,
+              name: _displayGroupName(group.name),
+              masked: _maskScriptNames,
               count:
                   group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
               grid: false,
@@ -1101,8 +1247,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
       );
     }
 
-    return ReorderableListView.builder(
-      buildDefaultDragHandles: false,
+    return ListView.builder(
       itemExtentBuilder: (index, _) {
         if (index < firstFolderIndex) return _scriptListItemExtent;
         if (index < firstRegularIndex) return _folderListItemExtent;
@@ -1110,13 +1255,6 @@ class _ScriptListPageState extends State<ScriptListPage> {
       },
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: itemCount,
-      onReorderItem: (int oldIndex, int newIndex) {
-        if (oldIndex < firstRegularIndex || newIndex < firstRegularIndex) {
-          return;
-        }
-        context.read<ScriptProvider>().reorderScriptInGroup(
-            null, oldIndex - groups.length, newIndex - groups.length);
-      },
       itemBuilder: (context, index) {
         if (index < firstFolderIndex) {
           return _buildFolderHomeScriptListItem(
@@ -1130,7 +1268,8 @@ class _ScriptListPageState extends State<ScriptListPage> {
           final group = groups[index - firstFolderIndex];
           return _ScriptFolderCard(
             key: ValueKey('home_group_reorder_${group.id}'),
-            name: group.name,
+            name: _displayGroupName(group.name),
+            masked: _maskScriptNames,
             count:
                 group.id == null ? 0 : provider.scriptCountInGroup(group.id!),
             grid: false,
@@ -1156,7 +1295,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
     final selected = _selectedScripts.contains(script.name);
     final canDragScript = reorderIndex != null && !script.isPinned;
 
-    return _ScriptCardSurface(
+    final card = _ScriptCardSurface(
       key: ValueKey('home_script_${script.name}'),
       colors: colors,
       selected: _multiSelectMode && selected,
@@ -1197,12 +1336,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
                 )
               else ...[
                 if (canDragScript)
-                  ReorderableDragStartListener(
-                    index: reorderIndex,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Icon(Icons.drag_indicator,
-                          size: 22, color: colors.onSurfaceVariant),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: _buildListDragHandle(
+                      script.name,
+                      colors.onSurfaceVariant,
                     ),
                   ),
                 _ScriptIcon(colors: colors, size: 44),
@@ -1210,18 +1348,19 @@ class _ScriptListPageState extends State<ScriptListPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(
-                          child: Text(displayName,
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.onSurface),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
+                          child: _buildMaskedScriptNameText(
+                            displayName,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            maxLines: 1,
+                          ),
                         ),
                         if (script.isPinned) ...[
                           const SizedBox(width: 6),
@@ -1258,6 +1397,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
         ),
       ),
     );
+
+    if (!canDragScript) return card;
+    return _buildListDragTarget(
+      scriptName: script.name,
+      groupId: null,
+      child: card,
+    );
   }
 
   Widget _buildFolderHomeGridScriptCard(dynamic script, int index,
@@ -1268,6 +1414,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
       return _ScriptGridCard(
         key: feedback ? null : ValueKey('home_script_grid_${script.name}'),
         name: _displayScriptName(script.name, index),
+        masked: _maskScriptNames,
         modifiedAt: script.modifiedAt,
         runCount: script.runCount,
         dateFormat: _dateFormat,
@@ -1400,7 +1547,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
       final displayName = _displayScriptName(script.name, index);
       final selected = _selectedScripts.contains(script.name);
       final canDragScript = canDrag && !script.isPinned;
-      return _ScriptCardSurface(
+      final card = _ScriptCardSurface(
         key: ValueKey('script_${script.name}'),
         colors: colors,
         selected: _multiSelectMode && selected,
@@ -1441,12 +1588,11 @@ class _ScriptListPageState extends State<ScriptListPage> {
                   )
                 else ...[
                   if (canDragScript)
-                    ReorderableDragStartListener(
-                      index: index,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(Icons.drag_indicator,
-                            size: 22, color: colors.onSurfaceVariant),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: _buildListDragHandle(
+                        script.name,
+                        colors.onSurfaceVariant,
                       ),
                     ),
                   _ScriptIcon(colors: colors, size: 44),
@@ -1454,18 +1600,19 @@ class _ScriptListPageState extends State<ScriptListPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           Expanded(
-                            child: Text(displayName,
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: colors.onSurface),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
+                            child: _buildMaskedScriptNameText(
+                              displayName,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              maxLines: 1,
+                            ),
                           ),
                           if (script.isPinned) ...[
                             const SizedBox(width: 6),
@@ -1502,6 +1649,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
           ),
         ),
       );
+
+      if (!canDragScript) return card;
+      return _buildListDragTarget(
+        scriptName: script.name,
+        groupId: _activeGroupId,
+        child: card,
+      );
     }
 
     if (!canDrag) {
@@ -1513,16 +1667,10 @@ class _ScriptListPageState extends State<ScriptListPage> {
       );
     }
 
-    return ReorderableListView.builder(
-      buildDefaultDragHandles: false,
+    return ListView.builder(
       itemExtentBuilder: (_, __) => _scriptListItemExtent,
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: scripts.length,
-      onReorderItem: (int oldIndex, int newIndex) {
-        context
-            .read<ScriptProvider>()
-            .reorderScriptInGroup(_activeGroupId, oldIndex, newIndex);
-      },
       itemBuilder: (context, index) => buildItem(index),
     );
   }
@@ -1540,6 +1688,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
       return _ScriptGridCard(
         key: ValueKey('script_grid_static_${script.name}'),
         name: _displayScriptName(script.name, index),
+        masked: _maskScriptNames,
         modifiedAt: script.modifiedAt,
         runCount: script.runCount,
         dateFormat: _dateFormat,
@@ -1619,6 +1768,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
         return _ScriptGridCard(
           key: feedback ? null : ValueKey('script_grid_${displayScript.name}'),
           name: _displayScriptName(displayScript.name, index),
+          masked: _maskScriptNames,
           modifiedAt: displayScript.modifiedAt,
           runCount: displayScript.runCount,
           dateFormat: _dateFormat,
@@ -1750,6 +1900,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
 class _ScriptFolderCard extends StatelessWidget {
   final String name;
+  final bool masked;
   final int count;
   final bool grid;
   final VoidCallback? onTap;
@@ -1758,6 +1909,7 @@ class _ScriptFolderCard extends StatelessWidget {
   const _ScriptFolderCard({
     super.key,
     required this.name,
+    required this.masked,
     required this.count,
     required this.grid,
     this.onTap,
@@ -1784,7 +1936,8 @@ class _ScriptFolderCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: colors.onSurface,
+                      color:
+                          masked ? const Color(0xFF050505) : colors.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1812,6 +1965,8 @@ class _ScriptFolderCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -1819,7 +1974,9 @@ class _ScriptFolderCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: colors.onSurface,
+                            color: masked
+                                ? const Color(0xFF050505)
+                                : colors.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1856,6 +2013,7 @@ class _ScriptFolderCard extends StatelessWidget {
 
 class _ScriptGridCard extends StatelessWidget {
   final String name;
+  final bool masked;
   final DateTime modifiedAt;
   final int runCount;
   final DateFormat dateFormat;
@@ -1869,6 +2027,7 @@ class _ScriptGridCard extends StatelessWidget {
   const _ScriptGridCard({
     super.key,
     required this.name,
+    required this.masked,
     required this.modifiedAt,
     required this.runCount,
     required this.dateFormat,
@@ -1926,7 +2085,9 @@ class _ScriptGridCard extends StatelessWidget {
                           fontSize: 14,
                           height: 1.2,
                           fontWeight: FontWeight.w600,
-                          color: colors.onSurface),
+                          color: masked
+                              ? const Color(0xFF050505)
+                              : colors.onSurface),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),
                   const Spacer(),

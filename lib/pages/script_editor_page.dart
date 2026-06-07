@@ -9,6 +9,7 @@ import 'package:re_highlight/styles/vs.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import '../providers/script_provider.dart';
 import '../providers/execution_provider.dart';
+import '../ui/app_toolbars.dart';
 import '../utils/app_page_transitions.dart';
 import 'run_console_page.dart';
 
@@ -224,7 +225,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     }
   }
 
-  Widget _buildToolbar() {
+  Widget _buildCommandBar(bool isThisRunning) {
     if (_readOnly) return const SizedBox.shrink();
     return Container(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -232,16 +233,79 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          _ToolbarBtn(label: '⇥ 缩进', onTap: () => _controller.applyIndent()),
-          const SizedBox(width: 4),
-          _ToolbarBtn(label: '⇤ 取消', onTap: () => _controller.applyOutdent()),
-          const SizedBox(width: 4),
-          _ToolbarBtn(label: '↩ 撤回', onTap: () => _controller.undo()),
-          const SizedBox(width: 4),
-          _ToolbarBtn(label: '↪ 重做', onTap: () => _controller.redo()),
+          AppToolbarButton(
+            icon: Icons.format_indent_increase,
+            tooltip: '缩进',
+            onPressed: () => _controller.applyIndent(),
+          ),
+          AppToolbarButton(
+            icon: Icons.format_indent_decrease,
+            tooltip: '反缩进',
+            onPressed: () => _controller.applyOutdent(),
+          ),
+          AppToolbarButton(
+            icon: Icons.undo,
+            tooltip: '撤销',
+            onPressed: () => _controller.undo(),
+          ),
+          AppToolbarButton(
+            icon: Icons.redo,
+            tooltip: '重做',
+            onPressed: () => _controller.redo(),
+          ),
           const Spacer(),
-          _ToolbarBtn(label: '搜索', onTap: () => _findController?.findMode()),
+          AppToolbarButton(
+            icon: Icons.search,
+            tooltip: '搜索',
+            onPressed: () => _findController?.findMode(),
+          ),
+          AppToolbarButton(
+            icon: isThisRunning ? Icons.stop : Icons.play_arrow,
+            active: true,
+            tooltip: isThisRunning ? '停止' : '运行',
+            onPressed: isThisRunning
+                ? () => context.read<ExecutionProvider>().stopExecution()
+                : _run,
+          ),
           const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditorStatusBar() {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
+        border: Border(
+          top: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.35)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            _modified ? '已修改' : '已保存',
+            style: TextStyle(
+              fontSize: 11,
+              color: _modified ? colors.primary : colors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _readOnly ? '只读' : '编辑',
+            style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+          ),
+          const Spacer(),
+          Text(
+            '${_fontSize.toStringAsFixed(0)} px · ${widget.scriptName}',
+            style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -294,7 +358,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildToolbar(),
+                _buildCommandBar(isThisRunning),
                 Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
@@ -338,6 +402,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                     ),
                   ),
                 ),
+                _buildEditorStatusBar(),
               ],
             ),
     );
@@ -349,31 +414,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     _controller.dispose();
     _findController?.close();
     super.dispose();
-  }
-}
-
-class _ToolbarBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _ToolbarBtn({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(
-              color:
-                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(label,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-      ),
-    );
   }
 }
 

@@ -57,6 +57,7 @@ void main() {
       'group detail hides menu and homepage ungrouped scripts stay reorderable',
       () {
     final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final mainSource = File('lib/main.dart').readAsStringSync();
 
     expect(source, contains('actions: _activeGroupId == null'));
     expect(source, contains('Widget _buildFolderHomeScriptListItem('));
@@ -69,14 +70,20 @@ void main() {
     expect(source, contains('final firstFolderIndex = pinnedScripts.length'));
     expect(source, contains('final firstRegularIndex ='));
     expect(source, contains('pinnedScripts.length + groups.length'));
-    expect(source, contains('ReorderableListView.builder('));
-    expect(source, contains('reorderScriptInGroup('));
-    expect(source, contains('oldIndex - groups.length'));
-    expect(source, contains('newIndex - groups.length'));
+    expect(source, contains('Widget _buildListDragTarget('));
+    expect(source, contains('Widget _buildListDragHandle('));
+    expect(source, contains('void _commitListDragTarget('));
+    expect(
+        source, contains('swapScriptPositionsByName(draggedName, targetName)'));
     expect(source, contains('Widget _buildFolderHomeGridScriptCard('));
     expect(source, contains('Draggable<String>('));
     expect(source, contains('DragTarget<String>('));
-    expect(source, contains('ReorderableDragStartListener('));
+    expect(source, contains('class ScriptListPageController'));
+    expect(source, contains('bool handleBack()'));
+    expect(source, contains('bool _handleBackNavigation()'));
+    expect(source, contains('_activeGroupId != null'));
+    expect(source, contains('_closeGroup();'));
+    expect(mainSource, contains('controller: _scriptListController'));
   });
 
   test('move-to-group sheet is scrollable when there are many groups', () {

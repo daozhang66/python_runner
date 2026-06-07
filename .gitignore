@@ -49,6 +49,9 @@ backdrop/
 # Gradle build reports
 android/build/
 
+# Claude Code
+.claude/
+
 # Lock file
 pubspec.lock
 
