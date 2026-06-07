@@ -56,8 +56,14 @@ void main() {
       expect(find.byIcon(Icons.text_decrease_rounded), findsNothing);
       expect(find.byIcon(Icons.text_increase_rounded), findsNothing);
 
-      final before =
-          _selectableFontSize(tester, find.byType(SelectableText).first);
+      final terminalLine = _richTextContaining('hello from terminal');
+      expect(terminalLine, findsOneWidget);
+
+      final before = _richTextFontSizeForText(
+        tester,
+        terminalLine,
+        'hello from terminal',
+      );
 
       await _pinchOut(
         tester,
@@ -65,8 +71,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final after =
-          _selectableFontSize(tester, find.byType(SelectableText).first);
+      final after = _richTextFontSizeForText(
+        tester,
+        terminalLine,
+        'hello from terminal',
+      );
       expect(after, greaterThan(before));
     });
 
@@ -92,6 +101,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ListView), findsOneWidget);
+      expect(find.byType(SelectionArea), findsOneWidget);
+      expect(find.byType(SelectableText), findsNothing);
       expect(find.byType(SingleChildScrollView), findsNothing);
     });
 
@@ -229,6 +240,35 @@ double _selectableFontSize(WidgetTester tester, Finder finder) {
     throw StateError('SelectableText has neither style nor textSpan.');
   }
   return _firstSpanFontSize(span);
+}
+
+Finder _richTextContaining(String text) {
+  return find.byWidgetPredicate(
+    (widget) => widget is RichText && widget.text.toPlainText().contains(text),
+  );
+}
+
+double _richTextFontSizeForText(
+  WidgetTester tester,
+  Finder finder,
+  String text,
+) {
+  final widget = tester.widget<RichText>(finder);
+  return _spanFontSizeForText(widget.text, text) ??
+      _firstSpanFontSize(widget.text);
+}
+
+double? _spanFontSizeForText(InlineSpan span, String text) {
+  if (span is TextSpan) {
+    if ((span.text ?? '').contains(text)) {
+      return span.style?.fontSize;
+    }
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      final childSize = _spanFontSizeForText(child, text);
+      if (childSize != null) return childSize;
+    }
+  }
+  return null;
 }
 
 double _firstSpanFontSize(InlineSpan span) {

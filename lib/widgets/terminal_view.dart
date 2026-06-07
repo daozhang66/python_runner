@@ -6,9 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../utils/ansi_parser.dart';
 
-/// Unified terminal widget —all log lines rendered as ONE SelectableText
+/// Unified terminal widget. Log lines stay virtualized for large output, while
+/// SelectionArea owns text selection so dragging can cross visible lines.
 /// Toolbar provides copy-all; scrolling works on the whole output area.
-/// Long-press any line for a context menu with range-copy options.
 class TerminalView extends StatefulWidget {
   final List<LogEntry> logs;
   final bool isRunning;
@@ -49,6 +49,8 @@ class TerminalViewState extends State<TerminalView> {
   String _searchQuery = '';
   bool _filterErrors = false;
   final _searchController = TextEditingController();
+  final Map<int, Offset> _scalePointers = {};
+  double? _pointerScaleStartDistance;
 
   static const double _fontSizeMin = 6.0;
   static const double _fontSizeMax = 32.0;
@@ -80,27 +82,55 @@ class TerminalViewState extends State<TerminalView> {
     await prefs.setDouble(_fontSizePrefsKey, _fontSize);
   }
 
-  void _handleScaleStart(ScaleStartDetails details) {
-    if (details.pointerCount >= 2) {
+  double? _currentPointerDistance() {
+    if (_scalePointers.length < 2) return null;
+    final positions = _scalePointers.values.take(2).toList(growable: false);
+    return (positions[0] - positions[1]).distance;
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _scalePointers[event.pointer] = event.localPosition;
+    if (_scalePointers.length == 2) {
       _scaleStartFontSize = _fontSize;
+      _pointerScaleStartDistance = _currentPointerDistance();
     }
   }
 
-  void _handleScaleUpdate(ScaleUpdateDetails details) {
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_scalePointers.containsKey(event.pointer)) return;
+    _scalePointers[event.pointer] = event.localPosition;
     final startSize = _scaleStartFontSize;
-    if (startSize == null || details.pointerCount < 2) return;
-    final nextSize = (startSize * details.scale)
+    final startDistance = _pointerScaleStartDistance;
+    final currentDistance = _currentPointerDistance();
+    if (startSize == null ||
+        startDistance == null ||
+        currentDistance == null ||
+        startDistance <= 0) {
+      return;
+    }
+    final nextSize = (startSize * currentDistance / startDistance)
         .clamp(_fontSizeMin, _fontSizeMax)
         .toDouble();
     if ((nextSize - _fontSize).abs() < 0.1) return;
     setState(() => _fontSize = nextSize);
   }
 
-  void _handleScaleEnd(ScaleEndDetails details) {
+  void _finishPointerScale() {
     if (_scaleStartFontSize != null) {
       _scaleStartFontSize = null;
+      _pointerScaleStartDistance = null;
       unawaited(_persistFontSize());
     }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _scalePointers.remove(event.pointer);
+    if (_scalePointers.length < 2) _finishPointerScale();
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _scalePointers.remove(event.pointer);
+    if (_scalePointers.length < 2) _finishPointerScale();
   }
 
   void _showFontSizeSlider() {
@@ -435,11 +465,12 @@ class TerminalViewState extends State<TerminalView> {
     final barColor =
         isDark ? const Color(0xFF161B22) : colors.surfaceContainerHighest;
 
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.translucent,
-      onScaleStart: _handleScaleStart,
-      onScaleUpdate: _handleScaleUpdate,
-      onScaleEnd: _handleScaleEnd,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
       child: Column(
         children: [
           _buildTerminalToolbar(colors, barColor, logs),
@@ -493,7 +524,8 @@ class TerminalViewState extends State<TerminalView> {
               ),
             ),
 
-          // Terminal output —single SelectableText for multi-line drag select
+          // Terminal output. SelectionArea keeps drag selection from being
+          // trapped inside one log row.
           Expanded(
             child: Container(
               color: bgColor,
@@ -523,17 +555,19 @@ class TerminalViewState extends State<TerminalView> {
                         ],
                       ),
                     )
-                  : Scrollbar(
-                      controller: _scrollController,
-                      thumbVisibility: true,
-                      child: ListView.builder(
+                  : SelectionArea(
+                      child: Scrollbar(
                         controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                        itemCount: displayLogs.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 1),
-                          child: SelectableText.rich(
-                            _buildLineSpan(displayLogs[index], index, colors),
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                          itemCount: displayLogs.length,
+                          itemBuilder: (context, index) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1),
+                            child: Text.rich(
+                              _buildLineSpan(displayLogs[index], index, colors),
+                            ),
                           ),
                         ),
                       ),

@@ -21,8 +21,11 @@ void main() {
     expect(groupModelSource, contains('final int sortOrder;'));
     expect(scriptModelSource, contains('final int? groupId;'));
     expect(scriptModelSource, contains("'groupId': groupId"));
-    expect(dbSource, contains('version: 4'));
+    expect(dbSource, contains('version: 5'));
     expect(dbSource, contains('CREATE TABLE script_groups'));
+    expect(dbSource, contains('projectKey TEXT'));
+    expect(dbSource, contains('mainFilePath TEXT'));
+    expect(dbSource, contains('isProject INTEGER DEFAULT 0'));
     expect(
         dbSource, contains('ALTER TABLE scripts ADD COLUMN groupId INTEGER'));
     expect(dbSource, contains('Future<List<ScriptGroup>> getAllGroups'));
@@ -67,14 +70,18 @@ void main() {
     expect(source, contains('final regularScripts ='));
     expect(
         source, contains('visibleScripts.where((script) => !script.isPinned)'));
+    expect(source, contains('final regularGroups ='));
+    expect(source, contains('final projectGroups ='));
+    expect(source, contains('final recentItems ='));
+    expect(source, contains('..sort(_compareHomeRecentItems)'));
     expect(source, contains('final firstFolderIndex = pinnedScripts.length'));
-    expect(source, contains('final firstRegularIndex ='));
-    expect(source, contains('pinnedScripts.length + groups.length'));
+    expect(source, contains('final firstRecentIndex ='));
+    expect(source, contains('pinnedScripts.length + regularGroups.length'));
     expect(source, contains('Widget _buildListDragTarget('));
     expect(source, contains('Widget _buildListDragHandle('));
     expect(source, contains('void _commitListDragTarget('));
-    expect(
-        source, contains('swapScriptPositionsByName(draggedName, targetName)'));
+    expect(source, contains('swapScriptPositionsByName('));
+    expect(source, contains('groupId: groupId'));
     expect(source, contains('Widget _buildFolderHomeGridScriptCard('));
     expect(source, contains('Draggable<String>('));
     expect(source, contains('DragTarget<String>('));
@@ -94,5 +101,19 @@ void main() {
     expect(source, contains('builder: (context, scrollController)'));
     expect(source, contains('ListView('));
     expect(source, contains('controller: scrollController'));
+  });
+
+  test('running grouped scripts promotes them inside their own group', () {
+    final providerSource =
+        File('lib/providers/script_provider.dart').readAsStringSync();
+    final dbSource =
+        File('lib/services/database_service.dart').readAsStringSync();
+
+    expect(providerSource, contains('_promoteScriptToFrontInGroup'));
+    expect(providerSource, contains('script.groupId'));
+    expect(
+        providerSource, contains('await _db.batchUpdateSortOrders(updates)'));
+    expect(dbSource,
+        contains('UPDATE scripts SET runCount = runCount + 1, modifiedAt = ?'));
   });
 }

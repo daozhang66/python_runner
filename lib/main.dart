@@ -664,7 +664,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   fullscreenDialog: true,
                 ),
-              ),
+              ).then((_) => _scriptListController.refreshRuntimePreference()),
             ),
             const NetworkInspectorPage(),
             const PackageManagerPage(),

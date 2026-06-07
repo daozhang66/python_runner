@@ -4,6 +4,9 @@ class ScriptGroup {
   final int sortOrder;
   final DateTime createdAt;
   final DateTime modifiedAt;
+  final String? projectKey;
+  final String? mainFilePath;
+  final bool isProject;
 
   ScriptGroup({
     this.id,
@@ -11,6 +14,9 @@ class ScriptGroup {
     required this.sortOrder,
     required this.createdAt,
     required this.modifiedAt,
+    this.projectKey,
+    this.mainFilePath,
+    this.isProject = false,
   });
 
   ScriptGroup copyWith({
@@ -19,6 +25,11 @@ class ScriptGroup {
     int? sortOrder,
     DateTime? createdAt,
     DateTime? modifiedAt,
+    String? projectKey,
+    String? mainFilePath,
+    bool? isProject,
+    bool clearProjectKey = false,
+    bool clearMainFilePath = false,
   }) {
     return ScriptGroup(
       id: id ?? this.id,
@@ -26,6 +37,10 @@ class ScriptGroup {
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
+      projectKey: clearProjectKey ? null : projectKey ?? this.projectKey,
+      mainFilePath:
+          clearMainFilePath ? null : mainFilePath ?? this.mainFilePath,
+      isProject: isProject ?? this.isProject,
     );
   }
 
@@ -36,6 +51,9 @@ class ScriptGroup {
       'sortOrder': sortOrder,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'modifiedAt': modifiedAt.millisecondsSinceEpoch,
+      'projectKey': projectKey,
+      'mainFilePath': mainFilePath,
+      'isProject': isProject ? 1 : 0,
     };
   }
 
@@ -48,6 +66,9 @@ class ScriptGroup {
           (map['createdAt'] as num).toInt()),
       modifiedAt: DateTime.fromMillisecondsSinceEpoch(
           (map['modifiedAt'] as num).toInt()),
+      projectKey: map['projectKey'] as String?,
+      mainFilePath: map['mainFilePath'] as String?,
+      isProject: (map['isProject'] as num?)?.toInt() == 1,
     );
   }
 }

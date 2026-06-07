@@ -71,6 +71,8 @@ class LinuxLikeBackend implements RuntimeBackend {
       workingDir: request.workingDirectory,
       environment: request.environment.isEmpty ? null : request.environment,
       timeoutSeconds: request.timeout?.inSeconds,
+      projectKey: request.projectKey,
+      projectMainFilePath: request.projectMainFilePath,
     );
     return session;
   }

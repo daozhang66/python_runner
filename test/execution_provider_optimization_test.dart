@@ -200,6 +200,8 @@ class _ExecutionBridgeFake extends NativeBridge {
     String? workingDir,
     Map<String, String>? environment,
     int? timeoutSeconds,
+    String? projectKey,
+    String? projectMainFilePath,
   }) async {
     linuxLikeExecuteScriptCalls++;
   }

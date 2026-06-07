@@ -6,6 +6,8 @@ class RuntimeRequest {
   final Map<String, String> environment;
   final String? workingDirectory;
   final Duration? timeout;
+  final String? projectKey;
+  final String? projectMainFilePath;
 
   const RuntimeRequest({
     required this.scriptName,
@@ -15,5 +17,9 @@ class RuntimeRequest {
     this.environment = const {},
     this.workingDirectory,
     this.timeout,
+    this.projectKey,
+    this.projectMainFilePath,
   });
+
+  bool get isProject => projectKey != null;
 }

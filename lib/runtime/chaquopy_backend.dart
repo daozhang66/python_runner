@@ -44,6 +44,9 @@ class ChaquopyBackend implements RuntimeBackend {
 
   @override
   Future<RuntimeSession> startScript(RuntimeRequest request) async {
+    if (request.isProject) {
+      throw StateError('项目型脚本组仅支持 Linux-like 引擎');
+    }
     final session = ChaquopyRuntimeSession(
       backend: this,
       request: request,

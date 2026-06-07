@@ -3,6 +3,7 @@ import '../models/script_file.dart';
 import '../models/script_group.dart';
 import '../services/native_bridge.dart';
 import '../services/database_service.dart';
+import '../services/project_path_validator.dart';
 import '../services/script_name_validator.dart';
 
 class ScriptProvider extends ChangeNotifier {
@@ -210,12 +211,50 @@ class ScriptProvider extends ChangeNotifier {
     }
   }
 
+  List<ScriptFile> _applyGroupSortOrders(List<ScriptFile> groupScripts) {
+    final updates = <ScriptFile>[];
+    for (int i = 0; i < groupScripts.length; i++) {
+      final updated = groupScripts[i].copyWith(sortOrder: i);
+      groupScripts[i] = updated;
+      final sourceIndex = _scripts.indexWhere((s) => s.name == updated.name);
+      if (sourceIndex >= 0) {
+        _scripts[sourceIndex] = updated;
+        updates.add(updated);
+      }
+    }
+    return updates;
+  }
+
+  List<ScriptFile> _promoteScriptToFrontInGroup(ScriptFile script) {
+    if (script.isPinned) return const [];
+
+    final groupScripts = scriptsInGroup(script.groupId);
+    if (!groupScripts.any((item) => item.name == script.name)) {
+      return const [];
+    }
+
+    final pinnedScripts = groupScripts.where((item) => item.isPinned).toList();
+    final regularScripts =
+        groupScripts.where((item) => !item.isPinned).toList();
+    regularScripts.removeWhere((item) => item.name == script.name);
+    regularScripts.insert(0, script);
+    return _applyGroupSortOrders([...pinnedScripts, ...regularScripts]);
+  }
+
   Future<void> incrementRunCount(String name) async {
     await _db.incrementRunCount(name);
     final idx = _scripts.indexWhere((s) => s.name == name);
     if (idx >= 0) {
-      _scripts[idx] =
-          _scripts[idx].copyWith(runCount: _scripts[idx].runCount + 1);
+      final updated = _scripts[idx].copyWith(
+        runCount: _scripts[idx].runCount + 1,
+        modifiedAt: DateTime.now(),
+      );
+      _scripts[idx] = updated;
+      final updates = _promoteScriptToFrontInGroup(updated);
+      if (updates.isNotEmpty) {
+        await _db.batchUpdateSortOrders(updates);
+      }
+      _sortScripts();
       notifyListeners();
     }
   }
@@ -264,6 +303,87 @@ class ScriptProvider extends ChangeNotifier {
     }
   }
 
+  String _generateProjectKey() =>
+      'project_${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+
+  Future<ScriptGroup?> createProjectGroup(
+    String name, {
+    String? mainFilePath,
+    String? projectKey,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) return null;
+    if (_groups.any((group) => group.name == trimmedName)) return null;
+
+    try {
+      final safeProjectKey = ProjectPathValidator.normalizeProjectKey(
+          projectKey ?? _generateProjectKey());
+      final safeMainFilePath = mainFilePath == null
+          ? null
+          : ProjectPathValidator.validateMainFilePath(mainFilePath);
+      final now = DateTime.now();
+      final maxOrder = _groups.fold<int>(
+          0, (max, group) => group.sortOrder > max ? group.sortOrder : max);
+      final draft = ScriptGroup(
+        name: trimmedName,
+        sortOrder: maxOrder + 1,
+        createdAt: now,
+        modifiedAt: now,
+        projectKey: safeProjectKey,
+        mainFilePath: safeMainFilePath,
+        isProject: true,
+      );
+      final id = await _db.createGroup(draft);
+      final group = draft.copyWith(id: id);
+      _groups.add(group);
+      _sortGroups();
+      notifyListeners();
+      return group;
+    } catch (e) {
+      debugPrint('createProjectGroup error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> updateProjectMainFile(
+      ScriptGroup group, String? mainFilePath) async {
+    final groupId = group.id;
+    if (groupId == null || !group.isProject) return false;
+
+    try {
+      final safeMainFilePath = mainFilePath == null
+          ? null
+          : ProjectPathValidator.validateMainFilePath(mainFilePath);
+      await _db.updateProjectMainFile(groupId, safeMainFilePath);
+      final idx = _groups.indexWhere((item) => item.id == groupId);
+      if (idx >= 0) {
+        _groups[idx] = _groups[idx].copyWith(
+          mainFilePath: safeMainFilePath,
+          clearMainFilePath: safeMainFilePath == null,
+          modifiedAt: DateTime.now(),
+        );
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('updateProjectMainFile error: $e');
+      return false;
+    }
+  }
+
+  Future<void> markProjectGroupUsed(ScriptGroup group) async {
+    final groupId = group.id;
+    if (groupId == null || !group.isProject) return;
+
+    final now = DateTime.now();
+    await _db.touchGroup(groupId);
+    final idx = _groups.indexWhere((item) => item.id == groupId);
+    if (idx >= 0) {
+      _groups[idx] = _groups[idx].copyWith(modifiedAt: now);
+      notifyListeners();
+    }
+  }
+
   Future<bool> renameGroup(int groupId, String name) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) return false;
@@ -290,6 +410,12 @@ class ScriptProvider extends ChangeNotifier {
 
   Future<bool> deleteGroup(int groupId) async {
     try {
+      final matches = _groups.where((item) => item.id == groupId);
+      final group = matches.isEmpty ? null : matches.first;
+      final projectKey = group?.isProject == true ? group?.projectKey : null;
+      if (projectKey != null) {
+        await _bridge.deleteScriptProject(projectKey);
+      }
       await _db.deleteGroup(groupId);
       _groups.removeWhere((group) => group.id == groupId);
       for (int i = 0; i < _scripts.length; i++) {
@@ -379,17 +505,29 @@ class ScriptProvider extends ChangeNotifier {
     final script = groupScripts.removeAt(oldIndex);
     groupScripts.insert(newIndex, script);
 
-    final updates = <ScriptFile>[];
-    for (int i = 0; i < groupScripts.length; i++) {
-      final updated = groupScripts[i].copyWith(sortOrder: i);
-      groupScripts[i] = updated;
-      final sourceIndex = _scripts.indexWhere((s) => s.name == updated.name);
-      if (sourceIndex >= 0) {
-        _scripts[sourceIndex] = updated;
-        updates.add(updated);
-      }
+    final updates = _applyGroupSortOrders(groupScripts);
+
+    await _db.batchUpdateSortOrders(updates);
+    _sortScripts();
+    notifyListeners();
+  }
+
+  Future<void> swapScriptPositionsInGroup(
+      int? groupId, int oldIndex, int newIndex) async {
+    if (oldIndex == newIndex) return;
+    final groupScripts = scriptsInGroup(groupId);
+    if (oldIndex < 0 || oldIndex >= groupScripts.length) return;
+    if (newIndex < 0 || newIndex >= groupScripts.length) return;
+
+    if (groupScripts[oldIndex].isPinned || groupScripts[newIndex].isPinned) {
+      return;
     }
 
+    final oldScript = groupScripts[oldIndex];
+    groupScripts[oldIndex] = groupScripts[newIndex];
+    groupScripts[newIndex] = oldScript;
+
+    final updates = _applyGroupSortOrders(groupScripts);
     await _db.batchUpdateSortOrders(updates);
     _sortScripts();
     notifyListeners();
@@ -416,9 +554,13 @@ class ScriptProvider extends ChangeNotifier {
   }
 
   Future<void> swapScriptPositionsByName(
-      String draggedName, String targetName) async {
-    final oldIndex = _scripts.indexWhere((s) => s.name == draggedName);
-    final newIndex = _scripts.indexWhere((s) => s.name == targetName);
-    await swapScriptPositions(oldIndex, newIndex);
+    String draggedName,
+    String targetName, {
+    int? groupId,
+  }) async {
+    final groupScripts = scriptsInGroup(groupId);
+    final oldIndex = groupScripts.indexWhere((s) => s.name == draggedName);
+    final newIndex = groupScripts.indexWhere((s) => s.name == targetName);
+    await swapScriptPositionsInGroup(groupId, oldIndex, newIndex);
   }
 }
