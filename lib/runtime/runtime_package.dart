@@ -10,6 +10,22 @@ class PackageInstallRequest {
   });
 }
 
+class RequirementsInstallRequest {
+  final String? projectKey;
+  final String requirementsPath;
+  final String? content;
+  final String displayName;
+  final String? indexUrl;
+
+  const RequirementsInstallRequest({
+    this.projectKey,
+    this.requirementsPath = 'requirements.txt',
+    this.content,
+    this.displayName = 'requirements.txt',
+    this.indexUrl,
+  });
+}
+
 class PackageInstallResult {
   final bool success;
   final String message;

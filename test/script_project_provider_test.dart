@@ -93,4 +93,27 @@ void main() {
     expect(providerSource, isNot(contains('readProjectFile(')));
     expect(providerSource, isNot(contains('saveProjectFile(')));
   });
+
+  test('project page exposes linux-like requirements install shortcut', () {
+    final source =
+        File('lib/pages/script_project_page.dart').readAsStringSync();
+
+    expect(source, contains('_hasRootRequirements'));
+    expect(source, contains("file.path == 'requirements.txt'"));
+    expect(source, contains("value: 'install_requirements'"));
+    expect(source, contains('installRequirementsFromProject'));
+    expect(source, contains('_RequirementsInstallDialog'));
+    expect(source, contains('仅 Linux-like 可用'));
+  });
+
+  test('project page intercepts back gesture to leave subdirectories first',
+      () {
+    final source =
+        File('lib/pages/script_project_page.dart').readAsStringSync();
+
+    expect(source, contains('PopScope'));
+    expect(source, contains('canPop: _currentDirectory.isEmpty'));
+    expect(source, contains('onPopInvokedWithResult'));
+    expect(source, contains('_goUpDirectory();'));
+  });
 }

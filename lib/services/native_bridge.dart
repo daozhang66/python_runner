@@ -353,6 +353,27 @@ class NativeBridge {
     });
   }
 
+  Future<void> installLinuxLikeRequirements({
+    String? projectKey,
+    String requirementsPath = 'requirements.txt',
+    String? content,
+    String displayName = 'requirements.txt',
+    String? indexUrl,
+  }) async {
+    final safeProjectKey = projectKey == null || projectKey.trim().isEmpty
+        ? null
+        : ProjectPathValidator.normalizeProjectKey(projectKey);
+    final safeRequirementsPath =
+        ProjectPathValidator.normalizeRelativePath(requirementsPath);
+    await _invoke('installLinuxLikeRequirements', {
+      'projectKey': safeProjectKey,
+      'requirementsPath': safeRequirementsPath,
+      'content': content,
+      'displayName': displayName,
+      'indexUrl': indexUrl,
+    });
+  }
+
   Future<Map<String, dynamic>> uninstallLinuxLikePackage(
       String packageName) async {
     final result = await _invoke(

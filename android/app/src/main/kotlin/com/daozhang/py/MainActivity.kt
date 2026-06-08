@@ -480,6 +480,23 @@ class MainActivity : FlutterActivity() {
                         val indexUrl = call.argument<String>("indexUrl")
                         handleInstallLinuxLikePackage(packageName, version, indexUrl, result)
                     }
+                    "installLinuxLikeRequirements" -> {
+                        val projectKey = call.argument<String>("projectKey")
+                        val requirementsPath =
+                            call.argument<String>("requirementsPath") ?: "requirements.txt"
+                        val content = call.argument<String>("content")
+                        val displayName =
+                            call.argument<String>("displayName") ?: "requirements.txt"
+                        val indexUrl = call.argument<String>("indexUrl")
+                        handleInstallLinuxLikeRequirements(
+                            projectKey,
+                            requirementsPath,
+                            content,
+                            displayName,
+                            indexUrl,
+                            result
+                        )
+                    }
                     "uninstallLinuxLikePackage" -> {
                         val packageName = call.argument<String>("packageName") ?: ""
                         handleUninstallLinuxLikePackage(packageName, result)
@@ -875,6 +892,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun deleteProjectPycacheDirectories(projectRoot: File) {
+        try {
+            val root = projectRoot.canonicalFile
+            val rootPath = root.toPath()
+            root.walkBottomUp().forEach { file ->
+                if (file.isDirectory && file.name == "__pycache__") {
+                    val path = file.canonicalFile.toPath()
+                    if (path.startsWith(rootPath)) {
+                        file.deleteRecursively()
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     // --- Script Execution ---
 
     private fun handleExecuteScript(name: String, executionId: String, workingDir: String?, hookEnv: Map<String, String>?, timeoutSeconds: Int, result: MethodChannel.Result) {
@@ -1105,7 +1138,8 @@ class MainActivity : FlutterActivity() {
                     pythonPathEntries = listOf(
                         projectRoot.absolutePath,
                         mainFile.parentFile?.absolutePath
-                    ).filterNotNull().distinct()
+                    ).filterNotNull().distinct(),
+                    projectRoot = projectRoot
                 )
             } else {
                 val scriptFile = safeScriptFile(name)
@@ -1209,6 +1243,7 @@ class MainActivity : FlutterActivity() {
                 exitCode = 1
                 _writeScriptErrorLog(executionTarget.displayName, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
             } finally {
+                executionTarget.projectRoot?.let { deleteProjectPycacheDirectories(it) }
                 currentExecutionProcess = null
                 currentExecutionThread = null
                 currentExecutionId = null
@@ -1251,6 +1286,128 @@ class MainActivity : FlutterActivity() {
         } else {
             result.success(false)
         }
+    }
+
+    private data class LinuxLikeRequirementsTarget(
+        val file: File,
+        val pipPath: String,
+        val workingDir: String?,
+        val temporary: Boolean
+    )
+
+    private fun handleInstallLinuxLikeRequirements(
+        projectKey: String?,
+        requirementsPath: String,
+        content: String?,
+        displayName: String,
+        indexUrl: String?,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            var temporaryFile: File? = null
+            val label = displayName.takeIf { it.isNotBlank() } ?: "requirements.txt"
+            try {
+                val info = linuxLikeRuntimeManager.getInfo()
+                if (info["available"] != "true") {
+                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                }
+                val target = resolveLinuxLikeRequirementsTarget(
+                    projectKey,
+                    requirementsPath,
+                    content,
+                    label
+                )
+                if (target.temporary) {
+                    temporaryFile = target.file
+                }
+                val args = mutableListOf(
+                    "--disable-pip-version-check",
+                    "install",
+                    "--target",
+                    linuxLikeRuntimeManager.userSitePackagesGuestPath
+                )
+                if (!indexUrl.isNullOrBlank()) {
+                    args.add("-i")
+                    args.add(indexUrl)
+                }
+                args.add("-r")
+                args.add(target.pipPath)
+
+                sendInstallProgress("requirements.txt", "installing", "开始安装 $label...")
+                val command = linuxLikeRuntimeManager.buildPythonModuleCommand(
+                    "pip",
+                    args,
+                    workingDir = target.workingDir
+                )
+                val commandResult = runLinuxLikeCommandBlocking(command)
+                if (commandResult.exitCode == 0) {
+                    refreshLinuxLikeExplicitPackageMetadata()
+                    sendInstallProgress("requirements.txt", "success", "$label 安装成功")
+                    mainHandler.post { result.success(true) }
+                } else {
+                    val errorMessage = commandResult.stderr.ifBlank { commandResult.stdout }
+                        .trim()
+                        .ifBlank { "pip 退出码 ${commandResult.exitCode}" }
+                    sendInstallProgress("requirements.txt", "error", "$label 安装失败")
+                    mainHandler.post {
+                        result.error("1031", "Linux-like安装requirements失败: $errorMessage", null)
+                    }
+                }
+            } catch (e: Exception) {
+                sendInstallProgress("requirements.txt", "error", "安装失败: ${e.message}")
+                mainHandler.post {
+                    result.error("1031", "Linux-like安装requirements失败: ${e.message}", null)
+                }
+            } finally {
+                temporaryFile?.delete()
+            }
+        }.also { it.name = "linux-like-pip-requirements"; it.start() }
+    }
+
+    private fun resolveLinuxLikeRequirementsTarget(
+        projectKey: String?,
+        requirementsPath: String,
+        content: String?,
+        displayName: String
+    ): LinuxLikeRequirementsTarget {
+        require(displayName.equals("requirements.txt", ignoreCase = true)) {
+            "只支持 requirements.txt"
+        }
+        val safeRequirementsPath = normalizeProjectRelativePath(requirementsPath)
+        require(safeRequirementsPath == "requirements.txt") {
+            "只支持项目根目录 requirements.txt"
+        }
+        if (!projectKey.isNullOrBlank()) {
+            val projectRoot = safeProjectRoot(projectKey)
+            val requirementsFile = safeProjectFile(projectKey, safeRequirementsPath)
+            require(requirementsFile.isFile) { "requirements.txt 不存在" }
+            return LinuxLikeRequirementsTarget(
+                file = requirementsFile,
+                pipPath = "requirements.txt",
+                workingDir = projectRoot.absolutePath,
+                temporary = false
+            )
+        }
+
+        val body = content?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("requirements.txt 为空")
+        val importDir = File(filesDir, "linux_like/requirements_imports")
+        if (!importDir.exists()) importDir.mkdirs()
+        val requirementsFile = File(importDir, "requirements-${System.currentTimeMillis()}.txt")
+        requirementsFile.writeText(body)
+        return LinuxLikeRequirementsTarget(
+            file = requirementsFile,
+            pipPath = requirementsFile.absolutePath,
+            workingDir = null,
+            temporary = true
+        )
+    }
+
+    private fun refreshLinuxLikeExplicitPackageMetadata() {
+        resolveLinuxLikeExplicitPackages(
+            linuxLikeDistributions(),
+            queryLinuxLikeTopLevelPackages()
+        )
     }
 
     private fun handleInstallLinuxLikePackage(
@@ -2247,7 +2404,8 @@ class MainActivity : FlutterActivity() {
         val displayName: String,
         val scriptFile: File,
         val workingDir: String,
-        val pythonPathEntries: List<String>
+        val pythonPathEntries: List<String>,
+        val projectRoot: File? = null
     )
 
     private fun runLinuxLikeCommandBlocking(

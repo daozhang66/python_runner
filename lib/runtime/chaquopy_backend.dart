@@ -84,6 +84,16 @@ class ChaquopyBackend implements RuntimeBackend {
   }
 
   @override
+  Future<PackageInstallResult> installRequirements(
+    RequirementsInstallRequest request,
+  ) async {
+    return const PackageInstallResult(
+      success: false,
+      message: 'requirements.txt 仅支持 Linux-like 运行环境',
+    );
+  }
+
+  @override
   Future<PackageUninstallResult> uninstallPackage(String packageName) async {
     final result = await _bridge.uninstallPackage(packageName);
     return PackageUninstallResult.fromMap(result);

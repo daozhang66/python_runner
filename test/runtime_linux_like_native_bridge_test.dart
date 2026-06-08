@@ -111,6 +111,23 @@ void main() {
     expect(activity, contains('result.error("1019"'));
   });
 
+  test('linux-like requirements install uses pip target and project guard', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('"installLinuxLikeRequirements"'));
+    expect(activity, contains('handleInstallLinuxLikeRequirements'));
+    expect(activity, contains('resolveLinuxLikeRequirementsTarget'));
+    expect(activity,
+        contains('safeProjectFile(projectKey, safeRequirementsPath)'));
+    expect(activity,
+        contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
+    expect(activity, contains('args.add("-r")'));
+    expect(activity, contains('refreshLinuxLikeExplicitPackageMetadata'));
+    expect(activity, contains('result.error("1031"'));
+  });
+
   test('linux-like uninstall records explicit packages and removes orphans',
       () {
     final activity = File(
@@ -188,6 +205,7 @@ void main() {
     expect(manager, contains('target["PATH"] ='));
     expect(manager, contains('target["TERM"] = "xterm-256color"'));
     expect(manager, contains('target["PIP_NO_INPUT"] = "1"'));
+    expect(manager, contains('target["PYTHONDONTWRITEBYTECODE"] = "1"'));
     expect(
         manager,
         isNot(contains(
@@ -222,8 +240,21 @@ void main() {
 
     expect(manager, contains('runpy.run_path'));
     expect(manager, contains('toPythonStringLiteral'));
+    expect(manager, contains('add("-B")'));
+    expect(manager, contains('sys.dont_write_bytecode = True'));
     expect(manager, isNot(contains('JSONObject.quote(scriptPath)')));
     expect(manager, isNot(contains(r"exec(open('$scriptPath').read())")));
+  });
+
+  test('linux-like project execution removes pycache directories', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('deleteProjectPycacheDirectories'));
+    expect(activity, contains('file.name == "__pycache__"'));
+    expect(activity, contains('projectRoot = projectRoot'));
+    expect(activity, contains('executionTarget.projectRoot?.let'));
   });
 
   test('linux-like launcher emits stdin request sentinel for interactive input',

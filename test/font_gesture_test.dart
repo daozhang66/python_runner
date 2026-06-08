@@ -55,6 +55,7 @@ void main() {
 
       expect(find.byIcon(Icons.text_decrease_rounded), findsNothing);
       expect(find.byIcon(Icons.text_increase_rounded), findsNothing);
+      expect(find.byIcon(Icons.format_size), findsNothing);
 
       final terminalLine = _richTextContaining('hello from terminal');
       expect(terminalLine, findsOneWidget);
@@ -133,8 +134,7 @@ void main() {
       expect(rerunBody, contains('setState('));
     });
 
-    testWidgets('script editor uses pinch-to-zoom instead of format size menu',
-        (
+    testWidgets('script editor hides font button and supports pinch-to-zoom', (
       WidgetTester tester,
     ) async {
       SharedPreferences.setMockInitialValues(const {
@@ -163,6 +163,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.format_size), findsNothing);
+      expect(find.byType(Slider), findsNothing);
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
 
       final before = _codeEditorFontSize(tester);
 

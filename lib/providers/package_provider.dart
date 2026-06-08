@@ -20,6 +20,8 @@ class PackageProvider extends ChangeNotifier {
   bool get installing => _installing;
   List<String> get installLog => List.unmodifiable(_installLog);
   String get activeBackendId => _runtimeManager.activeBackendId;
+  bool get supportsRequirementsInstall =>
+      activeBackendId == RuntimeManager.linuxLikeBackendId;
 
   PackageProvider(NativeBridge bridge, {RuntimeManager? runtimeManager})
       : _bridge = bridge,
@@ -119,6 +121,76 @@ class PackageProvider extends ChangeNotifier {
               : result.success
                   ? '安装成功: $name'
                   : '安装失败: $name',
+        );
+        if (result.success) {
+          await loadPackages();
+        }
+        _scheduleInstallLogClear();
+        notifyListeners();
+      }
+    } catch (e) {
+      _installing = false;
+      _installLog.add('Error: $e');
+      notifyListeners();
+    }
+  }
+
+  Future<void> installRequirementsFromProject({
+    required String projectKey,
+    String requirementsPath = 'requirements.txt',
+    String? indexUrl,
+  }) {
+    return _installRequirements(
+      RequirementsInstallRequest(
+        projectKey: projectKey,
+        requirementsPath: requirementsPath,
+        displayName: requirementsPath,
+        indexUrl: indexUrl,
+      ),
+    );
+  }
+
+  Future<void> installRequirementsFromContent({
+    required String content,
+    String displayName = 'requirements.txt',
+    String? indexUrl,
+  }) {
+    return _installRequirements(
+      RequirementsInstallRequest(
+        content: content,
+        displayName: displayName,
+        indexUrl: indexUrl,
+      ),
+    );
+  }
+
+  Future<void> _installRequirements(
+    RequirementsInstallRequest request,
+  ) async {
+    await _syncRuntimeManagerFromSettings();
+    final label = request.displayName.trim().isEmpty
+        ? 'requirements.txt'
+        : request.displayName.trim();
+    if (_installing) {
+      _installLog.add('已有安装任务进行中，请稍后再试');
+      notifyListeners();
+      return;
+    }
+    _installing = true;
+    _installLog.clear();
+    _installLog.add('Installing $label...');
+    notifyListeners();
+
+    try {
+      final result = await _runtimeManager.installRequirements(request);
+      if (_installing) {
+        _installing = false;
+        _installLog.add(
+          result.message.isNotEmpty
+              ? result.message
+              : result.success
+                  ? '$label 安装成功'
+                  : '$label 安装失败',
         );
         if (result.success) {
           await loadPackages();

@@ -2,7 +2,7 @@ name: python_runner
 description: "Python运行器 - Android端Python脚本运行环境"
 publish_to: 'none'
 
-version: 1.4.7+21
+version: 1.4.8+22
 
 environment:
   sdk: ^3.5.0
