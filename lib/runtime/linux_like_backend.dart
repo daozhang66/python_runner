@@ -114,6 +114,30 @@ class LinuxLikeBackend implements RuntimeBackend {
   }
 
   @override
+  Future<PackageInstallResult> installRequirements(
+    RequirementsInstallRequest request,
+  ) async {
+    final bridge = _bridge;
+    if (bridge == null) {
+      return const PackageInstallResult(
+        success: false,
+        message: unavailableMessage,
+      );
+    }
+    await bridge.installLinuxLikeRequirements(
+      projectKey: request.projectKey,
+      requirementsPath: request.requirementsPath,
+      content: request.content,
+      displayName: request.displayName,
+      indexUrl: request.indexUrl,
+    );
+    return PackageInstallResult(
+      success: true,
+      message: '${request.displayName} 安装成功',
+    );
+  }
+
+  @override
   Future<PackageUninstallResult> uninstallPackage(String packageName) async {
     final bridge = _bridge;
     if (bridge == null) {

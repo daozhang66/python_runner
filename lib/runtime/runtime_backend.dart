@@ -22,6 +22,9 @@ abstract class RuntimeBackend {
   Future<void> stopExecution();
 
   Future<PackageInstallResult> installPackage(PackageInstallRequest request);
+  Future<PackageInstallResult> installRequirements(
+    RequirementsInstallRequest request,
+  );
   Future<PackageUninstallResult> uninstallPackage(String packageName);
   Future<List<RuntimePackage>> listPackages();
   Future<RuntimeHealth> checkHealth();

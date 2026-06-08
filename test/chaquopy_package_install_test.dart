@@ -44,4 +44,14 @@ void main() {
     expect(runner, contains('return {'));
     expect(runner, contains('_cleanup_orphan_dependencies'));
   });
+
+  test('chaquopy script execution disables bytecode cache writes', () {
+    final runner = File(
+      'android/app/src/main/python/script_runner.py',
+    ).readAsStringSync();
+
+    expect(runner, contains('sys.dont_write_bytecode = True'));
+    expect(runner, contains('PYTHONDONTWRITEBYTECODE'));
+    expect(runner, contains('_original_dont_write_bytecode'));
+  });
 }

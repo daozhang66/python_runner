@@ -133,63 +133,6 @@ class TerminalViewState extends State<TerminalView> {
     if (_scalePointers.length < 2) _finishPointerScale();
   }
 
-  void _showFontSizeSlider() {
-    double tempSize = _fontSize;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${tempSize.round()} px',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('A', style: TextStyle(fontSize: 12)),
-                  Expanded(
-                    child: Slider(
-                      value: tempSize,
-                      min: _fontSizeMin,
-                      max: _fontSizeMax,
-                      divisions: (_fontSizeMax - _fontSizeMin).round(),
-                      onChanged: (v) {
-                        setDialogState(() => tempSize = v);
-                        setState(() => _fontSize = v);
-                      },
-                    ),
-                  ),
-                  const Text('A',
-                      style:
-                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() => _fontSize = 10.0);
-                setDialogState(() => tempSize = 10.0);
-              },
-              child: const Text('重置'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                unawaited(_persistFontSize());
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -400,12 +343,6 @@ class TerminalViewState extends State<TerminalView> {
               tooltip: '显示全部',
             ),
           const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.format_size, size: 18),
-            visualDensity: VisualDensity.compact,
-            onPressed: _showFontSizeSlider,
-            tooltip: '字体大小',
-          ),
           if (logs.isNotEmpty)
             TextButton.icon(
               onPressed: _copyAll,

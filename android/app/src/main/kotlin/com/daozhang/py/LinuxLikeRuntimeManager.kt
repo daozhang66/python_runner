@@ -358,16 +358,19 @@ class LinuxLikeRuntimeManager(private val context: Context) {
 
     private fun MutableList<String>.addPythonLauncher() {
         add(pythonGuestPath)
+        add("-B")
     }
 
     private fun MutableList<String>.addPythonLauncherWithHook(scriptPath: String) {
         add(pythonGuestPath)
+        add("-B")
         add("-c")
         val hooksDirLiteral = toPythonStringLiteral(hooksDir.absolutePath)
         val scriptPathLiteral = toPythonStringLiteral(scriptPath)
         val stdinRequestSentinelLiteral = toPythonStringLiteral(stdinRequestSentinel)
         val code = buildString {
             appendLine("import builtins, json, os, runpy, sys")
+            appendLine("sys.dont_write_bytecode = True")
             appendLine("hooks_dir = $hooksDirLiteral")
             appendLine("script_path = $scriptPathLiteral")
             appendLine("stdin_request_sentinel = $stdinRequestSentinelLiteral")
@@ -457,6 +460,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         environment?.forEach { (key, value) ->
             target[key] = value
         }
+        target["PYTHONDONTWRITEBYTECODE"] = "1"
         val existingPythonPath = target["PYTHONPATH"]?.takeIf { it.isNotBlank() }
         target["PYTHONPATH"] = listOf(
             userSitePackagesGuestPath,

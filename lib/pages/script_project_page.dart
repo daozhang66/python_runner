@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/script_group.dart';
 import '../models/script_project_file.dart';
 import '../providers/execution_provider.dart';
+import '../providers/package_provider.dart';
 import '../providers/script_project_provider.dart';
 import '../providers/script_provider.dart';
 import '../services/native_bridge.dart';
@@ -40,6 +43,9 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
       service: ScriptProjectService(NativeBridge()),
     );
     _projectProvider.load();
+    Future.microtask(() {
+      if (mounted) context.read<PackageProvider>().loadPackages();
+    });
   }
 
   @override
@@ -255,6 +261,50 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
     _showSnack(path.isEmpty ? '导出失败' : '已导出: $path');
   }
 
+  bool _hasRootRequirements(ScriptProjectProvider project) {
+    return project.files.any(
+      (file) => !file.isDirectory && file.path == 'requirements.txt',
+    );
+  }
+
+  String _requirementsMenuSubtitle(PackageProvider provider) {
+    if (!provider.supportsRequirementsInstall) {
+      return '仅 Linux-like 可用';
+    }
+    if (provider.installing) {
+      return '安装任务进行中';
+    }
+    return 'requirements.txt';
+  }
+
+  Future<void> _installProjectRequirements(
+    ScriptProjectProvider project,
+  ) async {
+    final packageProvider = context.read<PackageProvider>();
+    if (!packageProvider.supportsRequirementsInstall) {
+      _showSnack('requirements.txt 仅支持 Linux-like');
+      return;
+    }
+    if (packageProvider.installing) {
+      _showSnack('已有安装任务进行中，请稍后再试');
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final indexUrl = prefs.getString('pypi_index_url');
+    unawaited(
+      packageProvider.installRequirementsFromProject(
+        projectKey: project.group.projectKey ?? '',
+        requirementsPath: 'requirements.txt',
+        indexUrl: indexUrl,
+      ),
+    );
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => const _RequirementsInstallDialog(),
+    );
+  }
+
   void _handleMenuAction(String action, ScriptProjectProvider project) {
     switch (action) {
       case 'new_file':
@@ -272,6 +322,9 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
       case 'export_zip':
         _exportZip(project);
         break;
+      case 'install_requirements':
+        _installProjectRequirements(project);
+        break;
     }
   }
 
@@ -283,75 +336,158 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
         builder: (context, project, _) {
           final canRun = project.group.mainFilePath != null &&
               project.group.mainFilePath!.isNotEmpty;
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(project.group.name),
-              actions: [
-                if (canRun)
-                  IconButton(
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    tooltip: '运行主程序',
-                    onPressed: () => _runProject(project),
+          final packageProvider = context.watch<PackageProvider>();
+          final hasRootRequirements = _hasRootRequirements(project);
+          final canInstallRequirements = hasRootRequirements &&
+              packageProvider.supportsRequirementsInstall &&
+              !packageProvider.installing;
+          return PopScope(
+            canPop: _currentDirectory.isEmpty,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop && _currentDirectory.isNotEmpty) {
+                _goUpDirectory();
+              }
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text(project.group.name),
+                actions: [
+                  if (canRun)
+                    IconButton(
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      tooltip: '运行主程序',
+                      onPressed: () => _runProject(project),
+                    ),
+                  PopupMenuButton<String>(
+                    onSelected: (action) => _handleMenuAction(action, project),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'new_file',
+                        child: ListTile(
+                          leading: Icon(Icons.note_add_outlined),
+                          title: Text('新建文件'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'new_dir',
+                        child: ListTile(
+                          leading: Icon(Icons.create_new_folder_outlined),
+                          title: Text('新建目录'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'main',
+                        child: ListTile(
+                          leading: Icon(Icons.flag_outlined),
+                          title: Text('设置主程序'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      if (hasRootRequirements)
+                        PopupMenuItem(
+                          value: 'install_requirements',
+                          enabled: canInstallRequirements,
+                          child: ListTile(
+                            leading: const Icon(Icons.description_outlined),
+                            title: const Text('安装依赖'),
+                            subtitle: Text(
+                              _requirementsMenuSubtitle(packageProvider),
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      const PopupMenuItem(
+                        value: 'import_zip',
+                        child: ListTile(
+                          leading: Icon(Icons.archive_outlined),
+                          title: Text('导入 ZIP'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export_zip',
+                        child: ListTile(
+                          leading: Icon(Icons.file_download_outlined),
+                          title: Text('导出 ZIP'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
                   ),
-                PopupMenuButton<String>(
-                  onSelected: (action) => _handleMenuAction(action, project),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: 'new_file',
-                      child: ListTile(
-                        leading: Icon(Icons.note_add_outlined),
-                        title: Text('新建文件'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'new_dir',
-                      child: ListTile(
-                        leading: Icon(Icons.create_new_folder_outlined),
-                        title: Text('新建目录'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'main',
-                      child: ListTile(
-                        leading: Icon(Icons.flag_outlined),
-                        title: Text('设置主程序'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'import_zip',
-                      child: ListTile(
-                        leading: Icon(Icons.archive_outlined),
-                        title: Text('导入 ZIP'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'export_zip',
-                      child: ListTile(
-                        leading: Icon(Icons.file_download_outlined),
-                        title: Text('导出 ZIP'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            body: _ProjectBody(
-              project: project,
-              currentDirectory: _currentDirectory,
-              onSelectFile: _openProjectFile,
-              onEnterDirectory: _enterDirectory,
-              onGoUpDirectory: _goUpDirectory,
-              onRename: _renameEntry,
-              onDelete: _deleteEntry,
+                ],
+              ),
+              body: _ProjectBody(
+                project: project,
+                currentDirectory: _currentDirectory,
+                onSelectFile: _openProjectFile,
+                onEnterDirectory: _enterDirectory,
+                onGoUpDirectory: _goUpDirectory,
+                onRename: _renameEntry,
+                onDelete: _deleteEntry,
+              ),
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _RequirementsInstallDialog extends StatelessWidget {
+  const _RequirementsInstallDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<PackageProvider>(
+      builder: (context, provider, _) {
+        final logText = provider.installLog.isEmpty
+            ? '等待安装日志...'
+            : provider.installLog.reversed.take(8).join('\n');
+        return AlertDialog(
+          title: const Text('安装依赖'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (provider.installing) ...[
+                  const LinearProgressIndicator(minHeight: 3),
+                  const SizedBox(height: 12),
+                ],
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    logText,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

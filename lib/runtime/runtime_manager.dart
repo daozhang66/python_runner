@@ -139,6 +139,12 @@ class RuntimeManager {
     return currentBackend.installPackage(request);
   }
 
+  Future<PackageInstallResult> installRequirements(
+    RequirementsInstallRequest request,
+  ) {
+    return currentBackend.installRequirements(request);
+  }
+
   Future<PackageUninstallResult> uninstallPackage(String packageName) {
     return currentBackend.uninstallPackage(packageName);
   }

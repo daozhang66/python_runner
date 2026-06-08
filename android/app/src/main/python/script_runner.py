@@ -490,6 +490,10 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
     """Execute Python code with real-time output and stdin support."""
     _original_home = os.environ.get("HOME", "")
     _ensure_site_packages()
+    _original_dont_write_bytecode = sys.dont_write_bytecode
+    _original_py_dont_write_bytecode = os.environ.get("PYTHONDONTWRITEBYTECODE")
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     global _waiting_for_input
     _waiting_for_input = False
 
@@ -746,6 +750,11 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
         # ── Restore HOME ──
         if _original_home:
             os.environ["HOME"] = _original_home
+        sys.dont_write_bytecode = _original_dont_write_bytecode
+        if _original_py_dont_write_bytecode is None:
+            os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+        else:
+            os.environ["PYTHONDONTWRITEBYTECODE"] = _original_py_dont_write_bytecode
 
     return {
         "stdout": "",

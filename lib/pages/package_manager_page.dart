@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -62,6 +65,46 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         );
     _packageController.clear();
     _versionController.clear();
+  }
+
+  Future<void> _installRequirementsFromFile(PackageProvider provider) async {
+    if (!provider.supportsRequirementsInstall) {
+      _showSnack('requirements.txt 仅支持 Linux-like');
+      return;
+    }
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['txt'],
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    if (file.name.toLowerCase() != 'requirements.txt') {
+      _showSnack('请选择 requirements.txt');
+      return;
+    }
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _showSnack('requirements.txt 为空或无法读取');
+      return;
+    }
+    final content = utf8.decode(bytes, allowMalformed: true);
+    if (content.trim().isEmpty) {
+      _showSnack('requirements.txt 为空');
+      return;
+    }
+    await provider.installRequirementsFromContent(
+      content: content,
+      displayName: file.name,
+      indexUrl: _indexUrl,
+    );
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
   }
 
   void _copyInstallLog(BuildContext context, List<String> log) {
@@ -240,6 +283,9 @@ class _PackageManagerPageState extends State<PackageManagerPage>
   }
 
   Widget _buildCompactInstallFields(PackageProvider provider) {
+    final requirementsTooltip = provider.supportsRequirementsInstall
+        ? '安装 requirements.txt'
+        : 'requirements.txt 仅支持 Linux-like';
     return Row(
       children: [
         Expanded(
@@ -257,6 +303,22 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         ),
         const SizedBox(width: 8),
         SizedBox(width: 88, child: _buildVersionField()),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: Tooltip(
+            message: requirementsTooltip,
+            child: IconButton(
+              icon: const Icon(Icons.description_outlined, size: 20),
+              onPressed:
+                  provider.installing || !provider.supportsRequirementsInstall
+                      ? null
+                      : () => _installRequirementsFromFile(provider),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
         const SizedBox(width: 8),
         SizedBox(
           width: 76,

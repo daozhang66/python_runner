@@ -9,7 +9,6 @@ import 'package:re_highlight/styles/vs.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import '../providers/script_provider.dart';
 import '../providers/execution_provider.dart';
-import '../ui/app_toolbars.dart';
 import '../utils/app_page_transitions.dart';
 import 'run_console_page.dart';
 
@@ -30,6 +29,8 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   bool _readOnly = true;
   double _fontSize = 10.0;
   double? _scaleStartFontSize;
+  final Map<int, Offset> _scalePointers = {};
+  double? _pointerScaleStartDistance;
   String _savedText = '';
 
   static const _minFontSize = 6.0;
@@ -138,27 +139,55 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     await prefs.setDouble('editor_font_size_${widget.scriptName}', _fontSize);
   }
 
-  void _handleScaleStart(ScaleStartDetails details) {
-    if (details.pointerCount >= 2) {
+  double? _currentPointerDistance() {
+    if (_scalePointers.length < 2) return null;
+    final positions = _scalePointers.values.take(2).toList(growable: false);
+    return (positions[0] - positions[1]).distance;
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _scalePointers[event.pointer] = event.localPosition;
+    if (_scalePointers.length == 2) {
       _scaleStartFontSize = _fontSize;
+      _pointerScaleStartDistance = _currentPointerDistance();
     }
   }
 
-  void _handleScaleUpdate(ScaleUpdateDetails details) {
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_scalePointers.containsKey(event.pointer)) return;
+    _scalePointers[event.pointer] = event.localPosition;
     final startSize = _scaleStartFontSize;
-    if (startSize == null || details.pointerCount < 2) return;
-    final nextSize = (startSize * details.scale)
+    final startDistance = _pointerScaleStartDistance;
+    final currentDistance = _currentPointerDistance();
+    if (startSize == null ||
+        startDistance == null ||
+        currentDistance == null ||
+        startDistance <= 0) {
+      return;
+    }
+    final nextSize = (startSize * currentDistance / startDistance)
         .clamp(_minFontSize, _maxFontSize)
         .toDouble();
     if ((nextSize - _fontSize).abs() < 0.1) return;
     setState(() => _fontSize = nextSize);
   }
 
-  void _handleScaleEnd(ScaleEndDetails details) {
+  void _finishPointerScale() {
     if (_scaleStartFontSize != null) {
       _scaleStartFontSize = null;
+      _pointerScaleStartDistance = null;
       unawaited(_persistFontSize());
     }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _scalePointers.remove(event.pointer);
+    if (_scalePointers.length < 2) _finishPointerScale();
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _scalePointers.remove(event.pointer);
+    if (_scalePointers.length < 2) _finishPointerScale();
   }
 
   void _onTextChanged() {
@@ -225,47 +254,86 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
     }
   }
 
-  Widget _buildCommandBar(bool isThisRunning) {
+  Widget _buildCommandBar() {
     if (_readOnly) return const SizedBox.shrink();
     return Container(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      height: 36,
+      height: 40,
       child: Row(
         children: [
           const SizedBox(width: 8),
-          AppToolbarButton(
-            icon: Icons.format_indent_increase,
-            tooltip: '缩进',
-            onPressed: () => _controller.applyIndent(),
-          ),
-          AppToolbarButton(
-            icon: Icons.format_indent_decrease,
-            tooltip: '反缩进',
-            onPressed: () => _controller.applyOutdent(),
-          ),
-          AppToolbarButton(
-            icon: Icons.undo,
-            tooltip: '撤销',
-            onPressed: () => _controller.undo(),
-          ),
-          AppToolbarButton(
-            icon: Icons.redo,
-            tooltip: '重做',
-            onPressed: () => _controller.redo(),
+          PopupMenuButton<String>(
+            tooltip: '编辑操作',
+            onSelected: (value) {
+              switch (value) {
+                case 'indent':
+                  _controller.applyIndent();
+                  break;
+                case 'outdent':
+                  _controller.applyOutdent();
+                  break;
+                case 'undo':
+                  _controller.undo();
+                  break;
+                case 'redo':
+                  _controller.redo();
+                  break;
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'indent',
+                child: Row(children: [
+                  Icon(Icons.format_indent_increase),
+                  SizedBox(width: 12),
+                  Text('缩进'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'outdent',
+                child: Row(children: [
+                  Icon(Icons.format_indent_decrease),
+                  SizedBox(width: 12),
+                  Text('反缩进'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'undo',
+                child: Row(children: [
+                  Icon(Icons.undo),
+                  SizedBox(width: 12),
+                  Text('撤销'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'redo',
+                child: Row(children: [
+                  Icon(Icons.redo),
+                  SizedBox(width: 12),
+                  Text('重做'),
+                ]),
+              ),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.edit_note, size: 20),
+                  SizedBox(width: 6),
+                  Text('编辑操作'),
+                  Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
           const Spacer(),
-          AppToolbarButton(
-            icon: Icons.search,
-            tooltip: '搜索',
-            onPressed: () => _findController?.findMode(),
-          ),
-          AppToolbarButton(
-            icon: isThisRunning ? Icons.stop : Icons.play_arrow,
-            active: true,
-            tooltip: isThisRunning ? '停止' : '运行',
-            onPressed: isThisRunning
-                ? () => context.read<ExecutionProvider>().stopExecution()
-                : _run,
+          Text(
+            _modified ? '未保存' : '已同步',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -322,16 +390,6 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
       appBar: AppBar(
         title: Text(_displayName),
         actions: [
-          IconButton(
-            icon: Icon(_readOnly ? Icons.lock : Icons.lock_open, size: 20),
-            onPressed: () => setState(() => _readOnly = !_readOnly),
-            tooltip: _readOnly ? '只读模式' : '编辑模式',
-          ),
-          IconButton(
-            icon: const Icon(Icons.search, size: 20),
-            onPressed: () => _findController?.findMode(),
-            tooltip: '搜索',
-          ),
           if (_modified)
             IconButton(
                 icon: const Icon(Icons.save), onPressed: _save, tooltip: '保存'),
@@ -342,15 +400,52 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
                 : _run,
             tooltip: isThisRunning ? '停止' : '运行',
           ),
-          IconButton(
-            icon: const Icon(Icons.fullscreen),
-            onPressed: () => Navigator.push(
-              context,
-              AppPageTransitions.fadeThrough(
-                RunConsolePage(scriptName: widget.scriptName),
+          PopupMenuButton<String>(
+            tooltip: '更多',
+            onSelected: (value) {
+              switch (value) {
+                case 'mode':
+                  setState(() => _readOnly = !_readOnly);
+                  break;
+                case 'search':
+                  _findController?.findMode();
+                  break;
+                case 'console':
+                  Navigator.push(
+                    context,
+                    AppPageTransitions.fadeThrough(
+                      RunConsolePage(scriptName: widget.scriptName),
+                    ),
+                  );
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'mode',
+                child: Row(children: [
+                  Icon(_readOnly ? Icons.lock_open : Icons.lock),
+                  const SizedBox(width: 12),
+                  Text(_readOnly ? '进入编辑' : '切到只读'),
+                ]),
               ),
-            ),
-            tooltip: '全屏终端',
+              const PopupMenuItem(
+                value: 'search',
+                child: Row(children: [
+                  Icon(Icons.search),
+                  SizedBox(width: 12),
+                  Text('搜索'),
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'console',
+                child: Row(children: [
+                  Icon(Icons.fullscreen),
+                  SizedBox(width: 12),
+                  Text('全屏终端'),
+                ]),
+              ),
+            ],
           ),
         ],
       ),
@@ -358,13 +453,14 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildCommandBar(isThisRunning),
+                _buildCommandBar(),
                 Expanded(
-                  child: GestureDetector(
+                  child: Listener(
                     behavior: HitTestBehavior.translucent,
-                    onScaleStart: _handleScaleStart,
-                    onScaleUpdate: _handleScaleUpdate,
-                    onScaleEnd: _handleScaleEnd,
+                    onPointerDown: _handlePointerDown,
+                    onPointerMove: _handlePointerMove,
+                    onPointerUp: _handlePointerUp,
+                    onPointerCancel: _handlePointerCancel,
                     child: CodeEditor(
                       controller: _controller,
                       findController: _findController,

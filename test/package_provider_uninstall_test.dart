@@ -46,16 +46,50 @@ void main() {
       isNot(contains('urllib3')),
     );
   });
+
+  test('package provider installs requirements and refreshes packages',
+      () async {
+    final backend = _FakeRuntimeBackend(
+      packages: const [],
+      uninstallResult: const PackageUninstallResult(success: true),
+      packagesAfterRequirements: const [
+        RuntimePackage(name: 'requests', version: '2.32.0', source: 'user'),
+      ],
+    );
+    final provider = PackageProvider(
+      NativeBridge(),
+      runtimeManager: RuntimeManager(backend),
+    );
+
+    await provider.installRequirementsFromContent(
+      content: 'requests==2.32.0',
+      displayName: 'requirements.txt',
+      indexUrl: 'https://example.invalid/simple',
+    );
+
+    expect(backend.requirementsInstallCount, 1);
+    expect(backend.lastRequirementsRequest?.content, 'requests==2.32.0');
+    expect(
+      backend.lastRequirementsRequest?.indexUrl,
+      'https://example.invalid/simple',
+    );
+    expect(provider.installing, isFalse);
+    expect(provider.packages.map((item) => item.name), contains('requests'));
+  });
 }
 
 class _FakeRuntimeBackend implements RuntimeBackend {
   _FakeRuntimeBackend({
     required List<RuntimePackage> packages,
     required this.uninstallResult,
+    this.packagesAfterRequirements = const [],
   }) : _packages = List<RuntimePackage>.from(packages);
 
   final List<RuntimePackage> _packages;
   final PackageUninstallResult uninstallResult;
+  final List<RuntimePackage> packagesAfterRequirements;
+  RequirementsInstallRequest? lastRequirementsRequest;
+  int requirementsInstallCount = 0;
 
   @override
   String get id => 'fake';
@@ -92,6 +126,21 @@ class _FakeRuntimeBackend implements RuntimeBackend {
   @override
   Future<PackageInstallResult> installPackage(PackageInstallRequest request) {
     throw UnimplementedError();
+  }
+
+  @override
+  Future<PackageInstallResult> installRequirements(
+    RequirementsInstallRequest request,
+  ) async {
+    lastRequirementsRequest = request;
+    requirementsInstallCount++;
+    _packages
+      ..clear()
+      ..addAll(packagesAfterRequirements);
+    return const PackageInstallResult(
+      success: true,
+      message: 'requirements.txt 安装成功',
+    );
   }
 
   @override

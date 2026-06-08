@@ -68,4 +68,35 @@ void main() {
     ]);
     expect(calls.first.arguments, {'projectKey': 'project_1'});
   });
+
+  test('native bridge exposes linux-like requirements install arguments',
+      () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'installLinuxLikeRequirements') {
+        return true;
+      }
+      throw PlatformException(code: 'missing', message: call.method);
+    });
+
+    final bridge = NativeBridge();
+    await bridge.installLinuxLikeRequirements(
+      projectKey: 'project_1',
+      requirementsPath: 'requirements.txt',
+      content: 'requests==2.32.0',
+      displayName: 'requirements.txt',
+      indexUrl: 'https://example.invalid/simple',
+    );
+
+    expect(calls.single.method, 'installLinuxLikeRequirements');
+    expect(calls.single.arguments, {
+      'projectKey': 'project_1',
+      'requirementsPath': 'requirements.txt',
+      'content': 'requests==2.32.0',
+      'displayName': 'requirements.txt',
+      'indexUrl': 'https://example.invalid/simple',
+    });
+  });
 }
