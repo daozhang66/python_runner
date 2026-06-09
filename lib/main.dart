@@ -193,15 +193,17 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final theme = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      scaffoldBackgroundColor:
+          isDark ? AppThemeColors.darkBackground : colorScheme.surface,
+      canvasColor: isDark ? AppThemeColors.darkBackground : null,
       cardTheme: CardThemeData(
         elevation: 0,
+        color: isDark ? AppThemeColors.darkSurface : colorScheme.surface,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xl),
           side: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.grey.shade200,
+            color: isDark ? AppThemeColors.darkBorder : Colors.grey.shade200,
           ),
         ),
       ),
@@ -213,8 +215,12 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         height: 60,
+        backgroundColor:
+            isDark ? AppThemeColors.darkBackground : colorScheme.surface,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: colorScheme.primaryContainer.withValues(alpha: 0.35),
+        indicatorColor: isDark
+            ? AppThemeColors.darkPinnedSurface
+            : colorScheme.primaryContainer.withValues(alpha: 0.35),
       ),
       dialogTheme: DialogThemeData(
         elevation: 0,

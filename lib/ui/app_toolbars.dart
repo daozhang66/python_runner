@@ -75,7 +75,7 @@ class AppSearchBar extends StatelessWidget {
 /// 统一工具栏按钮。
 ///
 /// 用于编辑器、终端、网络详情页工具栏。
-class AppToolbarButton extends StatelessWidget {
+class AppToolbarButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
   final String? tooltip;
@@ -92,15 +92,56 @@ class AppToolbarButton extends StatelessWidget {
   });
 
   @override
+  State<AppToolbarButton> createState() => _AppToolbarButtonState();
+}
+
+class _AppToolbarButtonState extends State<AppToolbarButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.90).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return IconButton(
-      icon: Icon(icon, size: iconSize),
-      color: active ? colors.primary : colors.onSurfaceVariant,
-      onPressed: onPressed,
-      visualDensity: VisualDensity.compact,
-      tooltip: tooltip,
+    return Listener(
+      onPointerDown: (_) {
+        if (widget.onPressed != null) _controller.forward();
+      },
+      onPointerUp: (_) {
+        if (widget.onPressed != null) _controller.reverse();
+      },
+      onPointerCancel: (_) {
+        if (widget.onPressed != null) _controller.reverse();
+      },
+      child: ScaleTransition(
+        scale: _scale,
+        child: IconButton(
+          icon: Icon(widget.icon, size: widget.iconSize),
+          color: widget.active ? colors.primary : colors.onSurfaceVariant,
+          onPressed: widget.onPressed,
+          visualDensity: VisualDensity.compact,
+          tooltip: widget.tooltip,
+        ),
+      ),
     );
   }
 }

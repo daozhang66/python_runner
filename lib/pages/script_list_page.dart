@@ -9,6 +9,7 @@ import '../providers/execution_provider.dart';
 import '../runtime/runtime_manager.dart';
 import '../services/native_bridge.dart';
 import '../services/script_project_service.dart';
+import '../ui/app_design_tokens.dart';
 import '../utils/app_page_transitions.dart';
 import '../widgets/confirm_dialog.dart';
 import 'script_project_page.dart';
@@ -16,6 +17,7 @@ import 'script_editor_page.dart';
 import 'run_console_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'app_file_picker_page.dart';
 
 class ScriptListPageController {
   _ScriptListPageState? _state;
@@ -170,8 +172,9 @@ class _ScriptListPageState extends State<ScriptListPage> {
     return _maskedScriptName;
   }
 
-  TextStyle? get _maskedNameStyle =>
-      _maskScriptNames ? const TextStyle(color: Color(0xFF050505)) : null;
+  TextStyle? get _maskedNameStyle => _maskScriptNames
+      ? TextStyle(color: AppThemeColors.maskedText(context))
+      : null;
 
   bool _canAcceptListDrop(String draggedName, String targetName, int? groupId) {
     if (draggedName == targetName) return false;
@@ -265,7 +268,9 @@ class _ScriptListPageState extends State<ScriptListPage> {
       style: TextStyle(
         fontSize: fontSize,
         fontWeight: fontWeight,
-        color: _maskScriptNames ? const Color(0xFF050505) : colors.onSurface,
+        color: _maskScriptNames
+            ? AppThemeColors.maskedText(context)
+            : colors.onSurface,
       ),
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
@@ -512,24 +517,39 @@ class _ScriptListPageState extends State<ScriptListPage> {
   }
 
   Future<void> _importProjectZip() async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-      withData: false,
+    final selected = await AppFilePickerPage.pickFile(
+      context,
+      title: '导入项目 ZIP',
+      allowedExtensions: const ['zip'],
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.first;
-    final path = file.path;
-    if (path == null || path.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取 ZIP 路径')),
-        );
+    if (selected == null) return;
+    late final String zipPath;
+    String fileName;
+    if (selected.useSystemPicker) {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        withData: false,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final file = picked.files.first;
+      final path = file.path;
+      fileName = file.name;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取 ZIP 路径')),
+          );
+        }
+        return;
       }
-      return;
+      zipPath = path;
+    } else {
+      zipPath = selected.path;
+      fileName = selected.name;
     }
     final defaultName =
-        file.name.replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
+        fileName.replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
     final name =
         await _askProjectName(defaultName.isEmpty ? '导入项目' : defaultName);
     if (name == null || name.isEmpty) return;
@@ -553,7 +573,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
         }
         return;
       }
-      await _bridge.importScriptProjectZip(projectKey, path);
+      await _bridge.importScriptProjectZip(projectKey, zipPath);
       final files = await service.loadProjectFiles(group);
       if (!mounted) return;
       final selected = await showDialog<String>(
@@ -662,22 +682,37 @@ class _ScriptListPageState extends State<ScriptListPage> {
   }
 
   void _importScript() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['py'],
-      withData: true,
+    final selected = await AppFilePickerPage.pickFile(
+      context,
+      title: '导入脚本',
+      allowedExtensions: const ['py'],
     );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    if (!file.name.toLowerCase().endsWith('.py')) {
+    if (selected == null) return;
+
+    String name;
+    List<int>? bytes;
+    if (selected.useSystemPicker) {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['py'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      name = file.name;
+      bytes = file.bytes;
+    } else {
+      name = selected.name;
+      bytes = await _bridge.readFilePickerFile(selected.path);
+    }
+
+    if (!name.toLowerCase().endsWith('.py')) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('只支持导入 .py 文件'), duration: Duration(seconds: 2)));
       }
       return;
     }
-    final name = file.name;
-    final bytes = file.bytes;
     if (bytes == null || !mounted) return;
     final content = utf8.decode(bytes, allowMalformed: true);
 
@@ -2281,15 +2316,20 @@ class _ScriptFolderCard extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon, size: 42, color: colors.primary),
+                  Icon(
+                    icon,
+                    size: 42,
+                    color: AppThemeColors.softIconColor(context, colors),
+                  ),
                   const Spacer(),
                   Text(
                     name,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color:
-                          masked ? const Color(0xFF050505) : colors.onSurface,
+                      color: masked
+                          ? AppThemeColors.maskedText(context)
+                          : colors.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2308,10 +2348,17 @@ class _ScriptFolderCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: colors.primaryContainer,
+                      color: AppThemeColors.isDark(context)
+                          ? AppThemeColors.darkSurfaceHigh
+                          : colors.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, color: colors.onPrimaryContainer),
+                    child: Icon(
+                      icon,
+                      color: AppThemeColors.isDark(context)
+                          ? AppThemeColors.softIconColor(context, colors)
+                          : colors.onPrimaryContainer,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2326,7 +2373,7 @@ class _ScriptFolderCard extends StatelessWidget {
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: masked
-                                ? const Color(0xFF050505)
+                                ? AppThemeColors.maskedText(context)
                                 : colors.onSurface,
                           ),
                           maxLines: 1,
@@ -2437,7 +2484,7 @@ class _ScriptGridCard extends StatelessWidget {
                           height: 1.2,
                           fontWeight: FontWeight.w600,
                           color: masked
-                              ? const Color(0xFF050505)
+                              ? AppThemeColors.maskedText(context)
                               : colors.onSurface),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),
@@ -2535,20 +2582,25 @@ class _ScriptCardSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(16);
+    final radius = BorderRadius.circular(14);
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: selected
-            ? colors.primaryContainer.withValues(alpha: 0.82)
-            : pinned
-                ? colors.primaryContainer.withValues(alpha: 0.72)
-                : colors.surfaceContainer,
+        color: AppThemeColors.scriptSurface(
+          context,
+          colors,
+          selected: selected,
+          pinned: pinned,
+        ),
         borderRadius: radius,
         border: Border.all(
-          color: pinned
-              ? colors.primary.withValues(alpha: 0.42)
-              : colors.outlineVariant.withValues(alpha: 0.7),
+          color: AppThemeColors.scriptBorder(
+            context,
+            colors,
+            selected: selected,
+            pinned: pinned,
+          ),
+          width: AppThemeColors.isDark(context) ? 0.8 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -2573,11 +2625,13 @@ class _ScriptIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppThemeColors.isDark(context);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: colors.primaryContainer,
+        color:
+            isDark ? AppThemeColors.darkSurfaceHigh : colors.primaryContainer,
         borderRadius: BorderRadius.circular(size * 0.28),
       ),
       alignment: Alignment.center,
@@ -2586,7 +2640,9 @@ class _ScriptIcon extends StatelessWidget {
         style: TextStyle(
           fontSize: fontSize,
           fontWeight: FontWeight.w700,
-          color: colors.onPrimaryContainer,
+          color: isDark
+              ? colors.primary.withValues(alpha: 0.88)
+              : colors.onPrimaryContainer,
         ),
       ),
     );
@@ -2635,16 +2691,21 @@ class _PinnedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppThemeColors.isDark(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.14),
+        color: colors.primary.withValues(alpha: isDark ? 0.16 : 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.push_pin, size: 10, color: colors.primary),
+          Icon(
+            Icons.push_pin,
+            size: 10,
+            color: colors.primary.withValues(alpha: isDark ? 0.86 : 1),
+          ),
           const SizedBox(width: 2),
           Text(
             '置顶',
@@ -2652,7 +2713,7 @@ class _PinnedBadge extends StatelessWidget {
               fontSize: 10,
               height: 1,
               fontWeight: FontWeight.w700,
-              color: colors.primary,
+              color: colors.primary.withValues(alpha: isDark ? 0.86 : 1),
             ),
           ),
         ],
@@ -2661,28 +2722,68 @@ class _PinnedBadge extends StatelessWidget {
   }
 }
 
-class _QuickRunButton extends StatelessWidget {
+class _QuickRunButton extends StatefulWidget {
   final VoidCallback onPressed;
 
   const _QuickRunButton({required this.onPressed});
 
   @override
+  State<_QuickRunButton> createState() => _QuickRunButtonState();
+}
+
+class _QuickRunButtonState extends State<_QuickRunButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.88).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: '运行',
-      child: SizedBox.square(
-        dimension: 34,
-        child: Material(
-          color: colors.primaryContainer,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onPressed,
-            child: Icon(
-              Icons.play_arrow_rounded,
-              size: 20,
-              color: colors.onPrimaryContainer,
+    final isDark = AppThemeColors.isDark(context);
+    return ScaleTransition(
+      scale: _scale,
+      child: Tooltip(
+        message: '运行',
+        child: SizedBox.square(
+          dimension: 34,
+          child: Material(
+            color: isDark
+                ? AppThemeColors.darkSurfaceHigh
+                : colors.primaryContainer,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTapDown: (_) => _controller.forward(),
+              onTapCancel: () => _controller.reverse(),
+              onTap: () {
+                _controller.reverse();
+                widget.onPressed();
+              },
+              child: Icon(
+                Icons.play_arrow_rounded,
+                size: 20,
+                color: isDark
+                    ? colors.primary.withValues(alpha: 0.9)
+                    : colors.onPrimaryContainer,
+              ),
             ),
           ),
         ),

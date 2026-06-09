@@ -792,7 +792,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: TextField(
                           controller: _workingDirController,
                           decoration: const InputDecoration(
-                            hintText: '/sdcard/Download/PythonRunner',
+                            hintText:
+                                '/storage/emulated/0/Download/PythonRunner',
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10),
@@ -830,7 +831,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: TextField(
                           controller: _exportDirController,
                           decoration: const InputDecoration(
-                            hintText: '/sdcard/Download/PythonRunner',
+                            hintText:
+                                '/storage/emulated/0/Download/PythonRunner',
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10),
@@ -955,7 +957,7 @@ class _SettingsPageState extends State<SettingsPage> {
             SwitchListTile(
               secondary: const Icon(Icons.visibility_outlined),
               title: const Text('记录网络请求'),
-              subtitle: const Text('捕获 requests/httpx/urllib3 的真实请求',
+              subtitle: const Text('捕获 HTTP、DNS、socket 与常见网络命令',
                   style: TextStyle(fontSize: 12)),
               value: _recordRequests,
               onChanged: (v) async {
@@ -1831,7 +1833,7 @@ class _UserManualPage extends StatelessWidget {
             title: '网络请求调试',
             items: [
               _ManualItem(Icons.visibility_outlined, '请求查看器',
-                  '底部「网络」Tab 查看所有 Python HTTP 请求'),
+                  '底部「网络」Tab 查看 Python 网络请求记录'),
               _ManualItem(Icons.search, '搜索 URL', '顶部搜索栏实时搜索 URL / 域名关键字'),
               _ManualItem(Icons.bar_chart, '统计摘要', '显示总数、成功数、错误数、平均耗时'),
               _ManualItem(Icons.filter_list, '高级筛选', '按域名、请求方法和状态码范围筛选'),
@@ -1839,7 +1841,8 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(
                   Icons.account_tree, 'JSON 树查看', '响应体支持 JSON 树状结构查看和搜索'),
               _ManualItem(Icons.tune, '请求覆盖', '设置页开启后可全局覆盖 UA/Headers/Cookie'),
-              _ManualItem(Icons.code, '支持的库', 'requests、httpx、urllib 自动 Hook'),
+              _ManualItem(Icons.code, '支持的库',
+                  'requests、httpx、urllib、aiohttp、socket、subprocess 网络命令自动 Hook'),
               _ManualItem(Icons.bug_report_outlined, '代理调试',
                   '配合 Charles/Fiddler 外部抓包工具使用'),
             ],
@@ -1881,7 +1884,7 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(
                   Icons.bug_report_outlined, '网络调试模式', '代理/SSL 配置，用于外部抓包工具'),
               _ManualItem(
-                  Icons.visibility_outlined, '记录网络请求', '捕获 Python HTTP 库的真实请求'),
+                  Icons.visibility_outlined, '记录网络请求', '捕获 Python 脚本的网络活动'),
               _ManualItem(Icons.tune, '请求覆盖', '全局覆盖 UA/Headers/Cookie/超时/重定向'),
               _ManualItem(Icons.article_outlined, '系统日志', '查看、导出或清空运行日志和崩溃日志'),
             ],

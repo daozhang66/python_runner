@@ -165,7 +165,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                     icon: Icons.wifi_find,
                     title: _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
                     subtitle: _store.count == 0
-                        ? '运行包含 HTTP 请求的脚本后，请求将自动显示在这里'
+                        ? '运行包含网络请求的脚本后，请求将自动显示在这里'
                         : '尝试清空筛选条件',
                   )
                 : ListView.builder(
@@ -225,8 +225,18 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: ['', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']
-                  .map((m) {
+              children: [
+                '',
+                'GET',
+                'POST',
+                'PUT',
+                'DELETE',
+                'PATCH',
+                'HEAD',
+                'DNS',
+                'CONNECT',
+                'PROCESS'
+              ].map((m) {
                 final label = m.isEmpty ? '全部' : m;
                 final selected = _store.filterMethod == m;
                 return ChoiceChip(

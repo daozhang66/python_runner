@@ -16,6 +16,7 @@ import '../services/project_path_validator.dart';
 import '../services/script_project_service.dart';
 import '../utils/app_page_transitions.dart';
 import '../widgets/confirm_dialog.dart';
+import 'app_file_picker_page.dart';
 import 'project_file_editor_page.dart';
 import 'run_console_page.dart';
 
@@ -222,18 +223,30 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
   }
 
   Future<void> _importZip(ScriptProjectProvider project) async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
+    final pickedFile = await AppFilePickerPage.pickFile(
+      context,
+      title: '导入项目 ZIP',
       allowedExtensions: const ['zip'],
-      withData: false,
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final path = picked.files.first.path;
-    if (path == null || path.isEmpty) {
-      _showSnack('无法读取 ZIP 路径');
-      return;
+    if (pickedFile == null) return;
+    late final String zipPath;
+    if (pickedFile.useSystemPicker) {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+        withData: false,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final path = picked.files.first.path;
+      if (path == null || path.isEmpty) {
+        _showSnack('无法读取 ZIP 路径');
+        return;
+      }
+      zipPath = path;
+    } else {
+      zipPath = pickedFile.path;
     }
-    final imported = await project.importZip(path);
+    final imported = await project.importZip(zipPath);
     setState(() => _currentDirectory = '');
     if (imported.isEmpty && project.files.isEmpty) {
       _showSnack('导入失败');

@@ -15,8 +15,10 @@ void main() {
     expect(source, contains("hintText: '包名'"));
     expect(source, contains("hintText: '版本'"));
     expect(source, contains('SizedBox(width: 88'));
+    expect(source, contains('AppFilePickerPage.pickFile'));
     expect(source, contains('FilePicker.platform.pickFiles'));
     expect(source, contains('installRequirementsFromContent'));
+    expect(source, contains("exactFileName: 'requirements.txt'"));
     expect(source, contains("'requirements.txt'"));
     expect(source, contains('requirements.txt 仅支持 Linux-like'));
     expect(source, contains('Icons.description_outlined'));

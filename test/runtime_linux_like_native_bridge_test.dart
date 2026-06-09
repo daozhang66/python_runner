@@ -169,7 +169,7 @@ void main() {
     expect(
       manager,
       contains(
-          'const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"'),
+          'const val defaultScriptWorkingDir = "/storage/emulated/0/Download/PythonRunner"'),
     );
     expect(manager, contains('fun resolveScriptWorkingDir('));
     expect(manager, contains('ensureWorkingDirExists = true'));
@@ -233,17 +233,26 @@ void main() {
     expect(activity, contains('executionEnvironment'));
   });
 
-  test('linux-like script launcher preserves script semantics with runpy', () {
+  test('linux-like script launcher exposes cwd script path to user code', () {
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
+    final activity = File(
+      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
 
-    expect(manager, contains('runpy.run_path'));
     expect(manager, contains('toPythonStringLiteral'));
     expect(manager, contains('add("-B")'));
     expect(manager, contains('sys.dont_write_bytecode = True'));
+    expect(manager, contains('execution_file_path'));
+    expect(manager, contains("'__file__': execution_file_path"));
+    expect(manager, contains("sys.argv[0] = os.path.abspath(execution_file_path)"));
+    expect(manager, contains("compile(_source, execution_file_path, 'exec')"));
+    expect(activity, contains('executionFilePath = File('));
+    expect(activity, contains('linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)'));
     expect(manager, isNot(contains('JSONObject.quote(scriptPath)')));
     expect(manager, isNot(contains(r"exec(open('$scriptPath').read())")));
+    expect(manager, isNot(contains('runpy.run_path')));
   });
 
   test('linux-like project execution removes pycache directories', () {

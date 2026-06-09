@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'app_logger.dart';
+import '../models/app_file_entry.dart';
 import '../models/script_project_file.dart';
 import 'project_path_validator.dart';
 import 'script_name_validator.dart';
@@ -171,6 +172,31 @@ class NativeBridge {
     final result =
         await _invoke('exportScript', {'name': safeName, 'destDir': destDir});
     return result?.toString() ?? '';
+  }
+
+  Future<List<AppFileEntry>> getFilePickerRoots() async {
+    final result = await _invoke('getFilePickerRoots', {});
+    return (result as List)
+        .map((item) => AppFileEntry.fromMap(item as Map))
+        .toList();
+  }
+
+  Future<List<AppFileEntry>> listFilePickerDirectory(String path) async {
+    final result = await _invoke('listFilePickerDirectory', {'path': path});
+    return (result as List)
+        .map((item) => AppFileEntry.fromMap(item as Map))
+        .toList();
+  }
+
+  Future<AppFileEntry?> openFilePickerTree({String title = '选择目录'}) async {
+    final result = await _invoke('openFilePickerTree', {'title': title});
+    if (result == null) return null;
+    return AppFileEntry.fromMap(result as Map);
+  }
+
+  Future<List<int>> readFilePickerFile(String path) async {
+    final result = await _invoke('readFilePickerFile', {'path': path});
+    return (result as List).map((item) => (item as num).toInt()).toList();
   }
 
   Future<String> createScriptProject(String projectKey) async {

@@ -45,7 +45,7 @@ void main() {
     expect(source, contains('_displayScriptName('));
     expect(source, contains('_displayGroupName('));
     expect(source, contains("'●●●●●●'"));
-    expect(source, contains('const Color(0xFF050505)'));
+    expect(source, contains('AppThemeColors.maskedText(context)'));
     expect(source, contains('masked: _maskScriptNames'));
     expect(source, contains('_buildScriptNameVisibilityButton(),'));
     expect(source.indexOf('_buildScriptNameVisibilityButton(),'),
@@ -131,7 +131,7 @@ void main() {
     expect(pageSource, contains('取消置顶'));
     expect(pageSource, contains('pinned: script.isPinned'));
     expect(pageSource, contains('class _PinnedBadge'));
-    expect(pageSource, contains('primaryContainer.withValues(alpha: 0.72)'));
+    expect(pageSource, contains('AppThemeColors.scriptSurface('));
   });
 
   test('script reordering starts only from handles and never from pinned cards',
@@ -174,7 +174,7 @@ void main() {
     expect(source, contains('class _ScriptIcon'));
     expect(source, contains('class _ScriptMetaChip'));
     expect(source, contains('class _QuickRunButton'));
-    expect(source, contains('colors.outlineVariant.withValues(alpha: 0.7)'));
+    expect(source, contains('AppThemeColors.scriptBorder('));
     expect(source, contains('SizedBox.square('));
     expect(source, contains('dimension: 34'));
     expect(source, contains('size: 20'));

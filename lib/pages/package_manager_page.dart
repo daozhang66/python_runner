@@ -9,11 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/package_info.dart';
 import '../providers/package_provider.dart';
 import '../runtime/runtime_package.dart';
+import '../services/native_bridge.dart';
 import '../ui/app_badges.dart';
 import '../ui/app_empty_state.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_toolbars.dart';
 import '../widgets/confirm_dialog.dart';
+import 'app_file_picker_page.dart';
 
 class PackageManagerPage extends StatefulWidget {
   const PackageManagerPage({super.key});
@@ -24,6 +26,7 @@ class PackageManagerPage extends StatefulWidget {
 
 class _PackageManagerPageState extends State<PackageManagerPage>
     with SingleTickerProviderStateMixin {
+  final _bridge = NativeBridge();
   final _packageController = TextEditingController();
   final _versionController = TextEditingController();
   final _searchController = TextEditingController();
@@ -72,18 +75,34 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       _showSnack('requirements.txt 仅支持 Linux-like');
       return;
     }
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['txt'],
-      withData: true,
+    final selected = await AppFilePickerPage.pickFile(
+      context,
+      title: '安装 requirements.txt',
+      exactFileName: 'requirements.txt',
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.first;
-    if (file.name.toLowerCase() != 'requirements.txt') {
+    if (selected == null) return;
+
+    String fileName;
+    List<int>? bytes;
+    if (selected.useSystemPicker) {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final file = picked.files.first;
+      fileName = file.name;
+      bytes = file.bytes;
+    } else {
+      fileName = selected.name;
+      bytes = await _bridge.readFilePickerFile(selected.path);
+    }
+
+    if (fileName.toLowerCase() != 'requirements.txt') {
       _showSnack('请选择 requirements.txt');
       return;
     }
-    final bytes = file.bytes;
     if (bytes == null || bytes.isEmpty) {
       _showSnack('requirements.txt 为空或无法读取');
       return;
@@ -95,7 +114,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     }
     await provider.installRequirementsFromContent(
       content: content,
-      displayName: file.name,
+      displayName: fileName,
       indexUrl: _indexUrl,
     );
   }

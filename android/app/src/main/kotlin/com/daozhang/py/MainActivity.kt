@@ -413,6 +413,16 @@ class MainActivity : FlutterActivity() {
                         val destDir = call.argument<String>("destDir")
                         handleExportScript(name, destDir, result)
                     }
+                    "getFilePickerRoots" -> handleGetFilePickerRoots(result)
+                    "listFilePickerDirectory" -> {
+                        val path = call.argument<String>("path") ?: ""
+                        handleListFilePickerDirectory(path, result)
+                    }
+                    "openFilePickerTree" -> result.success(null)
+                    "readFilePickerFile" -> {
+                        val path = call.argument<String>("path") ?: ""
+                        handleReadFilePickerFile(path, result)
+                    }
                     "openUrl" -> {
                         val url = call.argument<String>("url") ?: ""
                         handleOpenUrl(url, result)
@@ -1134,6 +1144,7 @@ class MainActivity : FlutterActivity() {
                 LinuxLikeExecutionTarget(
                     displayName = name.trim().ifBlank { normalizeProjectKey(projectKey) },
                     scriptFile = mainFile,
+                    executionFilePath = mainFile.absolutePath,
                     workingDir = projectRoot.absolutePath,
                     pythonPathEntries = listOf(
                         projectRoot.absolutePath,
@@ -1149,6 +1160,10 @@ class MainActivity : FlutterActivity() {
                 LinuxLikeExecutionTarget(
                     displayName = name,
                     scriptFile = scriptFile,
+                    executionFilePath = File(
+                        linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir),
+                        scriptFile.name
+                    ).absolutePath,
                     workingDir = linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir),
                     pythonPathEntries = emptyList()
                 )
@@ -1179,7 +1194,8 @@ class MainActivity : FlutterActivity() {
         val command = linuxLikeRuntimeManager.buildPythonCommand(
             executionTarget.scriptFile.absolutePath,
             resolvedWorkingDir,
-            executionEnvironment
+            executionEnvironment,
+            executionTarget.executionFilePath
         )
         val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -2210,6 +2226,105 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun handleGetFilePickerRoots(result: MethodChannel.Result) {
+        try {
+            val roots = linkedMapOf<String, Map<String, Any>>()
+            fun addRoot(name: String, file: File?) {
+                if (file == null) return
+                val path = try {
+                    file.canonicalPath
+                } catch (_: Exception) {
+                    file.absolutePath
+                }
+                if (path.isBlank() || !file.exists()) return
+                roots[path] = appFileEntryMap(file, name)
+            }
+
+            val externalRoot = Environment.getExternalStorageDirectory()
+            addRoot("内部存储", externalRoot)
+            addRoot("下载", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
+            addRoot("文档", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS))
+
+            val storageRoot = File("/storage")
+            storageRoot.listFiles()
+                ?.filter { it.isDirectory && it.canRead() && it.name != "self" && it.name != "emulated" }
+                ?.forEach { addRoot(it.name, it) }
+
+            addRoot("文件系统", File("/"))
+            result.success(roots.values.toList())
+        } catch (e: Exception) {
+            result.error("1032", "获取存储位置失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleListFilePickerDirectory(path: String, result: MethodChannel.Result) {
+        try {
+            if (path.isBlank()) {
+                handleGetFilePickerRoots(result)
+                return
+            }
+            val dir = File(path)
+            if (!dir.exists()) {
+                result.error("1033", "目录不存在: $path", null)
+                return
+            }
+            if (!dir.isDirectory) {
+                result.error("1033", "不是目录: $path", null)
+                return
+            }
+            val entries = dir.listFiles()
+                ?.map { appFileEntryMap(it) }
+                ?: emptyList()
+            result.success(entries)
+        } catch (e: SecurityException) {
+            result.error("1033", "没有权限读取此目录: ${e.message}", null)
+        } catch (e: Exception) {
+            result.error("1033", "读取目录失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleReadFilePickerFile(path: String, result: MethodChannel.Result) {
+        try {
+            if (path.isBlank()) {
+                result.error("1034", "文件路径为空", null)
+                return
+            }
+            val bytes = if (path.startsWith("content://")) {
+                val uri = Uri.parse(path)
+                contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalArgumentException("无法读取文件")
+            } else {
+                val file = File(path)
+                if (!file.isFile) {
+                    result.error("1034", "文件不存在: $path", null)
+                    return
+                }
+                file.readBytes()
+            }
+            result.success(bytes)
+        } catch (e: SecurityException) {
+            result.error("1034", "没有权限读取文件: ${e.message}", null)
+        } catch (e: Exception) {
+            result.error("1034", "读取文件失败: ${e.message}", null)
+        }
+    }
+
+    private fun appFileEntryMap(file: File, displayName: String? = null): Map<String, Any> {
+        val path = try {
+            file.canonicalPath
+        } catch (_: Exception) {
+            file.absolutePath
+        }
+        val name = displayName ?: file.name.ifBlank { path }
+        return mapOf(
+            "path" to path,
+            "name" to name,
+            "isDirectory" to file.isDirectory,
+            "size" to if (file.isFile) file.length() else 0L,
+            "modifiedAt" to file.lastModified()
+        )
+    }
+
     private fun handleGetPythonInfo(result: MethodChannel.Result) {
         Thread {
             try {
@@ -2403,6 +2518,7 @@ class MainActivity : FlutterActivity() {
     private data class LinuxLikeExecutionTarget(
         val displayName: String,
         val scriptFile: File,
+        val executionFilePath: String,
         val workingDir: String,
         val pythonPathEntries: List<String>,
         val projectRoot: File? = null
