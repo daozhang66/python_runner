@@ -99,4 +99,66 @@ void main() {
       'indexUrl': 'https://example.invalid/simple',
     });
   });
+
+  test('native bridge exposes app file picker directory APIs', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      switch (call.method) {
+        case 'getFilePickerRoots':
+          return [
+            {
+              'path': '/downloads',
+              'name': '下载',
+              'isDirectory': true,
+              'size': 0,
+              'modifiedAt': 1000,
+            }
+          ];
+        case 'listFilePickerDirectory':
+          return [
+            {
+              'path': '/downloads/demo.py',
+              'name': 'demo.py',
+              'isDirectory': false,
+              'size': 12,
+              'modifiedAt': 1000,
+            }
+          ];
+        case 'openFilePickerTree':
+          return {
+            'path': 'content://tree/downloads',
+            'name': '授权目录',
+            'isDirectory': true,
+            'size': 0,
+            'modifiedAt': 1000,
+          };
+        case 'readFilePickerFile':
+          return Uint8List.fromList([112, 114, 105, 110, 116]);
+      }
+      throw PlatformException(code: 'missing', message: call.method);
+    });
+
+    final bridge = NativeBridge();
+    expect((await bridge.getFilePickerRoots()).single.name, '下载');
+    expect(
+      (await bridge.listFilePickerDirectory('/downloads')).single.path,
+      '/downloads/demo.py',
+    );
+    expect(
+        (await bridge.openFilePickerTree())?.path, 'content://tree/downloads');
+    expect(
+        await bridge.readFilePickerFile('content://file/demo.py'), isNotEmpty);
+
+    expect(calls.map((call) => call.method), [
+      'getFilePickerRoots',
+      'listFilePickerDirectory',
+      'openFilePickerTree',
+      'readFilePickerFile',
+    ]);
+    expect(calls[1].arguments, {'path': '/downloads'});
+    expect(calls[2].arguments, {'title': '选择目录'});
+    expect(calls[3].arguments, {'path': 'content://file/demo.py'});
+  });
 }

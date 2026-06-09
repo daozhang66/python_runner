@@ -10,6 +10,9 @@ void main() {
     expect(tokens, contains('class AppRadius'));
     expect(tokens, contains('class AppMotion'));
     expect(tokens, contains('class AppOpacity'));
+    expect(tokens, contains('class AppThemeColors'));
+    expect(tokens, contains('darkBackground'));
+    expect(tokens, contains('maskedText'));
   });
 
   test('frontend design system exposes shared UI components', () {

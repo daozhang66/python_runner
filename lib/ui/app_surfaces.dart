@@ -28,17 +28,21 @@ class AppSurface extends StatelessWidget {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: selected
-            ? colors.primaryContainer.withValues(alpha: AppOpacity.selectedFill)
-            : pinned
-                ? colors.primaryContainer
-                    .withValues(alpha: AppOpacity.pinnedFill)
-                : colors.surfaceContainer,
+        color: AppThemeColors.scriptSurface(
+          context,
+          colors,
+          selected: selected,
+          pinned: pinned,
+        ),
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: pinned
-              ? colors.primary.withValues(alpha: 0.42)
-              : colors.outlineVariant.withValues(alpha: AppOpacity.border),
+          color: AppThemeColors.scriptBorder(
+            context,
+            colors,
+            selected: selected,
+            pinned: pinned,
+          ),
+          width: AppThemeColors.isDark(context) ? 0.8 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,

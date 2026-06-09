@@ -790,11 +790,240 @@ class _UrllibResponseWrapper:
 
 
 # ══════════════════════════════════════════
+#  Hook: socket DNS/connect
+# ══════════════════════════════════════════
+_HOOKED_SOCKET = False
+
+def _short_repr(value, limit=2000):
+    try:
+        text = value.decode('utf-8', errors='replace') if isinstance(value, bytes) else str(value)
+    except Exception:
+        text = repr(value)
+    return text[:limit] + ('... (truncated)' if len(text) > limit else '')
+
+
+def _host_port_from_address(address):
+    try:
+        if isinstance(address, tuple) and len(address) >= 2:
+            return str(address[0]), address[1]
+        return str(address), ''
+    except Exception:
+        return str(address), ''
+
+
+def _hook_socket():
+    global _HOOKED_SOCKET
+    if _HOOKED_SOCKET:
+        return
+    try:
+        import socket
+    except Exception:
+        return
+    if getattr(socket.getaddrinfo, '_pyrunner_hooked', False):
+        return
+    _HOOKED_SOCKET = True
+
+    _original_getaddrinfo = socket.getaddrinfo
+    _original_gethostbyname = socket.gethostbyname
+    _original_gethostbyname_ex = socket.gethostbyname_ex
+    _original_connect = socket.socket.connect
+
+    def _record_dns(kind, host, port, start_time, result=None, error=None):
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        record = {
+            'id': str(uuid.uuid4())[:8],
+            'timestamp': int(start_time * 1000),
+            'method': 'DNS',
+            'url': f"dns://{host}" + (f":{port}" if port not in (None, '') else ''),
+            'request_headers': {'operation': kind},
+            'used_proxy': False,
+            'ssl_verify': True,
+            'library': 'socket',
+            'duration_ms': elapsed_ms,
+        }
+        if error is None:
+            record['status_code'] = 200
+            record['response_body_preview'] = _short_repr(result)
+        else:
+            record['status_code'] = 599
+            record['error_type'] = type(error).__name__
+            record['error_message'] = str(error)[:500]
+        _send_record(record)
+
+    def _patched_getaddrinfo(host, port, *args, **kwargs):
+        start_time = time.time()
+        try:
+            result = _original_getaddrinfo(host, port, *args, **kwargs)
+            try:
+                ips = sorted({str(item[4][0]) for item in result if len(item) >= 5 and item[4]})
+            except Exception:
+                ips = result
+            _record_dns('getaddrinfo', host, port, start_time, ips)
+            return result
+        except Exception as e:
+            _record_dns('getaddrinfo', host, port, start_time, error=e)
+            raise
+
+    def _patched_gethostbyname(host):
+        start_time = time.time()
+        try:
+            result = _original_gethostbyname(host)
+            _record_dns('gethostbyname', host, '', start_time, result)
+            return result
+        except Exception as e:
+            _record_dns('gethostbyname', host, '', start_time, error=e)
+            raise
+
+    def _patched_gethostbyname_ex(host):
+        start_time = time.time()
+        try:
+            result = _original_gethostbyname_ex(host)
+            _record_dns('gethostbyname_ex', host, '', start_time, result)
+            return result
+        except Exception as e:
+            _record_dns('gethostbyname_ex', host, '', start_time, error=e)
+            raise
+
+    def _patched_connect(self, address):
+        host, port = _host_port_from_address(address)
+        start_time = time.time()
+        record = {
+            'id': str(uuid.uuid4())[:8],
+            'timestamp': int(start_time * 1000),
+            'method': 'CONNECT',
+            'url': f"tcp://{host}" + (f":{port}" if port not in (None, '') else ''),
+            'request_headers': {},
+            'used_proxy': False,
+            'ssl_verify': True,
+            'library': 'socket',
+        }
+        try:
+            result = _original_connect(self, address)
+            record['status_code'] = 200
+            record['duration_ms'] = int((time.time() - start_time) * 1000)
+            _send_record(record)
+            return result
+        except Exception as e:
+            record['status_code'] = 599
+            record['error_type'] = type(e).__name__
+            record['error_message'] = str(e)[:500]
+            record['duration_ms'] = int((time.time() - start_time) * 1000)
+            _send_record(record)
+            raise
+
+    _patched_getaddrinfo._pyrunner_hooked = True
+    _patched_gethostbyname._pyrunner_hooked = True
+    _patched_gethostbyname_ex._pyrunner_hooked = True
+    _patched_connect._pyrunner_hooked = True
+    socket.getaddrinfo = _patched_getaddrinfo
+    socket.gethostbyname = _patched_gethostbyname
+    socket.gethostbyname_ex = _patched_gethostbyname_ex
+    socket.socket.connect = _patched_connect
+
+
+# ══════════════════════════════════════════
+#  Hook: subprocess network commands
+# ══════════════════════════════════════════
+_HOOKED_SUBPROCESS = False
+
+def _command_parts(args):
+    if isinstance(args, (list, tuple)):
+        return [str(item) for item in args]
+    if isinstance(args, str):
+        try:
+            import shlex
+            return shlex.split(args)
+        except Exception:
+            return args.split()
+    return []
+
+
+def _network_command_target(parts):
+    if not parts:
+        return None, None
+    tool = os.path.basename(parts[0]).lower()
+    network_tools = {
+        'nslookup', 'dig', 'host', 'ping', 'ping6', 'curl', 'wget',
+        'nmap', 'traceroute', 'tracepath', 'nc', 'netcat', 'telnet',
+        'openssl'
+    }
+    if tool not in network_tools:
+        return None, None
+    candidates = [
+        item for item in parts[1:]
+        if item and not item.startswith('-') and '=' not in item
+    ]
+    return tool, (candidates[-1] if candidates else '')
+
+
+def _hook_subprocess():
+    global _HOOKED_SUBPROCESS
+    if _HOOKED_SUBPROCESS:
+        return
+    try:
+        import subprocess
+    except Exception:
+        return
+    if getattr(subprocess.run, '_pyrunner_hooked', False):
+        return
+    _HOOKED_SUBPROCESS = True
+    _original_run = subprocess.run
+
+    def _patched_run(*popenargs, **kwargs):
+        command = kwargs.get('args') if 'args' in kwargs else (popenargs[0] if popenargs else None)
+        parts = _command_parts(command)
+        tool, target = _network_command_target(parts)
+        if not tool:
+            return _original_run(*popenargs, **kwargs)
+        start_time = time.time()
+        record = {
+            'id': str(uuid.uuid4())[:8],
+            'timestamp': int(start_time * 1000),
+            'method': 'PROCESS',
+            'url': f"process://{tool}" + (f"/{target}" if target else ''),
+            'request_headers': {'command': ' '.join(parts[:20])},
+            'used_proxy': False,
+            'ssl_verify': True,
+            'library': 'subprocess',
+        }
+        try:
+            result = _original_run(*popenargs, **kwargs)
+            record['status_code'] = 200 if getattr(result, 'returncode', 1) == 0 else 599
+            record['duration_ms'] = int((time.time() - start_time) * 1000)
+            out = getattr(result, 'stdout', None)
+            err = getattr(result, 'stderr', None)
+            preview_parts = []
+            if out:
+                preview_parts.append('stdout:\\n' + _short_repr(out, 1200))
+            if err:
+                preview_parts.append('stderr:\\n' + _short_repr(err, 800))
+            if preview_parts:
+                record['response_body_preview'] = '\\n\\n'.join(preview_parts)
+            if getattr(result, 'returncode', 0) != 0:
+                record['error_type'] = 'ProcessExit'
+                record['error_message'] = f"exit code {result.returncode}"
+            _send_record(record)
+            return result
+        except Exception as e:
+            record['status_code'] = 599
+            record['error_type'] = type(e).__name__
+            record['error_message'] = str(e)[:500]
+            record['duration_ms'] = int((time.time() - start_time) * 1000)
+            _send_record(record)
+            raise
+
+    _patched_run._pyrunner_hooked = True
+    subprocess.run = _patched_run
+
+
+# ══════════════════════════════════════════
 #  Initialize all hooks
 # ══════════════════════════════════════════
 def _init_hooks():
     if not _CFG['record_requests'] and not _CFG['override_enabled']:
         return
+    _hook_socket()
+    _hook_subprocess()
     _hook_requests()
     _hook_httpx()
     _hook_urllib3()

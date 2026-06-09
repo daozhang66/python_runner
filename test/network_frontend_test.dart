@@ -19,4 +19,36 @@ void main() {
     expect(source, contains('EdgeInsets.fromLTRB(16, 0, 16, 6)'));
     expect(source, isNot(contains('class _SectionCard')));
   });
+
+  test('network hook captures dns socket and subprocess activity', () {
+    final hookFiles = [
+      'android/app/src/main/python/http_debug_hook.py',
+      'android/app/src/main/assets/python_hooks/http_debug_hook.py',
+      'assets/python_hooks/http_debug_hook.py',
+    ];
+
+    for (final path in hookFiles) {
+      final source = File(path).readAsStringSync();
+      expect(source, contains('def _hook_socket():'));
+      expect(source, contains('socket.getaddrinfo = _patched_getaddrinfo'));
+      expect(source, contains('socket.socket.connect = _patched_connect'));
+      expect(source, contains('def _hook_subprocess():'));
+      expect(source, contains('subprocess.run = _patched_run'));
+      expect(source, contains("'method': 'DNS'"));
+      expect(source, contains("'method': 'CONNECT'"));
+      expect(source, contains("'method': 'PROCESS'"));
+      expect(source, contains('_hook_socket()'));
+      expect(source, contains('_hook_subprocess()'));
+    }
+  });
+
+  test('network inspector exposes non-http network method filters', () {
+    final source =
+        File('lib/pages/network_inspector_page.dart').readAsStringSync();
+
+    expect(source, contains("'DNS'"));
+    expect(source, contains("'CONNECT'"));
+    expect(source, contains("'PROCESS'"));
+    expect(source, contains('运行包含网络请求的脚本后'));
+  });
 }

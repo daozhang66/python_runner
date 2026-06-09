@@ -23,7 +23,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             "https://raw.githubusercontent.com/daozhang66/python_runner/main/linux-like/debian-python-dev-aarch64.json"
         const val defaultRuntimeFlavor = "debian-python-dev-aarch64"
         const val stdinRequestSentinel = "__PYRUNNER_STDIN_REQUEST__"
-        const val defaultScriptWorkingDir = "/sdcard/Download/PythonRunner"
+        const val defaultScriptWorkingDir = "/storage/emulated/0/Download/PythonRunner"
     }
 
     private val runtimeDir: File = File(context.filesDir, "linux_like")
@@ -278,13 +278,14 @@ class LinuxLikeRuntimeManager(private val context: Context) {
     fun buildPythonCommand(
         scriptPath: String,
         workingDir: String? = null,
-        environment: Map<String, String>? = null
+        environment: Map<String, String>? = null,
+        executionFilePath: String? = null
     ): List<String> {
         return buildBaseCommand(
             resolveScriptWorkingDir(workingDir),
             ensureWorkingDirExists = true
         ).apply {
-            addPythonLauncherWithHook(scriptPath)
+            addPythonLauncherWithHook(scriptPath, executionFilePath)
         }
     }
 
@@ -361,18 +362,24 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         add("-B")
     }
 
-    private fun MutableList<String>.addPythonLauncherWithHook(scriptPath: String) {
+    private fun MutableList<String>.addPythonLauncherWithHook(
+        scriptPath: String,
+        executionFilePath: String? = null
+    ) {
         add(pythonGuestPath)
         add("-B")
         add("-c")
         val hooksDirLiteral = toPythonStringLiteral(hooksDir.absolutePath)
         val scriptPathLiteral = toPythonStringLiteral(scriptPath)
+        val executionFilePathLiteral =
+            toPythonStringLiteral(executionFilePath?.takeIf { it.isNotBlank() } ?: scriptPath)
         val stdinRequestSentinelLiteral = toPythonStringLiteral(stdinRequestSentinel)
         val code = buildString {
-            appendLine("import builtins, json, os, runpy, sys")
+            appendLine("import builtins, json, os, sys")
             appendLine("sys.dont_write_bytecode = True")
             appendLine("hooks_dir = $hooksDirLiteral")
             appendLine("script_path = $scriptPathLiteral")
+            appendLine("execution_file_path = $executionFilePathLiteral")
             appendLine("stdin_request_sentinel = $stdinRequestSentinelLiteral")
             appendLine("_original_stdin = sys.stdin")
             appendLine("_stdin_request_from_input = False")
@@ -404,8 +411,21 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             appendLine("        import http_debug_hook")
             appendLine("    except Exception:")
             appendLine("        pass")
-            appendLine("sys.argv[0] = os.path.abspath(script_path)")
-            appendLine("runpy.run_path(script_path, run_name='__main__')")
+            appendLine("script_dir = os.path.dirname(os.path.abspath(script_path))")
+            appendLine("if script_dir and script_dir not in sys.path:")
+            appendLine("    sys.path.insert(0, script_dir)")
+            appendLine("sys.argv[0] = os.path.abspath(execution_file_path)")
+            appendLine("with open(script_path, 'rb') as _source_file:")
+            appendLine("    _source = _source_file.read()")
+            appendLine("_code = compile(_source, execution_file_path, 'exec')")
+            appendLine("_globals = {")
+            appendLine("    '__name__': '__main__',")
+            appendLine("    '__file__': execution_file_path,")
+            appendLine("    '__package__': None,")
+            appendLine("    '__cached__': None,")
+            appendLine("    '__builtins__': builtins,")
+            appendLine("}")
+            appendLine("exec(_code, _globals)")
         }
         add(code)
     }
