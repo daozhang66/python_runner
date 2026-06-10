@@ -9,6 +9,8 @@ void main() {
 
     expect(source, contains('Widget _buildInstallPanel('));
     expect(source, contains('Widget _buildPackageListTile('));
+    expect(source, contains('String _formatVersionLabel(String version)'));
+    expect(source, contains("return '版本未知';"));
     expect(source, contains('AppSearchBar('));
     expect(source, contains('AppStatusBadge('));
     expect(source, contains('Widget _buildCompactInstallFields('));

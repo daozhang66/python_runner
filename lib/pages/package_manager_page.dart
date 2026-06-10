@@ -407,12 +407,14 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     PackageProvider provider, {
     required bool canDelete,
   }) {
+    final versionLabel = _formatVersionLabel(pkg.version);
+
     return AppSurface(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: ListTile(
         dense: true,
         title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(pkg.version, style: const TextStyle(fontSize: 12)),
+        subtitle: Text(versionLabel, style: const TextStyle(fontSize: 12)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -454,6 +456,14 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         ),
       ),
     );
+  }
+
+  String _formatVersionLabel(String version) {
+    final value = version.trim();
+    if (value.isEmpty || value.toLowerCase() == 'unknown') {
+      return '版本未知';
+    }
+    return value;
   }
 
   @override
