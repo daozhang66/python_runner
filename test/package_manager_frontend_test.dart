@@ -25,11 +25,23 @@ void main() {
     expect(source, contains('width: 76'));
     expect(source, contains('height: 40'));
     expect(source, contains('_buildInstallPanel(provider),'));
+    expect(source, contains('provider.loadingPackages'));
+    expect(source, contains('LinearProgressIndicator(minHeight: 2)'));
+    expect(source, contains('loadPackages(forceRefresh: true)'));
     expect(source, isNot(contains('useStackedLayout')));
     expect(source, isNot(contains('constraints.maxWidth < 720')));
     expect(source, isNot(contains("hintText: '包名 (如 requests)'")));
     expect(source, isNot(contains('if (false) _buildInstallPanel')));
     expect(source, isNot(contains('ignore: dead_code')));
     expect(source, isNot(contains('onChanged: (v) {}')));
+  });
+
+  test('home tab refreshes package manager when opening package page', () {
+    final source = File('lib/main.dart').readAsStringSync();
+
+    expect(source, contains('void _selectTab(int index)'));
+    expect(source, contains('context.read<PackageProvider>().loadPackages('));
+    expect(source, contains('forceRefresh: true'));
+    expect(source, contains('onDestinationSelected: _selectTab'));
   });
 }

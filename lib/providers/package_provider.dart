@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/package_info.dart';
@@ -13,11 +14,14 @@ class PackageProvider extends ChangeNotifier {
 
   List<PackageInfo> _packages = [];
   bool _installing = false;
+  bool _loadingPackages = false;
+  int _loadGeneration = 0;
   final List<String> _installLog = [];
   StreamSubscription<PackageInstallProgress>? _installSub;
 
   List<PackageInfo> get packages => _packages;
   bool get installing => _installing;
+  bool get loadingPackages => _loadingPackages;
   List<String> get installLog => List.unmodifiable(_installLog);
   String get activeBackendId => _runtimeManager.activeBackendId;
   bool get supportsRequirementsInstall =>
@@ -69,16 +73,70 @@ class PackageProvider extends ChangeNotifier {
       );
       if (backendId == _runtimeManager.activeBackendId) return;
       _runtimeManager = RuntimeManager.fromPreferredBackend(_bridge, backendId);
+      _packages = [];
       _listenInstallProgress();
+      notifyListeners();
     } catch (e) {
       debugPrint('sync package runtime backend error: $e');
     }
   }
 
-  Future<void> loadPackages() async {
+  String get _cacheKey => 'package_cache_${_runtimeManager.activeBackendId}';
+
+  Future<void> _restoreCachedPackagesIfNeeded() async {
+    if (_packages.isNotEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      _packages = decoded
+          .whereType<Map>()
+          .map((item) => PackageInfo(
+                name: item['name']?.toString() ?? '',
+                version: item['version']?.toString() ?? '',
+                isUserPackage: item['isUserPackage'] == true,
+              ))
+          .where((item) => item.name.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      if (_packages.isNotEmpty) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('restore package cache error: $e');
+    }
+  }
+
+  Future<void> _savePackageCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = jsonEncode(_packages
+          .map((item) => {
+                'name': item.name,
+                'version': item.version,
+                'isUserPackage': item.isUserPackage,
+              })
+          .toList());
+      await prefs.setString(_cacheKey, encoded);
+    } catch (e) {
+      debugPrint('save package cache error: $e');
+    }
+  }
+
+  Future<void> loadPackages({bool forceRefresh = false}) async {
+    final generation = ++_loadGeneration;
     try {
       await _syncRuntimeManagerFromSettings();
+      if (!forceRefresh) {
+        await _restoreCachedPackagesIfNeeded();
+      }
+      if (generation != _loadGeneration) return;
+      _loadingPackages = true;
+      notifyListeners();
       final result = await _runtimeManager.listPackages();
+      if (generation != _loadGeneration) return;
       _packages = result
           .map((item) => PackageInfo(
                 name: item.name,
@@ -87,8 +145,14 @@ class PackageProvider extends ChangeNotifier {
               ))
           .toList();
       _packages.sort((a, b) => a.name.compareTo(b.name));
+      await _savePackageCache();
+      _loadingPackages = false;
       notifyListeners();
     } catch (e) {
+      if (generation == _loadGeneration) {
+        _loadingPackages = false;
+        notifyListeners();
+      }
       debugPrint('loadPackages error: $e');
     }
   }

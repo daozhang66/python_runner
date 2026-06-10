@@ -12,8 +12,13 @@ import 'package:python_runner/runtime/runtime_request.dart';
 import 'package:python_runner/runtime/runtime_session.dart';
 import 'package:python_runner/runtime/runtime_stdin_request.dart';
 import 'package:python_runner/services/native_bridge.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   test('package provider returns orphan cleanup details after uninstall',
       () async {
     final backend = _FakeRuntimeBackend(
@@ -76,6 +81,40 @@ void main() {
     expect(provider.installing, isFalse);
     expect(provider.packages.map((item) => item.name), contains('requests'));
   });
+
+  test('package provider restores cached packages before slow refresh',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'package_cache_fake':
+          '[{"name":"cached","version":"1.0","isUserPackage":true}]',
+    });
+    final listCompleter = Completer<List<RuntimePackage>>();
+    final backend = _FakeRuntimeBackend(
+      packages: const [],
+      uninstallResult: const PackageUninstallResult(success: true),
+      listPackagesCompleter: listCompleter,
+    );
+    final provider = PackageProvider(
+      NativeBridge(),
+      runtimeManager: RuntimeManager(backend),
+    );
+
+    final loadFuture = provider.loadPackages();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.loadingPackages, isTrue);
+    expect(provider.packages.map((item) => item.name), contains('cached'));
+
+    listCompleter.complete(const [
+      RuntimePackage(name: 'fresh', version: '2.0', source: 'user'),
+    ]);
+    await loadFuture;
+
+    expect(provider.loadingPackages, isFalse);
+    expect(provider.packages.map((item) => item.name), contains('fresh'));
+    expect(
+        provider.packages.map((item) => item.name), isNot(contains('cached')));
+  });
 }
 
 class _FakeRuntimeBackend implements RuntimeBackend {
@@ -83,11 +122,13 @@ class _FakeRuntimeBackend implements RuntimeBackend {
     required List<RuntimePackage> packages,
     required this.uninstallResult,
     this.packagesAfterRequirements = const [],
+    this.listPackagesCompleter,
   }) : _packages = List<RuntimePackage>.from(packages);
 
   final List<RuntimePackage> _packages;
   final PackageUninstallResult uninstallResult;
   final List<RuntimePackage> packagesAfterRequirements;
+  final Completer<List<RuntimePackage>>? listPackagesCompleter;
   RequirementsInstallRequest? lastRequirementsRequest;
   int requirementsInstallCount = 0;
 
@@ -154,7 +195,7 @@ class _FakeRuntimeBackend implements RuntimeBackend {
 
   @override
   Future<List<RuntimePackage>> listPackages() async =>
-      List<RuntimePackage>.from(_packages);
+      listPackagesCompleter?.future ?? List<RuntimePackage>.from(_packages);
 
   @override
   Future<RuntimeHealth> checkHealth() async => const RuntimeHealth(ok: true);

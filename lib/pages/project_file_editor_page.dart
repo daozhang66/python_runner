@@ -263,7 +263,10 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
       Navigator.push(
         context,
         AppPageTransitions.scaleIn(
-          RunConsolePage(scriptName: widget.group.name),
+          RunConsolePage(
+            scriptName: widget.group.name,
+            projectGroup: widget.group,
+          ),
         ),
       );
     } catch (e) {
@@ -440,7 +443,10 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
                   Navigator.push(
                     context,
                     AppPageTransitions.fadeThrough(
-                      RunConsolePage(scriptName: widget.group.name),
+                      RunConsolePage(
+                        scriptName: widget.group.name,
+                        projectGroup: widget.group,
+                      ),
                     ),
                   );
                   break;
