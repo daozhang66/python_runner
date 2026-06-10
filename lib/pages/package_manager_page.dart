@@ -11,6 +11,7 @@ import '../providers/package_provider.dart';
 import '../runtime/runtime_package.dart';
 import '../services/native_bridge.dart';
 import '../ui/app_badges.dart';
+import '../ui/app_design_tokens.dart';
 import '../ui/app_empty_state.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_toolbars.dart';
@@ -44,7 +45,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     });
     final packageProvider = context.read<PackageProvider>();
     Future.microtask(() {
-      packageProvider.loadPackages();
+      packageProvider.ensurePackagesLoaded();
       _loadIndexUrl();
     });
   }
@@ -285,8 +286,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                   width: double.infinity,
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color:
-                        colors.surfaceContainerHighest.withValues(alpha: 0.5),
+                    color: AppThemeColors.softSurface(colors),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SelectableText(

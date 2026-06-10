@@ -56,6 +56,20 @@ abstract final class AppThemeColors {
   static Color maskedText(BuildContext context) =>
       isDark(context) ? darkMaskedText : lightMaskedText;
 
+  static Color pageBackground(ColorScheme colors) =>
+      Color.alphaBlend(colors.primary.withValues(alpha: 0.008), colors.surface);
+
+  static Color cardSurface(ColorScheme colors) =>
+      Color.alphaBlend(colors.primary.withValues(alpha: 0.012), colors.surface);
+
+  static Color softSurface(ColorScheme colors) =>
+      Color.alphaBlend(colors.primary.withValues(alpha: 0.018), colors.surface);
+
+  static Color codeSurface(ColorScheme colors) => cardSurface(colors);
+
+  static Color navigationIndicator(ColorScheme colors) => Color.alphaBlend(
+      colors.primary.withValues(alpha: 0.12), colors.primaryContainer);
+
   static Color scriptSurface(
     BuildContext context,
     ColorScheme colors, {
@@ -64,10 +78,10 @@ abstract final class AppThemeColors {
   }) {
     if (!isDark(context)) {
       return selected
-          ? colors.primaryContainer.withValues(alpha: AppOpacity.selectedFill)
+          ? navigationIndicator(colors)
           : pinned
               ? colors.primaryContainer.withValues(alpha: AppOpacity.pinnedFill)
-              : colors.surfaceContainer;
+              : cardSurface(colors);
     }
     if (selected) return darkSelectedSurface;
     if (pinned) return darkPinnedSurface;

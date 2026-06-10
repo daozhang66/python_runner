@@ -25,6 +25,7 @@ import 'pages/settings_page.dart';
 import 'pages/run_console_page.dart';
 import 'utils/app_page_transitions.dart';
 import 'ui/app_design_tokens.dart';
+import 'ui/app_theme_palette.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -124,6 +125,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
 
   ThemeMode _themeMode = ThemeMode.system;
   bool _materialYouEnabled = true;
+  AppThemePalette _themePalette = AppThemePalette.ocean;
   ThemeData? _cachedLightTheme;
   ThemeData? _cachedDarkTheme;
   ColorScheme? _cachedLightScheme;
@@ -160,6 +162,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       _themeMode = ThemeMode.values
           .firstWhere((e) => e.name == mode, orElse: () => ThemeMode.system);
       _materialYouEnabled = prefs.getBool('material_you_enabled') ?? false;
+      _themePalette = AppThemePalette.fromKey(prefs.getString('theme_palette'));
     });
   }
 
@@ -173,6 +176,18 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('material_you_enabled', enabled);
     setState(() => _materialYouEnabled = enabled);
+  }
+
+  Future<void> _setThemePalette(AppThemePalette palette) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_palette', palette.key);
+    setState(() {
+      _themePalette = palette;
+      _cachedLightTheme = null;
+      _cachedDarkTheme = null;
+      _cachedLightScheme = null;
+      _cachedDarkScheme = null;
+    });
   }
 
   @override
@@ -193,34 +208,91 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final theme = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor:
-          isDark ? AppThemeColors.darkBackground : colorScheme.surface,
+      scaffoldBackgroundColor: isDark
+          ? AppThemeColors.darkBackground
+          : AppThemeColors.pageBackground(colorScheme),
       canvasColor: isDark ? AppThemeColors.darkBackground : null,
       cardTheme: CardThemeData(
         elevation: 0,
-        color: isDark ? AppThemeColors.darkSurface : colorScheme.surface,
+        color: isDark
+            ? AppThemeColors.darkSurface
+            : AppThemeColors.cardSurface(colorScheme),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xl),
           side: BorderSide(
-            color: isDark ? AppThemeColors.darkBorder : Colors.grey.shade200,
+            color: isDark
+                ? AppThemeColors.darkBorder
+                : colorScheme.outlineVariant.withValues(alpha: 0.44),
           ),
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0.5,
+        backgroundColor:
+            isDark ? AppThemeColors.darkBackground : colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+        surfaceTintColor: Colors.transparent,
+      ),
+      tabBarTheme: TabBarThemeData(
+        dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.32),
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(
+            color: colorScheme.primary.withValues(alpha: 0.82),
+            width: 3,
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        labelColor: colorScheme.primary,
+        unselectedLabelColor: colorScheme.onSurfaceVariant,
       ),
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         height: 60,
-        backgroundColor:
-            isDark ? AppThemeColors.darkBackground : colorScheme.surface,
+        backgroundColor: isDark
+            ? AppThemeColors.darkBackground
+            : AppThemeColors.cardSurface(colorScheme),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         indicatorColor: isDark
             ? AppThemeColors.darkPinnedSurface
-            : colorScheme.primaryContainer.withValues(alpha: 0.35),
+            : AppThemeColors.navigationIndicator(colorScheme),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+          ),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          side: WidgetStatePropertyAll(
+            BorderSide(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.58),
+            ),
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppThemeColors.navigationIndicator(colorScheme);
+            }
+            return AppThemeColors.cardSurface(colorScheme);
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return colorScheme.primary;
+            }
+            return colorScheme.onSurfaceVariant;
+          }),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+          ),
+        ),
       ),
       dialogTheme: DialogThemeData(
         elevation: 0,
@@ -254,9 +326,43 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppThemeColors.softSurface(colorScheme),
+        selectedColor: AppThemeColors.navigationIndicator(colorScheme),
+        secondarySelectedColor: AppThemeColors.navigationIndicator(colorScheme),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        secondaryLabelStyle: TextStyle(color: colorScheme.onPrimaryContainer),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+      ),
+      dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.32),
       inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark
+            ? colorScheme.surfaceContainerHigh
+            : AppThemeColors.softSurface(colorScheme),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.62),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.62),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(
+            color: colorScheme.primary.withValues(alpha: 0.84),
+            width: 1.4,
+          ),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -280,13 +386,13 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         final lightScheme = _materialYouEnabled && lightDynamic != null
             ? lightDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF1A73E8),
+                seedColor: _themePalette.lightSeed,
                 brightness: Brightness.light,
               );
         final darkScheme = _materialYouEnabled && darkDynamic != null
             ? darkDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF1A73E8),
+                seedColor: _themePalette.darkSeed,
                 brightness: Brightness.dark,
               );
         return MaterialApp(
@@ -319,6 +425,8 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
             child: HomePage(
               onThemeChanged: _setTheme,
               currentThemeMode: _themeMode,
+              onThemePaletteChanged: _setThemePalette,
+              currentThemePalette: _themePalette,
               onMaterialYouChanged: _setMaterialYouEnabled,
               currentMaterialYouEnabled: _materialYouEnabled,
             ),
@@ -582,6 +690,8 @@ class _SplashGateState extends State<SplashGate>
 class HomePage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
   final ThemeMode currentThemeMode;
+  final ValueChanged<AppThemePalette> onThemePaletteChanged;
+  final AppThemePalette currentThemePalette;
   final ValueChanged<bool> onMaterialYouChanged;
   final bool currentMaterialYouEnabled;
 
@@ -589,6 +699,8 @@ class HomePage extends StatefulWidget {
     super.key,
     required this.onThemeChanged,
     required this.currentThemeMode,
+    required this.onThemePaletteChanged,
+    required this.currentThemePalette,
     required this.onMaterialYouChanged,
     required this.currentMaterialYouEnabled,
   });
@@ -632,9 +744,7 @@ class _HomePageState extends State<HomePage> {
 
   void _selectTab(int index) {
     if (index == 2) {
-      unawaited(context.read<PackageProvider>().loadPackages(
-            forceRefresh: true,
-          ));
+      unawaited(context.read<PackageProvider>().ensurePackagesLoaded());
     }
     setState(() => _currentIndex = index);
   }
@@ -674,6 +784,8 @@ class _HomePageState extends State<HomePage> {
                   builder: (_) => SettingsPage(
                     onThemeChanged: widget.onThemeChanged,
                     currentThemeMode: widget.currentThemeMode,
+                    onThemePaletteChanged: widget.onThemePaletteChanged,
+                    currentThemePalette: widget.currentThemePalette,
                     onMaterialYouChanged: widget.onMaterialYouChanged,
                     currentMaterialYouEnabled: widget.currentMaterialYouEnabled,
                   ),

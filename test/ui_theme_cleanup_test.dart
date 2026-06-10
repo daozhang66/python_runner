@@ -233,9 +233,17 @@ void main() {
     expect(mainSource, contains('DynamicColorBuilder'));
     expect(mainSource, contains('_materialYouEnabled'));
     expect(mainSource, contains("prefs.getBool('material_you_enabled')"));
+    expect(mainSource, contains("prefs.getString('theme_palette')"));
+    expect(mainSource, contains('AppThemePalette.fromKey'));
+    expect(mainSource, contains('onThemePaletteChanged'));
     expect(mainSource, contains('onMaterialYouChanged'));
     expect(settingsSource, contains('Material You'));
     expect(settingsSource, contains('widget.currentMaterialYouEnabled'));
+    expect(settingsSource, contains('配色方案'));
+    expect(settingsSource, contains('_showThemeModePicker'));
+    expect(settingsSource, contains('_showThemePalettePicker'));
+    expect(settingsSource, contains('Claude'));
+    expect(settingsSource, contains('Codex'));
   });
 
   test(

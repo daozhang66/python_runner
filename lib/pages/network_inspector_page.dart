@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../services/http_inspector_store.dart';
 import '../services/native_bridge.dart';
 import '../ui/app_badges.dart';
+import '../ui/app_design_tokens.dart';
 import '../ui/app_empty_state.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_toolbars.dart';
@@ -80,7 +81,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               _store.filterStatus != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              color: colors.primaryContainer.withValues(alpha: 0.3),
+              color: AppThemeColors.navigationIndicator(colors),
               child: Row(
                 children: [
                   const Icon(Icons.filter_alt, size: 14),
@@ -319,7 +320,8 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
             _StatBadge(
                 label: '${stats['success']}',
                 icon: Icons.check_circle,
-                color: Colors.green),
+                color: Color.alphaBlend(
+                    colors.primary.withValues(alpha: 0.36), colors.tertiary)),
             const SizedBox(width: 12),
             _StatBadge(
                 label: '${stats['error']}',
@@ -621,16 +623,16 @@ class _HttpRecordDetailPage extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.08),
+                      color: colors.errorContainer.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: Colors.orange.withValues(alpha: 0.28)),
+                          color: colors.error.withValues(alpha: 0.24)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(Icons.warning_amber_rounded,
-                            size: 16, color: Colors.orange.shade700),
+                            size: 16, color: colors.error),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -638,7 +640,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
                                 ? '响应体较大，显示 ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}。'
                                 : '响应体较大，当前仅显示已捕获的内容。',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.orange.shade900),
+                                fontSize: 11, color: colors.onErrorContainer),
                           ),
                         ),
                       ],
@@ -783,7 +785,7 @@ class _CodeBlock extends StatelessWidget {
       constraints: const BoxConstraints(maxHeight: 300),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: AppThemeColors.codeSurface(colors),
         borderRadius: BorderRadius.circular(6),
       ),
       child: SingleChildScrollView(
@@ -829,7 +831,7 @@ class _MediaInfoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: AppThemeColors.softSurface(colors),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1365,7 +1367,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           if (_searchVisible)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              color: colors.surfaceContainerHighest,
+              color: AppThemeColors.softSurface(colors),
               child: Row(
                 children: [
                   Expanded(
@@ -1416,16 +1418,14 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           // --- Info bar ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-            color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: AppThemeColors.softSurface(colors),
             child: Row(
               children: [
                 if (_isTruncated) ...[
-                  Icon(Icons.warning_amber,
-                      size: 12, color: Colors.orange.shade700),
+                  Icon(Icons.warning_amber, size: 12, color: colors.error),
                   const SizedBox(width: 3),
                   Text('已截断',
-                      style: TextStyle(
-                          fontSize: 10, color: Colors.orange.shade700)),
+                      style: TextStyle(fontSize: 10, color: colors.error)),
                   const SizedBox(width: 8),
                 ],
                 Text('$_lineCount 行',
@@ -1466,7 +1466,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest,
+                        color: AppThemeColors.codeSurface(colors),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: SelectableText(
@@ -1637,7 +1637,7 @@ class _JsonTreeNodeState extends State<_JsonTreeNode> {
                             style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: fs,
-                                color: Colors.blue.shade700)),
+                                color: colors.primary)),
                         _JsonValue(
                           data: items[i].value,
                           depth: depth + 1,
@@ -1768,11 +1768,11 @@ String _primitiveText(dynamic value) {
 }
 
 Color _primitiveColor(dynamic value) {
-  if (value == null) return Colors.grey;
-  if (value is bool) return Colors.purple;
-  if (value is num) return Colors.orange.shade800;
-  if (value is String) return Colors.green.shade700;
-  return const Color(0xFF9E9E9E); // visible on both light and dark backgrounds
+  if (value == null) return const Color(0xFF7B8190);
+  if (value is bool) return const Color(0xFF7A52C7);
+  if (value is num) return const Color(0xFFB26418);
+  if (value is String) return const Color(0xFF1D8A63);
+  return const Color(0xFF7B8190);
 }
 
 // --- Image preview widget ---
@@ -1802,7 +1802,7 @@ class _ImagePreview extends StatelessWidget {
       width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 300),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: AppThemeColors.codeSurface(Theme.of(context).colorScheme),
         borderRadius: BorderRadius.circular(6),
       ),
       child: ClipRRect(
