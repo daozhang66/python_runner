@@ -77,7 +77,10 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
     Navigator.push(
       context,
       AppPageTransitions.fadeThrough(
-        RunConsolePage(scriptName: project.group.name),
+        RunConsolePage(
+          scriptName: project.group.name,
+          projectGroup: project.group,
+        ),
       ),
     );
   }
@@ -448,15 +451,48 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
   }
 }
 
-class _RequirementsInstallDialog extends StatelessWidget {
+class _RequirementsInstallDialog extends StatefulWidget {
   const _RequirementsInstallDialog();
+
+  @override
+  State<_RequirementsInstallDialog> createState() =>
+      _RequirementsInstallDialogState();
+}
+
+class _RequirementsInstallDialogState
+    extends State<_RequirementsInstallDialog> {
+  bool _closeScheduled = false;
+
+  bool _hasSuccess(List<String> log) =>
+      log.any((line) => line.contains('安装成功'));
+
+  bool _hasError(List<String> log) =>
+      log.any((line) => line.contains('安装失败') || line.contains('Error'));
+
+  void _scheduleCloseOnSuccess(PackageProvider provider) {
+    if (_closeScheduled ||
+        provider.installing ||
+        !_hasSuccess(provider.installLog)) {
+      return;
+    }
+    _closeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 900), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<PackageProvider>(
       builder: (context, provider, _) {
+        _scheduleCloseOnSuccess(provider);
+        final hasError = _hasError(provider.installLog);
         final logText = provider.installLog.isEmpty
-            ? '等待安装日志...'
+            ? (provider.installing ? '等待安装日志...' : '安装完成')
             : provider.installLog.reversed.take(8).join('\n');
         return AlertDialog(
           title: const Text('安装依赖'),
@@ -468,6 +504,15 @@ class _RequirementsInstallDialog extends StatelessWidget {
               children: [
                 if (provider.installing) ...[
                   const LinearProgressIndicator(minHeight: 3),
+                  const SizedBox(height: 12),
+                ] else if (provider.installLog.isNotEmpty && !hasError) ...[
+                  Text(
+                    '安装完成，正在刷新库列表...',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                 ],
                 Container(

@@ -630,6 +630,15 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  void _selectTab(int index) {
+    if (index == 2) {
+      unawaited(context.read<PackageProvider>().loadPackages(
+            forceRefresh: true,
+          ));
+    }
+    setState(() => _currentIndex = index);
+  }
+
   Future<void> _checkForUpdatesOnLaunch() async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
@@ -678,7 +687,7 @@ class _HomePageState extends State<HomePage> {
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          onDestinationSelected: _selectTab,
           destinations: const [
             NavigationDestination(icon: Icon(Icons.code), label: '脚本'),
             NavigationDestination(icon: Icon(Icons.http), label: '网络'),

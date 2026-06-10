@@ -67,13 +67,13 @@ void main() {
     ).readAsStringSync();
 
     expect(activity, contains('resolveLinuxLikeExplicitPackages'));
-    expect(activity, contains('queryLinuxLikeTopLevelPackages'));
     expect(activity, contains('REQUESTED'));
     expect(activity, contains('hostDistributions'));
     expect(activity, contains('removeMissingLinuxLikeExplicitPackages'));
     expect(
         activity, contains('explicitPackages.contains(normalizedPackageName)'));
-    expect(activity, contains('pipListedPackages'));
+    expect(activity, contains('linux-like-package-list'));
+    expect(activity, isNot(contains('linux-like-pip-list')));
     expect(
         activity,
         contains(
@@ -88,14 +88,18 @@ void main() {
 
     expect(activity, contains('resolveLinuxLikeExplicitPackages'));
     expect(activity, contains('readPythonPackageVersion'));
-    expect(activity, contains('"--not-required"'));
     expect(activity, contains('metadataOwnedTopLevels'));
     expect(activity, contains('requestedPackages'));
-    expect(activity, contains('topLevelPackages'));
+    expect(activity, contains('PYTHON_RUNNER_REQUESTED'));
+    expect(activity, contains('markLinuxLikeExplicitDistributions'));
+    expect(activity, contains('pruneLinuxLikeImplicitExplicitPackages'));
+    expect(
+        activity,
+        contains(
+            'explicitPackages.isEmpty() && topLevelPackages.isNotEmpty()'));
     expect(activity,
         isNot(contains('!linuxLikeImplicitDependencyPackages.contains(name)')));
-    expect(
-        activity, contains('saveLinuxLikeExplicitPackages(requestedPackages)'));
+    expect(activity, contains('saveLinuxLikeExplicitPackages(mergedPackages)'));
     expect(
         activity, contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
   });
@@ -125,6 +129,9 @@ void main() {
         contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
     expect(activity, contains('args.add("-r")'));
     expect(activity, contains('refreshLinuxLikeExplicitPackageMetadata'));
+    expect(activity, contains('readLinuxLikeRequirementPackageNames'));
+    expect(activity,
+        contains('recordLinuxLikeExplicitPackages(requestedPackages)'));
     expect(activity, contains('result.error("1031"'));
   });
 
@@ -141,6 +148,14 @@ void main() {
     expect(activity, contains('removeLinuxLikeExplicitPackage'));
     expect(activity, contains('cleanupLinuxLikeOrphanDependencies'));
     expect(activity, contains('removeLinuxLikePackagesFromOverlay'));
+    expect(
+        activity,
+        contains(
+            'resolveLinuxLikeExplicitPackages(\n                distributions,\n                emptyMap()'));
+    expect(
+        activity,
+        isNot(contains(
+            'resolveLinuxLikeExplicitPackages(\n                distributions,\n                queryLinuxLikeTopLevelPackages()')));
     expect(activity, contains('removedDependencies'));
     expect(manager, contains('explicit_user_packages.json'));
   });
@@ -246,10 +261,14 @@ void main() {
     expect(manager, contains('sys.dont_write_bytecode = True'));
     expect(manager, contains('execution_file_path'));
     expect(manager, contains("'__file__': execution_file_path"));
-    expect(manager, contains("sys.argv[0] = os.path.abspath(execution_file_path)"));
+    expect(manager,
+        contains("sys.argv[0] = os.path.abspath(execution_file_path)"));
     expect(manager, contains("compile(_source, execution_file_path, 'exec')"));
     expect(activity, contains('executionFilePath = File('));
-    expect(activity, contains('linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)'));
+    expect(
+        activity,
+        contains(
+            'linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)'));
     expect(manager, isNot(contains('JSONObject.quote(scriptPath)')));
     expect(manager, isNot(contains(r"exec(open('$scriptPath').read())")));
     expect(manager, isNot(contains('runpy.run_path')));

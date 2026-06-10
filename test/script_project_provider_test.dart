@@ -103,6 +103,9 @@ void main() {
     expect(source, contains("value: 'install_requirements'"));
     expect(source, contains('installRequirementsFromProject'));
     expect(source, contains('_RequirementsInstallDialog'));
+    expect(source, contains('_scheduleCloseOnSuccess'));
+    expect(source, contains('安装完成，正在刷新库列表'));
+    expect(source, contains('Duration(milliseconds: 900)'));
     expect(source, contains('仅 Linux-like 可用'));
   });
 
@@ -115,5 +118,24 @@ void main() {
     expect(source, contains('canPop: _currentDirectory.isEmpty'));
     expect(source, contains('onPopInvokedWithResult'));
     expect(source, contains('_goUpDirectory();'));
+  });
+
+  test('project console rerun keeps project execution context', () {
+    final consoleSource =
+        File('lib/pages/run_console_page.dart').readAsStringSync();
+    final projectPageSource =
+        File('lib/pages/script_project_page.dart').readAsStringSync();
+    final projectEditorSource =
+        File('lib/pages/project_file_editor_page.dart').readAsStringSync();
+
+    expect(consoleSource, contains('final ScriptGroup? projectGroup;'));
+    expect(consoleSource,
+        contains('await exec.executeScriptProject(projectGroup);'));
+    expect(consoleSource,
+        contains('await scriptProvider.markProjectGroupUsed(projectGroup);'));
+    expect(consoleSource,
+        contains('await exec.executeScript(widget.scriptName);'));
+    expect(projectPageSource, contains('projectGroup: project.group'));
+    expect(projectEditorSource, contains('projectGroup: widget.group'));
   });
 }

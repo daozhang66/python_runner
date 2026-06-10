@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/log_entry.dart';
+import '../models/script_group.dart';
 import '../providers/execution_provider.dart';
 import '../models/execution_state.dart';
 import '../providers/script_provider.dart';
@@ -9,7 +10,13 @@ import '../widgets/terminal_view.dart';
 
 class RunConsolePage extends StatefulWidget {
   final String scriptName;
-  const RunConsolePage({super.key, required this.scriptName});
+  final ScriptGroup? projectGroup;
+
+  const RunConsolePage({
+    super.key,
+    required this.scriptName,
+    this.projectGroup,
+  });
 
   @override
   State<RunConsolePage> createState() => _RunConsolePageState();
@@ -48,9 +55,17 @@ class _RunConsolePageState extends State<RunConsolePage>
     try {
       final exec = context.read<ExecutionProvider>();
       final scriptProvider = context.read<ScriptProvider>();
-      await scriptProvider.incrementRunCount(widget.scriptName);
       exec.clearLogs();
-      await exec.executeScript(widget.scriptName);
+      final projectGroup = widget.projectGroup;
+      if (projectGroup != null && projectGroup.isProject) {
+        await exec.executeScriptProject(projectGroup);
+        if (exec.isRunning) {
+          await scriptProvider.markProjectGroupUsed(projectGroup);
+        }
+      } else {
+        await scriptProvider.incrementRunCount(widget.scriptName);
+        await exec.executeScript(widget.scriptName);
+      }
       if (!mounted) return;
       setState(() {
         _captureStartTime();

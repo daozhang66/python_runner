@@ -181,6 +181,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       body: Column(
         children: [
           _buildInstallPanel(provider),
+          if (provider.loadingPackages)
+            const LinearProgressIndicator(minHeight: 2),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: AppSearchBar(
@@ -208,7 +210,9 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20),
-                onPressed: () => provider.loadPackages(),
+                onPressed: provider.loadingPackages
+                    ? null
+                    : () => provider.loadPackages(forceRefresh: true),
                 visualDensity: VisualDensity.compact,
               ),
             ],
