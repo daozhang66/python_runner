@@ -2072,6 +2072,34 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun queryLinuxLikeInstalledPackageVersions(): MutableMap<String, String> {
+        return try {
+            val command = linuxLikeRuntimeManager.buildPythonModuleCommand(
+                "pip",
+                listOf(
+                    "--disable-pip-version-check",
+                    "list",
+                    "--format=json"
+                )
+            )
+            val commandResult = runLinuxLikeCommandBlocking(command, emitLogs = false)
+            if (commandResult.exitCode != 0) {
+                return mutableMapOf()
+            }
+            val json = JSONArray(commandResult.stdout)
+            val packages = linkedMapOf<String, String>()
+            for (i in 0 until json.length()) {
+                val item = json.getJSONObject(i)
+                val packageName = item.optString("name")
+                if (packageName.isBlank()) continue
+                packages[normalizePythonPackageName(packageName)] = item.optString("version")
+            }
+            packages.toMutableMap()
+        } catch (_: Exception) {
+            mutableMapOf()
+        }
+    }
+
     private fun resolveLinuxLikeExplicitPackages(
         distributions: List<LinuxLikeDistribution>,
         topLevelPackages: Map<String, String>
@@ -2157,6 +2185,7 @@ class MainActivity : FlutterActivity() {
                     return@Thread
                 }
                 val hostDistributions = linuxLikeDistributions()
+                val installedPackageVersions = queryLinuxLikeInstalledPackageVersions()
                 val explicitPackages =
                     resolveLinuxLikeExplicitPackages(hostDistributions, emptyMap()).keys
                 val packages = mutableListOf<Map<String, String>>()
@@ -2182,7 +2211,9 @@ class MainActivity : FlutterActivity() {
                         packages.add(
                             mapOf(
                                 "name" to distribution.name,
-                                "version" to distribution.version.ifBlank { "unknown" },
+                                "version" to distribution.version
+                                    .ifBlank { installedPackageVersions[normalizedPackageName].orEmpty() }
+                                    .ifBlank { "unknown" },
                                 "source" to if (isExplicitUserPackage) "user" else "runtime"
                             )
                         )
@@ -2195,7 +2226,8 @@ class MainActivity : FlutterActivity() {
                         packages.add(
                             mapOf(
                                 "name" to name,
-                                "version" to "unknown",
+                                "version" to installedPackageVersions[name].orEmpty()
+                                    .ifBlank { "unknown" },
                                 "source" to "runtime"
                             )
                         )

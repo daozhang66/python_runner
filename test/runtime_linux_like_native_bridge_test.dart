@@ -69,11 +69,12 @@ void main() {
     expect(activity, contains('resolveLinuxLikeExplicitPackages'));
     expect(activity, contains('REQUESTED'));
     expect(activity, contains('hostDistributions'));
+    expect(activity, contains('queryLinuxLikeInstalledPackageVersions'));
+    expect(activity, contains('installedPackageVersions'));
     expect(activity, contains('removeMissingLinuxLikeExplicitPackages'));
     expect(
         activity, contains('explicitPackages.contains(normalizedPackageName)'));
     expect(activity, contains('linux-like-package-list'));
-    expect(activity, isNot(contains('linux-like-pip-list')));
     expect(
         activity,
         contains(
