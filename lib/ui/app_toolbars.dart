@@ -26,45 +26,83 @@ class AppSearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fieldFill =
+        isDark ? const Color(0xFF1B212B) : AppThemeColors.softSurface(colors);
+    final fieldBorder = isDark
+        ? AppThemeColors.darkBorder
+        : colors.outlineVariant.withValues(alpha: 0.48);
+    final hintColor = isDark
+        ? colors.onSurfaceVariant.withValues(alpha: 0.68)
+        : colors.onSurfaceVariant.withValues(alpha: 0.82);
+    final iconColor = isDark
+        ? colors.onSurfaceVariant.withValues(alpha: 0.9)
+        : colors.onSurfaceVariant;
 
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color:
-            isDark ? const Color(0xFF161B22) : colors.surfaceContainerHighest,
+        horizontal: AppSpacing.xs,
+        vertical: AppSpacing.xs,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.search,
-              size: 18, color: isDark ? Colors.white38 : Colors.grey),
-          const SizedBox(width: AppSpacing.xs),
           Expanded(
-            child: TextField(
-              controller: controller,
-              autofocus: autofocus,
-              enableSuggestions: false,
-              autocorrect: false,
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle:
-                    TextStyle(color: isDark ? Colors.white30 : Colors.grey),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm - 4, vertical: AppSpacing.sm - 2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
               ),
-              onChanged: onChanged,
+              decoration: BoxDecoration(
+                color: fieldFill,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: fieldBorder),
+                boxShadow: isDark
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: colors.shadow.withValues(alpha: 0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search, size: 18, color: iconColor),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      autofocus: autofocus,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: hintText,
+                        hintStyle: TextStyle(color: hintColor),
+                        border: InputBorder.none,
+                        filled: false,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: AppSpacing.sm - 2,
+                        ),
+                      ),
+                      onChanged: onChanged,
+                    ),
+                  ),
+                  if (controller.text.isNotEmpty && onClear != null)
+                    IconButton(
+                      icon: Icon(Icons.close, size: 16, color: iconColor),
+                      onPressed: onClear,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: '清空',
+                    ),
+                ],
+              ),
             ),
           ),
-          if (controller.text.isNotEmpty && onClear != null)
-            IconButton(
-              icon: Icon(Icons.close, size: 16, color: colors.onSurfaceVariant),
-              onPressed: onClear,
-              visualDensity: VisualDensity.compact,
-              tooltip: '清空',
-            ),
+          if (trailingActions.isNotEmpty) const SizedBox(width: AppSpacing.sm),
           ...trailingActions,
         ],
       ),

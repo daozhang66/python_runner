@@ -11,11 +11,15 @@ import '../services/app_update_manager.dart';
 import '../services/network_debug_config.dart';
 import '../services/request_override_config.dart';
 import '../runtime/runtime_manager.dart';
+import '../ui/app_design_tokens.dart';
+import '../ui/app_theme_palette.dart';
 import 'update_log_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
   final ThemeMode currentThemeMode;
+  final ValueChanged<AppThemePalette> onThemePaletteChanged;
+  final AppThemePalette currentThemePalette;
   final ValueChanged<bool> onMaterialYouChanged;
   final bool currentMaterialYouEnabled;
 
@@ -23,6 +27,8 @@ class SettingsPage extends StatefulWidget {
     super.key,
     required this.onThemeChanged,
     required this.currentThemeMode,
+    required this.onThemePaletteChanged,
+    required this.currentThemePalette,
     required this.onMaterialYouChanged,
     required this.currentMaterialYouEnabled,
   });
@@ -524,6 +530,85 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Future<void> _showThemeModePicker() async {
+    final selected = await showDialog<ThemeMode>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('选择主题模式'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.light,
+              groupValue: widget.currentThemeMode,
+              onChanged: (value) => Navigator.pop(ctx, value),
+              title: const Text('浅色'),
+              secondary: const Icon(Icons.light_mode),
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.system,
+              groupValue: widget.currentThemeMode,
+              onChanged: (value) => Navigator.pop(ctx, value),
+              title: const Text('跟随系统'),
+              secondary: const Icon(Icons.auto_mode),
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.dark,
+              groupValue: widget.currentThemeMode,
+              onChanged: (value) => Navigator.pop(ctx, value),
+              title: const Text('深色'),
+              secondary: const Icon(Icons.dark_mode),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      widget.onThemeChanged(selected);
+    }
+  }
+
+  Future<void> _showThemePalettePicker() async {
+    if (widget.currentMaterialYouEnabled) return;
+    final selected = await showDialog<AppThemePalette>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('选择配色方案'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: AppThemePalette.values.map((palette) {
+              return RadioListTile<AppThemePalette>(
+                value: palette,
+                groupValue: widget.currentThemePalette,
+                onChanged: (value) => Navigator.pop(ctx, value),
+                title: Text(palette.label),
+                subtitle: Text(
+                  palette.description,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                secondary: CircleAvatar(
+                  radius: 10,
+                  backgroundColor: palette.lightSeed,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+    if (selected != null) {
+      widget.onThemePaletteChanged(selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -572,7 +657,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   border: const OutlineInputBorder(gapPadding: 0),
                   isDense: true,
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                  fillColor: AppThemeColors.softSurface(
+                    Theme.of(context).colorScheme,
+                  ),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
@@ -1352,30 +1439,42 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         ListTile(
           leading: const Icon(Icons.palette_outlined),
-          title: const Text('主题'),
-          trailing: SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(
-                  value: ThemeMode.light,
-                  icon: Icon(Icons.light_mode, size: 18)),
-              ButtonSegment(
-                  value: ThemeMode.system,
-                  icon: Icon(Icons.auto_mode, size: 18)),
-              ButtonSegment(
-                  value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 18)),
-            ],
-            selected: {widget.currentThemeMode},
-            onSelectionChanged: (s) => widget.onThemeChanged(s.first),
-            showSelectedIcon: false,
+          title: const Text('主题模式'),
+          subtitle: Text(
+            switch (widget.currentThemeMode) {
+              ThemeMode.light => '当前：浅色',
+              ThemeMode.dark => '当前：深色',
+              ThemeMode.system => '当前：跟随系统',
+            },
+            style: const TextStyle(fontSize: 12),
           ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _showThemeModePicker,
         ),
         SwitchListTile(
           secondary: const Icon(Icons.color_lens_outlined),
           title: const Text('Material You'),
-          subtitle: const Text('Android 12+ 跟随系统壁纸动态取色，不支持时使用默认蓝色',
+          subtitle: const Text('Android 12+ 跟随系统壁纸动态取色；关闭后可使用下方自定义配色',
               style: TextStyle(fontSize: 12)),
           value: widget.currentMaterialYouEnabled,
           onChanged: widget.onMaterialYouChanged,
+        ),
+        ListTile(
+          leading: const Icon(Icons.colorize_outlined),
+          title: const Text('配色方案'),
+          subtitle: Text(
+            widget.currentMaterialYouEnabled
+                ? '当前由 Material You 接管；关闭后可切换海蓝、青玉、Claude、Codex'
+                : '当前：${widget.currentThemePalette.label} · ${widget.currentThemePalette.description}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: Icon(
+            widget.currentMaterialYouEnabled
+                ? Icons.block_outlined
+                : Icons.chevron_right,
+          ),
+          onTap:
+              widget.currentMaterialYouEnabled ? null : _showThemePalettePicker,
         ),
         SwitchListTile(
           secondary: const Icon(Icons.bubble_chart),
@@ -1866,7 +1965,10 @@ class _UserManualPage extends StatelessWidget {
             icon: Icons.settings,
             title: '设置',
             items: [
-              _ManualItem(Icons.palette_outlined, '主题', '浅色/跟随系统/深色'),
+              _ManualItem(
+                  Icons.palette_outlined, '主题模式', '点击后选择浅色 / 跟随系统 / 深色'),
+              _ManualItem(Icons.colorize_outlined, '配色方案',
+                  '关闭 Material You 后可切换海蓝、青玉、Claude、Codex 四套主题色'),
               _ManualItem(Icons.color_lens_outlined, 'Material You',
                   'Android 12+ 可跟随系统壁纸动态取色'),
               _ManualItem(Icons.bubble_chart, '悬浮球',

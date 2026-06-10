@@ -15,6 +15,7 @@ class PackageProvider extends ChangeNotifier {
   List<PackageInfo> _packages = [];
   bool _installing = false;
   bool _loadingPackages = false;
+  bool _hasLoadedOnce = false;
   int _loadGeneration = 0;
   final List<String> _installLog = [];
   StreamSubscription<PackageInstallProgress>? _installSub;
@@ -125,6 +126,17 @@ class PackageProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> ensurePackagesLoaded() async {
+    if (_loadingPackages) return;
+    final previousBackendId = _runtimeManager.activeBackendId;
+    await _syncRuntimeManagerFromSettings();
+    final backendChanged = previousBackendId != _runtimeManager.activeBackendId;
+    if (_hasLoadedOnce && !backendChanged) {
+      return;
+    }
+    await loadPackages(forceRefresh: backendChanged);
+  }
+
   Future<void> loadPackages({bool forceRefresh = false}) async {
     final generation = ++_loadGeneration;
     try {
@@ -145,6 +157,7 @@ class PackageProvider extends ChangeNotifier {
               ))
           .toList();
       _packages.sort((a, b) => a.name.compareTo(b.name));
+      _hasLoadedOnce = true;
       await _savePackageCache();
       _loadingPackages = false;
       notifyListeners();

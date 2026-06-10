@@ -115,6 +115,25 @@ void main() {
     expect(
         provider.packages.map((item) => item.name), isNot(contains('cached')));
   });
+
+  test('package provider only loads once when packages are already ready',
+      () async {
+    final backend = _FakeRuntimeBackend(
+      packages: const [
+        RuntimePackage(name: 'requests', version: '2.32.0', source: 'user'),
+      ],
+      uninstallResult: const PackageUninstallResult(success: true),
+    );
+    final provider = PackageProvider(
+      NativeBridge(),
+      runtimeManager: RuntimeManager(backend),
+    );
+
+    await provider.ensurePackagesLoaded();
+    await provider.ensurePackagesLoaded();
+
+    expect(backend.listPackagesCallCount, 1);
+  });
 }
 
 class _FakeRuntimeBackend implements RuntimeBackend {
@@ -131,6 +150,7 @@ class _FakeRuntimeBackend implements RuntimeBackend {
   final Completer<List<RuntimePackage>>? listPackagesCompleter;
   RequirementsInstallRequest? lastRequirementsRequest;
   int requirementsInstallCount = 0;
+  int listPackagesCallCount = 0;
 
   @override
   String get id => 'fake';
@@ -194,8 +214,11 @@ class _FakeRuntimeBackend implements RuntimeBackend {
   }
 
   @override
-  Future<List<RuntimePackage>> listPackages() async =>
-      listPackagesCompleter?.future ?? List<RuntimePackage>.from(_packages);
+  Future<List<RuntimePackage>> listPackages() async {
+    listPackagesCallCount++;
+    return listPackagesCompleter?.future ??
+        List<RuntimePackage>.from(_packages);
+  }
 
   @override
   Future<RuntimeHealth> checkHealth() async => const RuntimeHealth(ok: true);

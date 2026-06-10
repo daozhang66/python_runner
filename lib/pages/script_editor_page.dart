@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:re_editor/re_editor.dart';
@@ -21,6 +22,7 @@ class ScriptEditorPage extends StatefulWidget {
 }
 
 class _ScriptEditorPageState extends State<ScriptEditorPage> {
+  static final _modifiedAtFormat = DateFormat('yyyy年MM月dd日 HH:mm');
   late CodeLineEditingController _controller;
   CodeFindController? _findController;
   late final SelectionToolbarController _toolbarController;
@@ -37,6 +39,11 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
   static const _maxFontSize = 36.0;
 
   String get _displayName => widget.scriptName.replaceAll('.py', '');
+
+  String _formatModifiedAt(DateTime? value) {
+    if (value == null) return '改动时间未知';
+    return '改动 ${_modifiedAtFormat.format(value)}';
+  }
 
   @override
   void initState() {
@@ -343,6 +350,14 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
 
   Widget _buildEditorStatusBar() {
     final colors = Theme.of(context).colorScheme;
+    final modifiedAt = context.select<ScriptProvider, DateTime?>((provider) {
+      for (final script in provider.scripts) {
+        if (script.name == widget.scriptName) {
+          return script.modifiedAt;
+        }
+      }
+      return null;
+    });
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -369,7 +384,7 @@ class _ScriptEditorPageState extends State<ScriptEditorPage> {
           ),
           const Spacer(),
           Text(
-            '${_fontSize.toStringAsFixed(0)} px · ${widget.scriptName}',
+            '${_fontSize.toStringAsFixed(0)} px · ${_formatModifiedAt(modifiedAt)}',
             style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

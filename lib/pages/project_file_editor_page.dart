@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/languages/python.dart';
@@ -34,6 +35,7 @@ class ProjectFileEditorPage extends StatefulWidget {
 }
 
 class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
+  static final _modifiedAtFormat = DateFormat('yyyy年MM月dd日 HH:mm');
   late final ScriptProjectService _service;
   late final CodeLineEditingController _controller;
   CodeFindController? _findController;
@@ -46,11 +48,27 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
   final Map<int, Offset> _scalePointers = {};
   double? _pointerScaleStartDistance;
   String _savedText = '';
+  DateTime? _lastModifiedAt;
 
   static const _minFontSize = 6.0;
   static const _maxFontSize = 36.0;
 
   String get _title => widget.filePath.split('/').last;
+
+  String _formatModifiedAt(DateTime? value) {
+    if (value == null) return '改动时间未知';
+    return '改动 ${_modifiedAtFormat.format(value)}';
+  }
+
+  Future<DateTime?> _loadCurrentFileModifiedAt() async {
+    final files = await _service.loadProjectFiles(widget.group);
+    for (final file in files) {
+      if (file.path == widget.filePath) {
+        return file.modifiedAt;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -134,12 +152,14 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
     final prefs = await SharedPreferences.getInstance();
     final content =
         await _service.readProjectFile(widget.group, widget.filePath);
+    final modifiedAt = await _loadCurrentFileModifiedAt();
     if (!mounted) return;
     _savedText = content;
     _controller.text = content;
     _controller.addListener(_onTextChanged);
     setState(() {
       _fontSize = prefs.getDouble('project_editor_font_size') ?? 10.0;
+      _lastModifiedAt = modifiedAt;
       _modified = false;
       _loading = false;
     });
@@ -220,9 +240,14 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
       _controller.text,
     );
     if (!success || !mounted) return;
+    final modifiedAt = await _loadCurrentFileModifiedAt();
+    if (!mounted) return;
     _savedText = _controller.text;
     widget.onSaved?.call();
-    setState(() => _modified = false);
+    setState(() {
+      _modified = false;
+      _lastModifiedAt = modifiedAt ?? DateTime.now();
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已保存'), duration: Duration(seconds: 1)),
     );
@@ -235,9 +260,14 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
       _controller.text,
     );
     if (success && mounted) {
+      final modifiedAt = await _loadCurrentFileModifiedAt();
+      if (!mounted) return false;
       _savedText = _controller.text;
       widget.onSaved?.call();
-      setState(() => _modified = false);
+      setState(() {
+        _modified = false;
+        _lastModifiedAt = modifiedAt ?? DateTime.now();
+      });
     }
     return success;
   }
@@ -392,7 +422,7 @@ class _ProjectFileEditorPageState extends State<ProjectFileEditorPage> {
           ),
           const Spacer(),
           Text(
-            '${_fontSize.toStringAsFixed(0)} px · ${widget.filePath}',
+            '${_fontSize.toStringAsFixed(0)} px · ${_formatModifiedAt(_lastModifiedAt)}',
             style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

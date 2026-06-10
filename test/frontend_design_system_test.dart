@@ -20,6 +20,7 @@ void main() {
     final badges = File('lib/ui/app_badges.dart').readAsStringSync();
     final toolbars = File('lib/ui/app_toolbars.dart').readAsStringSync();
     final emptyState = File('lib/ui/app_empty_state.dart').readAsStringSync();
+    final palette = File('lib/ui/app_theme_palette.dart').readAsStringSync();
 
     expect(surfaces, contains('class AppSurface'));
     expect(surfaces, contains('class AppSectionCard'));
@@ -28,5 +29,10 @@ void main() {
     expect(toolbars, contains('class AppSearchBar'));
     expect(toolbars, contains('class AppToolbarButton'));
     expect(emptyState, contains('class AppEmptyState'));
+    expect(palette, contains('enum AppThemePalette'));
+    expect(palette, contains("label: '海蓝'"));
+    expect(palette, contains("label: '青玉'"));
+    expect(palette, contains("label: 'Claude'"));
+    expect(palette, contains("label: 'Codex'"));
   });
 }
