@@ -2349,7 +2349,7 @@ class _ScriptFolderCard extends StatelessWidget {
                     height: 44,
                     decoration: BoxDecoration(
                       color: AppThemeColors.isDark(context)
-                          ? AppThemeColors.darkSurfaceHigh
+                          ? colors.surfaceContainerHigh
                           : colors.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -2630,8 +2630,7 @@ class _ScriptIcon extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color:
-            isDark ? AppThemeColors.darkSurfaceHigh : colors.primaryContainer,
+        color: isDark ? colors.surfaceContainerHigh : colors.primaryContainer,
         borderRadius: BorderRadius.circular(size * 0.28),
       ),
       alignment: Alignment.center,

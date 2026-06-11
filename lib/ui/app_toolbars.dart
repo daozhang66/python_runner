@@ -27,10 +27,9 @@ class AppSearchBar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fieldFill =
-        isDark ? const Color(0xFF1B212B) : AppThemeColors.softSurface(colors);
-    final fieldBorder = isDark
-        ? AppThemeColors.darkBorder
-        : colors.outlineVariant.withValues(alpha: 0.48);
+        isDark ? colors.surfaceContainer : AppThemeColors.softSurface(colors);
+    final fieldBorder =
+        isDark ? colors.outline : colors.outlineVariant.withValues(alpha: 0.48);
     final hintColor = isDark
         ? colors.onSurfaceVariant.withValues(alpha: 0.68)
         : colors.onSurfaceVariant.withValues(alpha: 0.82);
