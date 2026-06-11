@@ -388,4 +388,18 @@ void main() {
     expect(pubspec, isNot(contains('re_editor: ^0.8.0')));
     expect(patchedInput, contains('bool onFocusReceived() => false;'));
   });
+
+  test('code editor syntax highlighter ignores stale async results', () {
+    final highlighter = File(
+      'third_party/re_editor/lib/src/_code_highlight.dart',
+    ).readAsStringSync();
+
+    expect(highlighter, contains('int _highlightRevision = 0;'));
+    expect(
+      highlighter,
+      contains('_controller.codeLines.equals(_controller.preValue?.codeLines)'),
+    );
+    expect(highlighter, contains('final int revision = ++_highlightRevision;'));
+    expect(highlighter, contains('if (revision != _highlightRevision)'));
+  });
 }

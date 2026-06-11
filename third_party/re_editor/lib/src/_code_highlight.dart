@@ -8,6 +8,7 @@ class _CodeHighlighter extends ValueNotifier<List<_HighlightResult>> {
 
   CodeLineEditingController _controller;
   CodeHighlightTheme? _theme;
+  int _highlightRevision = 0;
 
   _CodeHighlighter({
     required BuildContext context,
@@ -156,14 +157,20 @@ class _CodeHighlighter extends ValueNotifier<List<_HighlightResult>> {
   }
 
   void _onCodesChanged() {
-    if (_controller.preValue?.codeLines == _controller.codeLines) {
+    if (_controller.codeLines.equals(_controller.preValue?.codeLines)) {
       return;
     }
     _processHighlight();
   }
 
   void _processHighlight() {
-    _engine.run(_controller.codeLines, (result) => value = result);
+    final int revision = ++_highlightRevision;
+    _engine.run(_controller.codeLines, (result) {
+      if (revision != _highlightRevision) {
+        return;
+      }
+      value = result;
+    });
   }
 
 }
@@ -327,4 +334,3 @@ class _HighlightLineRenderer implements HighlightRenderer {
   }
 
 }
-
