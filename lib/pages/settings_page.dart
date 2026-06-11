@@ -585,18 +585,21 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: AppThemePalette.values.map((palette) {
+              final subtitle = palette.darkOnly
+                  ? '${palette.description}（仅深色）'
+                  : palette.description;
               return RadioListTile<AppThemePalette>(
                 value: palette,
                 groupValue: widget.currentThemePalette,
                 onChanged: (value) => Navigator.pop(ctx, value),
                 title: Text(palette.label),
                 subtitle: Text(
-                  palette.description,
+                  subtitle,
                   style: const TextStyle(fontSize: 12),
                 ),
                 secondary: CircleAvatar(
                   radius: 10,
-                  backgroundColor: palette.lightSeed,
+                  backgroundColor: palette.previewColor,
                 ),
               );
             }).toList(),

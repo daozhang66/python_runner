@@ -167,6 +167,7 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
   }
 
   Future<void> _setTheme(ThemeMode mode) async {
+    if (_themePalette.darkOnly && mode != ThemeMode.dark) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('theme_mode', mode.name);
     setState(() => _themeMode = mode);
@@ -205,34 +206,47 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       return cachedTheme;
     }
 
+    final isHandCraftedDark = isDark && !_themePalette.isSeedBased;
+    final bgColor = isHandCraftedDark
+        ? colorScheme.surface
+        : (isDark
+            ? AppThemeColors.darkBackground
+            : AppThemeColors.pageBackground(colorScheme));
+    final cardColor = isHandCraftedDark
+        ? colorScheme.surfaceContainer
+        : (isDark
+            ? AppThemeColors.darkSurface
+            : AppThemeColors.cardSurface(colorScheme));
+    final borderColor = isHandCraftedDark
+        ? colorScheme.outline
+        : (isDark
+            ? AppThemeColors.darkBorder
+            : colorScheme.outlineVariant.withValues(alpha: 0.44));
+    final navIndicator = isHandCraftedDark
+        ? colorScheme.primaryContainer
+        : (isDark
+            ? AppThemeColors.darkPinnedSurface
+            : AppThemeColors.navigationIndicator(colorScheme));
+
     final theme = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: isDark
-          ? AppThemeColors.darkBackground
-          : AppThemeColors.pageBackground(colorScheme),
-      canvasColor: isDark ? AppThemeColors.darkBackground : null,
+      scaffoldBackgroundColor: bgColor,
+      canvasColor: isDark ? bgColor : null,
       cardTheme: CardThemeData(
         elevation: 0,
-        color: isDark
-            ? AppThemeColors.darkSurface
-            : AppThemeColors.cardSurface(colorScheme),
+        color: cardColor,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xl),
-          side: BorderSide(
-            color: isDark
-                ? AppThemeColors.darkBorder
-                : colorScheme.outlineVariant.withValues(alpha: 0.44),
-          ),
+          side: BorderSide(color: borderColor),
         ),
       ),
       appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0.5,
-        backgroundColor:
-            isDark ? AppThemeColors.darkBackground : colorScheme.surface,
+        backgroundColor: isDark ? bgColor : colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
       ),
@@ -251,13 +265,38 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         height: 60,
-        backgroundColor: isDark
-            ? AppThemeColors.darkBackground
-            : AppThemeColors.cardSurface(colorScheme),
+        backgroundColor:
+            isDark ? bgColor : AppThemeColors.cardSurface(colorScheme),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: isDark
-            ? AppThemeColors.darkPinnedSurface
-            : AppThemeColors.navigationIndicator(colorScheme),
+        indicatorColor: navIndicator,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return colorScheme.onSurface.withValues(alpha: 0.38);
+          }
+          if (states.contains(WidgetState.selected)) {
+            return colorScheme.onPrimary;
+          }
+          return colorScheme.onSurfaceVariant;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return colorScheme.onSurface.withValues(alpha: 0.12);
+          }
+          if (states.contains(WidgetState.selected)) {
+            return colorScheme.primary;
+          }
+          return isDark
+              ? colorScheme.surfaceContainerHighest
+              : colorScheme.surfaceContainerHigh;
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.transparent;
+          }
+          return colorScheme.outline.withValues(alpha: isDark ? 0.58 : 0.42);
+        }),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -277,9 +316,13 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
           ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
-              return AppThemeColors.navigationIndicator(colorScheme);
+              return isHandCraftedDark
+                  ? colorScheme.primaryContainer
+                  : AppThemeColors.navigationIndicator(colorScheme);
             }
-            return AppThemeColors.cardSurface(colorScheme);
+            return isHandCraftedDark
+                ? colorScheme.surfaceContainerHigh
+                : AppThemeColors.cardSurface(colorScheme);
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
@@ -327,9 +370,15 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppThemeColors.softSurface(colorScheme),
-        selectedColor: AppThemeColors.navigationIndicator(colorScheme),
-        secondarySelectedColor: AppThemeColors.navigationIndicator(colorScheme),
+        backgroundColor: isHandCraftedDark
+            ? colorScheme.surfaceContainerHigh
+            : AppThemeColors.softSurface(colorScheme),
+        selectedColor: isHandCraftedDark
+            ? colorScheme.primaryContainer
+            : AppThemeColors.navigationIndicator(colorScheme),
+        secondarySelectedColor: isHandCraftedDark
+            ? colorScheme.primaryContainer
+            : AppThemeColors.navigationIndicator(colorScheme),
         side: BorderSide(
           color: colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
@@ -383,23 +432,27 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        final lightScheme = _materialYouEnabled && lightDynamic != null
+        final lightScheme = _materialYouEnabled &&
+                lightDynamic != null &&
+                _themePalette.isSeedBased
             ? lightDynamic
-            : ColorScheme.fromSeed(
-                seedColor: _themePalette.lightSeed,
-                brightness: Brightness.light,
-              );
-        final darkScheme = _materialYouEnabled && darkDynamic != null
+            : (_themePalette.handCraftedScheme(Brightness.light) ??
+                ColorScheme.fromSeed(
+                    seedColor: _themePalette.lightSeed!,
+                    brightness: Brightness.light));
+        final darkScheme = _materialYouEnabled &&
+                darkDynamic != null &&
+                _themePalette.isSeedBased
             ? darkDynamic
-            : ColorScheme.fromSeed(
-                seedColor: _themePalette.darkSeed,
-                brightness: Brightness.dark,
-              );
+            : (_themePalette.handCraftedScheme(Brightness.dark) ??
+                ColorScheme.fromSeed(
+                    seedColor: _themePalette.darkSeed!,
+                    brightness: Brightness.dark));
         return MaterialApp(
           navigatorKey: appNavigatorKey,
           title: 'Python运行器',
           debugShowCheckedModeBanner: false,
-          themeMode: _themeMode,
+          themeMode: _themePalette.darkOnly ? ThemeMode.dark : _themeMode,
           builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -424,7 +477,8 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
           home: SplashGate(
             child: HomePage(
               onThemeChanged: _setTheme,
-              currentThemeMode: _themeMode,
+              currentThemeMode:
+                  _themePalette.darkOnly ? ThemeMode.dark : _themeMode,
               onThemePaletteChanged: _setThemePalette,
               currentThemePalette: _themePalette,
               onMaterialYouChanged: _setMaterialYouEnabled,
