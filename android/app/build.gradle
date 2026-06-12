@@ -181,13 +181,21 @@ tasks.register("verifyReleaseManifestPolicy") {
         def forbidden = [
             "android.permission.MANAGE_EXTERNAL_STORAGE",
             "android.permission.SYSTEM_ALERT_WINDOW",
-            "bin.mt.file.content.MTDataFilesProvider",
-            "bin.mt.file.content.MTDataFilesWakeUpActivity",
             "android:usesCleartextTraffic=\"true\""
         ]
         forbidden.each { value ->
             if (manifestText.contains(value)) {
                 throw new GradleException("Release manifest policy violation: ${value} found in ${mergedManifest}")
+            }
+        }
+        def required = [
+            "bin.mt.file.content.MTDataFilesProvider",
+            "bin.mt.file.content.MTDataFilesWakeUpActivity",
+            "android.permission.MANAGE_DOCUMENTS"
+        ]
+        required.each { value ->
+            if (!manifestText.contains(value)) {
+                throw new GradleException("Release manifest policy violation: ${value} missing from ${mergedManifest}")
             }
         }
         if (!manifestText.contains("android.permission.REQUEST_INSTALL_PACKAGES")) {
