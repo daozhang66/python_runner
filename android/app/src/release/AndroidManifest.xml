@@ -10,12 +10,5 @@
 
     <application
         android:usesCleartextTraffic="false"
-        tools:replace="android:usesCleartextTraffic">
-        <provider
-            android:name="bin.mt.file.content.MTDataFilesProvider"
-            tools:node="remove" />
-        <activity
-            android:name="bin.mt.file.content.MTDataFilesWakeUpActivity"
-            tools:node="remove" />
-    </application>
+        tools:replace="android:usesCleartextTraffic" />
 </manifest>
