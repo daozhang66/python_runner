@@ -305,7 +305,10 @@ class ExecutionProvider extends ChangeNotifier {
     return '$micros-$seq';
   }
 
-  Future<String> _resolveExecutableBackendId(String preferredBackendId) async {
+  Future<String> _resolveExecutableBackendId(
+    String preferredBackendId, {
+    bool isProject = false,
+  }) async {
     final resolvedBackendId =
         RuntimeManager.resolveBackendId(preferredBackendId);
     if (_runtimeManagerLocked ||
@@ -317,13 +320,31 @@ class ExecutionProvider extends ChangeNotifier {
       if (health.ok) {
         return resolvedBackendId;
       }
+
+      // For project scripts or explicit Linux-like selection, fail-fast
+      if (isProject || preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+        throw StateError(
+          'Linux-like 运行时未就绪: ${health.message}\n\n'
+          '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。'
+        );
+      }
+
       _logger.warn(
-        '运行引擎 $preferredBackendId 未就绪: ${health.message}',
+        '运行引擎 $preferredBackendId 未就绪: ${health.message}，回退到 Chaquopy',
         source: 'Execution',
       );
     } catch (e) {
+      if (e is StateError) rethrow;
+
+      if (isProject || preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+        throw StateError(
+          'Linux-like 运行时健康检查失败: $e\n\n'
+          '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。'
+        );
+      }
+
       _logger.warn(
-        '运行引擎 $preferredBackendId 健康检查失败: $e',
+        '运行引擎 $preferredBackendId 健康检查失败: $e，回退到 Chaquopy',
         source: 'Execution',
       );
     }
@@ -400,10 +421,17 @@ class ExecutionProvider extends ChangeNotifier {
         'TZ': tzValue,
       };
       if (preferredRuntimeBackendId != runtimeBackendId) {
+        final fallbackMsg = '⚠️ 运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId';
         _logger.warn(
-          '运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId',
+          fallbackMsg,
           source: 'Execution',
         );
+        // Add visible warning to execution output
+        _appendLiveLog(LogEntry(
+          type: LogType.info,
+          content: '\x1b[33m$fallbackMsg\x1b[0m\n',
+          timestamp: DateTime.now(),
+        ));
       }
 
       // Build HTTP hook environment config

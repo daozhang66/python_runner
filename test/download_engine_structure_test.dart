@@ -96,6 +96,9 @@ void main() {
     expect(managerSource, contains('speedBytesPerSecond'));
     expect(managerSource, contains('etaSeconds'));
     expect(managerSource, contains('cancelDownload'));
+    expect(managerSource, contains('requireSha256'));
+    expect(managerSource, contains('valid SHA-256 checksum'));
+    expect(managerSource, isNot(contains('task.sha256.isNotBlank()')));
 
     expect(installerSource, contains('canRequestPackageInstalls'));
     expect(installerSource, contains('FileProvider.getUriForFile'));

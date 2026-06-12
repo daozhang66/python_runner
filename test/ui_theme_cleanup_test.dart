@@ -2,10 +2,30 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String scriptListSource() => [
+      'lib/pages/script_list_page.dart',
+      'lib/pages/script_list_actions.dart',
+      'lib/pages/script_list_content.dart',
+      'lib/pages/script_list_widgets.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
+String settingsPageSource() => [
+      'lib/pages/settings_page.dart',
+      'lib/pages/settings_actions.dart',
+      'lib/pages/settings_sections.dart',
+      'lib/pages/settings_widgets.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
+String networkInspectorSource() => [
+      'lib/pages/network_inspector_page.dart',
+      'lib/pages/network_inspector_widgets.dart',
+      'lib/pages/network_inspector_detail.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
 void main() {
   test('script page uses compact app bar actions without large toolbar or FAB',
       () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
 
     expect(source, contains('_buildScriptTitleBadge(allScripts.length)'));
     expect(source, contains('Widget _buildScriptTitleBadge(int count)'));
@@ -31,7 +51,7 @@ void main() {
   });
 
   test('script page can mask script names from a small eye button', () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
 
     expect(source, contains('_maskScriptNames = false'));
     expect(source, contains('_loadScriptNameMaskPreference'));
@@ -99,8 +119,7 @@ void main() {
 
   test('scripts support pinning with persistent order and highlighted cards',
       () {
-    final pageSource =
-        File('lib/pages/script_list_page.dart').readAsStringSync();
+    final pageSource = scriptListSource();
     final providerSource =
         File('lib/providers/script_provider.dart').readAsStringSync();
     final modelSource = File('lib/models/script_file.dart').readAsStringSync();
@@ -113,7 +132,7 @@ void main() {
     expect(
         modelSource, contains("isPinned: (map['isPinned'] as int? ?? 0) == 1"));
 
-    expect(dbSource, contains('version: 5'));
+    expect(dbSource, contains('schemaVersion = 5'));
     expect(dbSource, contains('onUpgrade: _onUpgrade'));
     expect(dbSource, contains('isPinned INTEGER DEFAULT 0'));
     expect(dbSource, contains('sortOrder INTEGER DEFAULT 0'));
@@ -136,8 +155,7 @@ void main() {
 
   test('script reordering starts only from handles and never from pinned cards',
       () {
-    final pageSource =
-        File('lib/pages/script_list_page.dart').readAsStringSync();
+    final pageSource = scriptListSource();
     final providerSource =
         File('lib/providers/script_provider.dart').readAsStringSync();
 
@@ -169,7 +187,7 @@ void main() {
 
   test('script cards use unified Material style with modest quick run button',
       () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
 
     expect(source, contains('class _ScriptIcon'));
     expect(source, contains('class _ScriptMetaChip'));
@@ -187,7 +205,7 @@ void main() {
       () {
     final transitions =
         File('lib/utils/app_page_transitions.dart').readAsStringSync();
-    final listPage = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final listPage = scriptListSource();
     final editorPage =
         File('lib/pages/script_editor_page.dart').readAsStringSync();
     final consolePage =
@@ -223,8 +241,7 @@ void main() {
 
   test('app theme supports optional Material You dynamic color', () {
     final mainSource = File('lib/main.dart').readAsStringSync();
-    final settingsSource =
-        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsSource = settingsPageSource();
     final pubspecSource = File('pubspec.yaml').readAsStringSync();
 
     expect(pubspecSource, contains('dynamic_color:'));
@@ -260,7 +277,7 @@ void main() {
   });
 
   test('script list and editor use cheaper rebuild patterns', () {
-    final listPage = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final listPage = scriptListSource();
     final editorPage =
         File('lib/pages/script_editor_page.dart').readAsStringSync();
 
@@ -272,8 +289,7 @@ void main() {
   });
 
   test('network inspector caches stats and formatted line metadata', () {
-    final pageSource =
-        File('lib/pages/network_inspector_page.dart').readAsStringSync();
+    final pageSource = networkInspectorSource();
     final storeSource =
         File('lib/services/http_inspector_store.dart').readAsStringSync();
 
@@ -299,8 +315,7 @@ void main() {
   test(
       'graphics engine and scene support are fully removed from user-visible and runtime layers',
       () {
-    final settingsSource =
-        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsSource = settingsPageSource();
     final executionSource =
         File('lib/providers/execution_provider.dart').readAsStringSync();
     final bridgeSource =

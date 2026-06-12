@@ -119,7 +119,10 @@ The request inspector automatically records common Python HTTP libraries:
 
 - `requests`
 - `httpx`
-- `urllib`
+- `urllib` / `urllib3`
+- `aiohttp`
+- `socket` (DNS and connect)
+- `subprocess` (command recording only, not interception)
 
 It supports:
 
@@ -128,6 +131,7 @@ It supports:
 - Request detail view
 - JSON tree viewer
 - Request override configuration
+- Response body limits: images up to 30 MB, text / JSON defaults to 10 MB, audio / video records metadata only
 
 ## Project structure
 
@@ -146,26 +150,3 @@ android/
 assets/
 test/
 ```
-
-## Development
-
-- Flutter SDK
-- Android Studio or VS Code
-- Android device or emulator
-
-## Run
-
-```bash
-flutter pub get
-flutter run
-```
-
-## Build release APK
-
-```bash
-flutter build apk --release
-```
-
-## Repository
-
-- GitHub: https://github.com/daozhang66/python_runner

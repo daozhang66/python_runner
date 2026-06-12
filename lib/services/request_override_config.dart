@@ -17,7 +17,10 @@ class RequestOverrideConfig extends ChangeNotifier {
   int _defaultTimeout = 30;
   bool _followRedirects = true;
   bool _forceProxy = false;
+  String _domainRulesJson = '[]';
   List<Map<String, dynamic>> _domainRules = [];
+  String? _globalHeadersError;
+  String? _domainRulesError;
 
   bool get overrideEnabled => _overrideEnabled;
   bool get recordRequests => _recordRequests;
@@ -28,9 +31,20 @@ class RequestOverrideConfig extends ChangeNotifier {
   int get defaultTimeout => _defaultTimeout;
   bool get followRedirects => _followRedirects;
   bool get forceProxy => _forceProxy;
+  String get domainRulesJson => _domainRulesJson;
   List<Map<String, dynamic>> get domainRules => List.unmodifiable(_domainRules);
+  String? get configError {
+    final errors = [
+      _globalHeadersError,
+      _domainRulesError,
+    ].whereType<String>().where((e) => e.isNotEmpty).toList();
+    if (errors.isEmpty) return null;
+    return errors.join('\n');
+  }
 
-  /// Parse globalHeaders JSON into a Map. Returns empty map on error.
+  bool get hasConfigError => configError != null;
+
+  /// Parse globalHeaders JSON into a Map. Invalid saved JSON is reported by configError.
   Map<String, String> get parsedHeaders {
     if (_globalHeaders.trim().isEmpty) return {};
     try {
@@ -42,6 +56,31 @@ class RequestOverrideConfig extends ChangeNotifier {
     return {};
   }
 
+  /// Validate JSON string. Returns null if valid, error message otherwise.
+  static String? validateJson(String jsonStr) {
+    if (jsonStr.trim().isEmpty) return null;
+    try {
+      jsonDecode(jsonStr);
+      return null;
+    } catch (e) {
+      return 'Invalid JSON: ${e.toString()}';
+    }
+  }
+
+  /// Validate headers JSON. Returns null if valid, error message otherwise.
+  static String? validateHeadersJson(String jsonStr) {
+    if (jsonStr.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map) {
+        return 'Headers must be a JSON object, not ${decoded.runtimeType}';
+      }
+      return null;
+    } catch (e) {
+      return 'Invalid JSON: ${e.toString()}';
+    }
+  }
+
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -50,19 +89,29 @@ class RequestOverrideConfig extends ChangeNotifier {
       _recordResponseBody = prefs.getBool('req_record_body') ?? false;
       _globalUserAgent = prefs.getString('req_global_ua') ?? '';
       _globalHeaders = prefs.getString('req_global_headers') ?? '';
+      final headersError = validateHeadersJson(_globalHeaders);
+      _globalHeadersError =
+          headersError == null ? null : '全局请求头配置错误: $headersError';
       _globalCookie = prefs.getString('req_global_cookie') ?? '';
       _defaultTimeout = prefs.getInt('req_default_timeout') ?? 30;
       _followRedirects = prefs.getBool('req_follow_redirects') ?? true;
       _forceProxy = prefs.getBool('req_force_proxy') ?? false;
-      // Load domain rules
-      final rulesJson = prefs.getString('req_domain_rules') ?? '[]';
+      _domainRulesJson = prefs.getString('req_domain_rules') ?? '[]';
       try {
-        final decoded = jsonDecode(rulesJson);
-        if (decoded is List) {
-          _domainRules = decoded.whereType<Map<String, dynamic>>().toList();
+        final decoded = jsonDecode(_domainRulesJson);
+        if (decoded is! List) {
+          throw FormatException(
+            'Domain rules must be a JSON array, not ${decoded.runtimeType}',
+          );
         }
-      } catch (_) {
+        _domainRules = decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        _domainRulesError = null;
+      } catch (e) {
         _domainRules = [];
+        _domainRulesError = '域名规则配置错误: $e';
       }
       notifyListeners();
     } catch (e) {
@@ -103,7 +152,13 @@ class RequestOverrideConfig extends ChangeNotifier {
   }
 
   Future<void> setGlobalHeaders(String v) async {
-    _globalHeaders = v.trim();
+    final trimmed = v.trim();
+    final error = validateHeadersJson(trimmed);
+    if (error != null) {
+      throw FormatException(error);
+    }
+    _globalHeaders = trimmed;
+    _globalHeadersError = null;
     await _save('req_global_headers', _globalHeaders);
   }
 
@@ -128,9 +183,21 @@ class RequestOverrideConfig extends ChangeNotifier {
   }
 
   Future<void> setDomainRules(List<Map<String, dynamic>> rules) async {
+    final String encoded;
+    try {
+      encoded = jsonEncode(rules);
+    } catch (e) {
+      throw FormatException('Invalid domain rules JSON: $e');
+    }
+    final error = validateJson(encoded);
+    if (error != null) {
+      throw FormatException(error);
+    }
     _domainRules = List.from(rules);
+    _domainRulesJson = encoded;
+    _domainRulesError = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('req_domain_rules', jsonEncode(_domainRules));
+    await prefs.setString('req_domain_rules', encoded);
     notifyListeners();
   }
 
@@ -154,8 +221,10 @@ class RequestOverrideConfig extends ChangeNotifier {
   }
 
   Future<void> _saveDomainRules() async {
+    _domainRulesJson = jsonEncode(_domainRules);
+    _domainRulesError = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('req_domain_rules', jsonEncode(_domainRules));
+    await prefs.setString('req_domain_rules', _domainRulesJson);
     notifyListeners();
   }
 

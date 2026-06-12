@@ -45,7 +45,8 @@ void main() async {
   await RequestOverrideConfig.instance.load();
 
   // Restore persisted HTTP inspector records before the UI starts.
-  await HttpInspectorStore.instance.ensureLoaded();
+  final httpInspectorStore = HttpInspectorStore.instance;
+  await httpInspectorStore.ensureLoaded();
 
   // Global Flutter framework error handler
   FlutterError.onError = (details) {
@@ -81,6 +82,7 @@ void main() async {
             ChangeNotifierProvider(create: (_) => ScriptProvider(bridge, db)),
             ChangeNotifierProvider(create: (_) => ExecutionProvider(bridge)),
             ChangeNotifierProvider(create: (_) => PackageProvider(bridge)),
+            ChangeNotifierProvider.value(value: httpInspectorStore),
           ],
           child: const PythonRunnerApp(),
         ),

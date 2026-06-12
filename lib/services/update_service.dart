@@ -1,17 +1,29 @@
 import 'dart:convert';
 import 'dart:io';
 
+final RegExp _sha256Pattern = RegExp(r'\b[a-fA-F0-9]{64}\b');
+
+String? _extractSha256(String? text) {
+  if (text == null) return null;
+  final match = _sha256Pattern.firstMatch(text);
+  return match?.group(0)?.toLowerCase();
+}
+
 class ReleaseAssetInfo {
   final String name;
   final String downloadUrl;
   final int size;
   final String contentType;
+  final String? sha256;
+  final String? checksumDownloadUrl;
 
   const ReleaseAssetInfo({
     required this.name,
     required this.downloadUrl,
     required this.size,
     required this.contentType,
+    this.sha256,
+    this.checksumDownloadUrl,
   });
 
   factory ReleaseAssetInfo.fromJson(Map<String, dynamic> json) {
@@ -20,10 +32,27 @@ class ReleaseAssetInfo {
       downloadUrl: json['browser_download_url']?.toString() ?? '',
       size: (json['size'] as num?)?.toInt() ?? 0,
       contentType: json['content_type']?.toString() ?? '',
+      sha256: _extractSha256(
+        json['sha256']?.toString() ?? json['digest']?.toString(),
+      ),
     );
   }
 
   bool get isApk => name.toLowerCase().endsWith('.apk');
+
+  ReleaseAssetInfo copyWith({
+    String? sha256,
+    String? checksumDownloadUrl,
+  }) {
+    return ReleaseAssetInfo(
+      name: name,
+      downloadUrl: downloadUrl,
+      size: size,
+      contentType: contentType,
+      sha256: sha256 ?? this.sha256,
+      checksumDownloadUrl: checksumDownloadUrl ?? this.checksumDownloadUrl,
+    );
+  }
 }
 
 class AppUpdateInfo {
@@ -49,6 +78,19 @@ class AppUpdateInfo {
 
   bool get hasUpdate =>
       UpdateService.compareVersions(latestVersion, currentVersion) > 0;
+
+  AppUpdateInfo copyWith({ReleaseAssetInfo? apkAsset}) {
+    return AppUpdateInfo(
+      currentVersion: currentVersion,
+      latestVersion: latestVersion,
+      tagName: tagName,
+      releaseName: releaseName,
+      releaseNotes: releaseNotes,
+      htmlUrl: htmlUrl,
+      publishedAt: publishedAt,
+      apkAsset: apkAsset ?? this.apkAsset,
+    );
+  }
 }
 
 class ReleaseLogEntry {
@@ -134,13 +176,78 @@ class UpdateService {
         );
       }
 
-      return parseLatestReleaseResponse(
+      final updateInfo = parseLatestReleaseResponse(
         body: body,
+        currentVersion: currentVersion,
+      );
+      return _resolveChecksumAsset(
+        client: client,
+        updateInfo: updateInfo,
         currentVersion: currentVersion,
       );
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<AppUpdateInfo> _resolveChecksumAsset({
+    required HttpClient client,
+    required AppUpdateInfo updateInfo,
+    required String currentVersion,
+  }) async {
+    final asset = updateInfo.apkAsset;
+    if (asset == null ||
+        asset.sha256 != null ||
+        asset.checksumDownloadUrl == null ||
+        asset.checksumDownloadUrl!.isEmpty) {
+      return updateInfo;
+    }
+
+    try {
+      final checksum = await _fetchChecksum(
+        client: client,
+        url: asset.checksumDownloadUrl!,
+        currentVersion: currentVersion,
+      );
+      return updateInfo.copyWith(apkAsset: asset.copyWith(sha256: checksum));
+    } catch (_) {
+      // Keep the update visible but leave sha256 empty so auto-install is blocked.
+      return updateInfo;
+    }
+  }
+
+  Future<String> _fetchChecksum({
+    required HttpClient client,
+    required String url,
+    required String currentVersion,
+  }) async {
+    final uri = Uri.parse(url);
+    final request = await client.getUrl(uri);
+    request.headers.set(HttpHeaders.acceptHeader, 'text/plain,*/*');
+    request.headers
+        .set(HttpHeaders.userAgentHeader, 'python_runner/$currentVersion');
+
+    final response = await request.close();
+    final bytes = <int>[];
+    await for (final chunk in response) {
+      bytes.addAll(chunk);
+      if (bytes.length > 64 * 1024) {
+        throw const FormatException('Checksum asset is too large');
+      }
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      throw HttpException(
+        'Checksum download failed: ${response.statusCode}',
+        uri: uri,
+      );
+    }
+    final checksum = extractSha256Checksum(
+      utf8.decode(bytes, allowMalformed: true),
+    );
+    if (checksum == null) {
+      throw const FormatException('Checksum asset does not contain SHA-256');
+    }
+    return checksum;
   }
 
   Future<List<ReleaseLogEntry>> fetchReleaseLogs({int limit = 20}) async {
@@ -195,6 +302,18 @@ class UpdateService {
       if (asset.isApk) {
         apkAsset = asset;
         break;
+      }
+    }
+
+    if (apkAsset != null) {
+      final checksumName = '${apkAsset.name}.sha256';
+      for (final asset in assets) {
+        if (asset.name == checksumName) {
+          apkAsset = apkAsset!.copyWith(
+            checksumDownloadUrl: asset.downloadUrl,
+          );
+          break;
+        }
       }
     }
 
@@ -261,4 +380,6 @@ class UpdateService {
     } catch (_) {}
     return null;
   }
+
+  static String? extractSha256Checksum(String body) => _extractSha256(body);
 }

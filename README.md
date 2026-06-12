@@ -119,7 +119,10 @@
 
 - `requests`
 - `httpx`
-- `urllib`
+- `urllib` / `urllib3`
+- `aiohttp`
+- `socket` (DNS 和 connect)
+- `subprocess` (仅记录命令，不拦截)
 
 支持：
 
@@ -128,6 +131,7 @@
 - 请求详情
 - JSON 树状查看
 - 请求覆盖配置
+- 响应体大小限制（图片最大 30MB，文本/JSON 等默认 10MB，音视频仅记录 metadata）
 
 ## 项目结构
 
@@ -146,26 +150,3 @@ android/
 assets/
 test/
 ```
-
-## 开发环境
-
-- Flutter SDK
-- Android Studio 或 VS Code
-- Android 真机或模拟器
-
-## 运行
-
-```bash
-flutter pub get
-flutter run
-```
-
-## 构建 Release APK
-
-```bash
-flutter build apk --release
-```
-
-## 仓库
-
-- GitHub: https://github.com/daozhang66/python_runner

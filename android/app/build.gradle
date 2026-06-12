@@ -1,10 +1,17 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
 }
 
 apply plugin: "com.chaquo.python"
+
+pluginManager.withPlugin("kotlin-android") {
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+}
 
 def keystoreProperties = new java.util.Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
@@ -40,10 +47,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     lint {
@@ -157,6 +160,113 @@ flutter {
     source = "../.."
 }
 
+tasks.register("verifyReleaseManifestPolicy") {
+    group = "verification"
+    description = "Verify the merged release manifest keeps high-risk debug/internal capabilities out of release builds."
+
+    doLast {
+        def mergedManifest = fileTree(layout.buildDirectory.dir("intermediates").get().asFile) {
+            include "**/AndroidManifest.xml"
+        }.files.findAll { file ->
+            def normalized = file.absolutePath.replace('\\', '/').toLowerCase(Locale.US)
+            normalized.contains('/release/') &&
+                (normalized.contains('merged_manifest') || normalized.contains('merged_manifests'))
+        }.sort { a, b -> b.lastModified() <=> a.lastModified() }.find()
+
+        if (mergedManifest == null || !mergedManifest.exists()) {
+            throw new GradleException("Merged release manifest not found. Run processReleaseMainManifest before verifyReleaseManifestPolicy.")
+        }
+
+        def manifestText = mergedManifest.getText("UTF-8")
+        def forbidden = [
+            "android.permission.MANAGE_EXTERNAL_STORAGE",
+            "android.permission.SYSTEM_ALERT_WINDOW",
+            "bin.mt.file.content.MTDataFilesProvider",
+            "bin.mt.file.content.MTDataFilesWakeUpActivity",
+            "android:usesCleartextTraffic=\"true\""
+        ]
+        forbidden.each { value ->
+            if (manifestText.contains(value)) {
+                throw new GradleException("Release manifest policy violation: ${value} found in ${mergedManifest}")
+            }
+        }
+        if (!manifestText.contains("android.permission.REQUEST_INSTALL_PACKAGES")) {
+            throw new GradleException("Release manifest policy violation: REQUEST_INSTALL_PACKAGES missing; updater install flow depends on it.")
+        }
+        println "Release manifest policy verified: ${mergedManifest}"
+    }
+}
+
+tasks.register("reportReleaseApkSize") {
+    group = "verification"
+    description = "Write a release APK size report and enforce the hard size budget."
+
+    doLast {
+        def apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+        if (!apk.exists()) {
+            throw new GradleException("Release APK not found: ${apk}. Build packageRelease first.")
+        }
+        def warningMb = 170.0d
+        def hardLimitMb = 190.0d
+        def apkSizeMb = apk.length() / 1024.0d / 1024.0d
+        if (apkSizeMb > hardLimitMb) {
+            throw new GradleException(String.format(Locale.US, "Release APK %.1f MB exceeds hard limit %.1f MB", apkSizeMb, hardLimitMb))
+        }
+        if (apkSizeMb > warningMb) {
+            logger.warn(String.format(Locale.US, "Release APK %.1f MB exceeds warning budget %.1f MB", apkSizeMb, warningMb))
+        }
+
+        def buckets = [
+            "native-libs": 0L,
+            "chaquopy-python": 0L,
+            "linux-like-assets": 0L,
+            "flutter-assets": 0L,
+            "resources": 0L,
+            "dex": 0L,
+            "other": 0L,
+        ]
+        def zip = new java.util.zip.ZipFile(apk)
+        zip.entries().each { entry ->
+            if (entry.directory) return
+            def name = entry.name
+            def size = Math.max(entry.size, 0L)
+            if (name.startsWith("lib/")) buckets["native-libs"] += size
+            else if (name.contains("chaquopy") || name.startsWith("assets/chaquopy/")) buckets["chaquopy-python"] += size
+            else if (name.startsWith("assets/flutter_assets/linux_like_libs/")) buckets["linux-like-assets"] += size
+            else if (name.startsWith("assets/flutter_assets/")) buckets["flutter-assets"] += size
+            else if (name.endsWith(".dex")) buckets["dex"] += size
+            else if (name.startsWith("res/") || name == "resources.arsc") buckets["resources"] += size
+            else buckets["other"] += size
+        }
+        zip.close()
+
+        def reportDir = layout.buildDirectory.dir("reports/apk-size").get().asFile
+        reportDir.mkdirs()
+        def report = new File(reportDir, "release-size.txt")
+        def lines = []
+        lines << String.format(Locale.US, "APK: %s", apk.absolutePath)
+        lines << String.format(Locale.US, "Total: %.1f MB", apkSizeMb)
+        lines << String.format(Locale.US, "Warning budget: %.1f MB", warningMb)
+        lines << String.format(Locale.US, "Hard limit: %.1f MB", hardLimitMb)
+        lines << "Buckets:"
+        buckets.each { key, value ->
+            lines << String.format(Locale.US, "- %s: %.1f MB", key, value / 1024.0d / 1024.0d)
+        }
+        report.setText(lines.join(System.lineSeparator()) + System.lineSeparator(), "UTF-8")
+        println "Release APK size report written: ${report}"
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name == "processReleaseMainManifest") {
+        tasks.named("verifyReleaseManifestPolicy").configure { dependsOn task }
+    }
+    if (task.name == "assembleRelease") {
+        task.dependsOn(tasks.named("verifyReleaseManifestPolicy"))
+        task.finalizedBy(tasks.named("reportReleaseApkSize"))
+    }
+}
+
 // Force proot .so files to be stored uncompressed so Android extracts them
 // to nativeLibraryDir with execute permission, then re-sign the APK.
 tasks.whenTaskAdded { task ->
@@ -235,6 +345,25 @@ tasks.whenTaskAdded { task ->
                     unsignedApk.absolutePath
             }
             unsignedApk.delete()
+
+            // Step 3: verify signature and .so compression
+            exec {
+                commandLine apksignerFile.absolutePath, "verify", "--verbose", "--print-certs", apk.absolutePath
+            }
+            def verifyZip = new java.util.zip.ZipFile(apk)
+            targets.each { target ->
+                def e = verifyZip.getEntry(target)
+                if (e == null) {
+                    verifyZip.close()
+                    throw new GradleException("APK missing expected entry: ${target}")
+                }
+                if (e.method != java.util.zip.ZipEntry.STORED) {
+                    verifyZip.close()
+                    throw new GradleException("${target} is not STORED (uncompressed) in final APK")
+                }
+            }
+            verifyZip.close()
+            println "APK verified: signature valid, .so entries stored uncompressed"
         }
     }
 }

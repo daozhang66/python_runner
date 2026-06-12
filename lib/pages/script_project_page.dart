@@ -234,7 +234,7 @@ class _ScriptProjectPageState extends State<ScriptProjectPage> {
     if (pickedFile == null) return;
     late final String zipPath;
     if (pickedFile.useSystemPicker) {
-      final picked = await FilePicker.platform.pickFiles(
+      final picked = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['zip'],
         withData: false,

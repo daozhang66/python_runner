@@ -267,9 +267,11 @@ class HttpInspectorStore extends ChangeNotifier {
   HttpInspectorStore._({
     Future<Directory> Function()? supportDirectoryProvider,
     Duration persistDebounce = _defaultPersistDebounce,
+    bool throwOnStorageError = false,
   })  : _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory,
-        _persistDebounce = persistDebounce;
+        _persistDebounce = persistDebounce,
+        _throwOnStorageError = throwOnStorageError;
 
   static final HttpInspectorStore instance = HttpInspectorStore._();
 
@@ -282,16 +284,19 @@ class HttpInspectorStore extends ChangeNotifier {
   factory HttpInspectorStore.test({
     required Future<Directory> Function() supportDirectoryProvider,
     Duration persistDebounce = _defaultPersistDebounce,
+    bool throwOnStorageError = true,
   }) {
     return HttpInspectorStore._(
       supportDirectoryProvider: supportDirectoryProvider,
       persistDebounce: persistDebounce,
+      throwOnStorageError: throwOnStorageError,
     );
   }
 
   final List<HttpRecord> _records = [];
   final Future<Directory> Function() _supportDirectoryProvider;
   final Duration _persistDebounce;
+  final bool _throwOnStorageError;
   String _filterDomain = '';
   String _filterMethod = '';
   int? _filterStatus; // null = all, 0 = errors, 200 = 2xx, etc.
@@ -304,6 +309,7 @@ class HttpInspectorStore extends ChangeNotifier {
   Future<void>? _loadFuture;
   Future<void> _persistChain = Future<void>.value();
   bool _loaded = false;
+  Object? _lastStorageError;
 
   List<HttpRecord> get records => List.unmodifiable(_records);
   int get count => _records.length;
@@ -312,6 +318,7 @@ class HttpInspectorStore extends ChangeNotifier {
   String get filterMethod => _filterMethod;
   int? get filterStatus => _filterStatus;
   bool get isLoaded => _loaded;
+  Object? get lastStorageError => _lastStorageError;
   Map<String, dynamic> get stats => {
         'total': _totalCount,
         'success': _successCount,
@@ -668,8 +675,11 @@ class HttpInspectorStore extends ChangeNotifier {
             ..addAll(trimRecords(loaded));
         }
       }
+      _lastStorageError = null;
     } catch (e) {
+      _lastStorageError = e;
       debugPrint('HttpInspectorStore.load error: $e');
+      if (_throwOnStorageError) rethrow;
     } finally {
       _recomputeStats();
       _loaded = true;
@@ -686,8 +696,11 @@ class HttpInspectorStore extends ChangeNotifier {
         await file.parent.create(recursive: true);
         final payload = jsonEncode(snapshot);
         await file.writeAsString(payload, flush: true);
+        _lastStorageError = null;
       } catch (e) {
+        _lastStorageError = e;
         debugPrint('HttpInspectorStore.persist error: $e');
+        if (_throwOnStorageError) rethrow;
       }
     }, onError: (_) async {
       try {
@@ -695,8 +708,11 @@ class HttpInspectorStore extends ChangeNotifier {
         await file.parent.create(recursive: true);
         final payload = jsonEncode(snapshot);
         await file.writeAsString(payload, flush: true);
+        _lastStorageError = null;
       } catch (e) {
+        _lastStorageError = e;
         debugPrint('HttpInspectorStore.persist error: $e');
+        if (_throwOnStorageError) rethrow;
       }
     });
     await _persistChain;

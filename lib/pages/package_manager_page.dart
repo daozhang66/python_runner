@@ -86,7 +86,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     String fileName;
     List<int>? bytes;
     if (selected.useSystemPicker) {
-      final picked = await FilePicker.platform.pickFiles(
+      final picked = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['txt'],
         withData: true,

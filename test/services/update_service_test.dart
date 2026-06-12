@@ -57,6 +57,58 @@ void main() {
       );
     });
 
+    test('parseLatestReleaseResponse links checksum asset without fake hash',
+        () {
+      const checksumUrl = 'https://example.com/python_runner-v1.3.4.apk.sha256';
+      const body = '''
+{
+  "tag_name": "v1.3.4",
+  "name": "1.3.4",
+  "body": "",
+  "html_url": "https://github.com/daozhang66/python_runner/releases/tag/v1.3.4",
+  "published_at": "2026-05-03T08:30:00Z",
+  "assets": [
+    {
+      "name": "python_runner-v1.3.4.apk",
+      "browser_download_url": "https://example.com/python_runner-v1.3.4.apk",
+      "size": 123456,
+      "content_type": "application/vnd.android.package-archive"
+    },
+    {
+      "name": "python_runner-v1.3.4.apk.sha256",
+      "browser_download_url": "$checksumUrl",
+      "size": 96,
+      "content_type": "text/plain"
+    }
+  ]
+}
+''';
+
+      final updateInfo = UpdateService.parseLatestReleaseResponse(
+        body: body,
+        currentVersion: '1.3.3',
+      );
+
+      expect(updateInfo.apkAsset, isNotNull);
+      expect(updateInfo.apkAsset!.sha256, isNull);
+      expect(updateInfo.apkAsset!.checksumDownloadUrl, checksumUrl);
+    });
+
+    test('extractSha256Checksum accepts sha256sum and digest formats', () {
+      const hash =
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+      expect(
+        UpdateService.extractSha256Checksum('$hash  app-release.apk'),
+        hash,
+      );
+      expect(
+        UpdateService.extractSha256Checksum('sha256:$hash'),
+        hash,
+      );
+      expect(UpdateService.extractSha256Checksum('not a checksum'), isNull);
+    });
+
     test('parseReleaseLogsResponse extracts release history entries', () {
       const body = '''
 [

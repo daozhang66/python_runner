@@ -43,7 +43,7 @@ def _reload_config():
     _CFG['proxy_host'] = os.environ.get('PYRUNNER_PROXY_HOST', '')
     _CFG['proxy_port'] = os.environ.get('PYRUNNER_PROXY_PORT', '')
     _CFG['ssl_verify'] = os.environ.get('PYRUNNER_SSL_VERIFY', '1') == '1'
-    _CFG['body_limit'] = 2 * 1024 * 1024
+    _CFG['body_limit'] = 10 * 1024 * 1024
     raw_headers = hc.get('global_headers', '')
     try:
         _CFG['global_headers'] = json.loads(raw_headers) if raw_headers else {}
@@ -169,9 +169,9 @@ def _detect_content_type(headers):
 
 def _safe_body_preview(body, response_headers=None):
     """Capture response body for preview.
-    - For image/* content types: base64 encode up to body_limit
+    - For image/* content types: base64 encode up to 30MB limit
     - For audio/* and video/* content types: store metadata only (type + size)
-    - For other types: use configured body_limit (default 2MB) to keep memory bounded
+    - For other types: use configured body_limit (default 10MB) to keep memory bounded
     """
     if body is None:
         return None
@@ -179,10 +179,15 @@ def _safe_body_preview(body, response_headers=None):
         # Check if this is an image response
         ct = _detect_content_type(response_headers)
         if ct and ct.startswith('image/'):
-            if isinstance(body, bytes) and len(body) > 0:
-                import base64
-                limit = _CFG.get('body_limit', 2 * 1024 * 1024)
-                return 'data:' + ct + ';base64,' + base64.b64encode(body[:limit]).decode('ascii')
+            if isinstance(body, bytes):
+                # Apply 30MB limit for images to prevent OOM
+                IMAGE_LIMIT = 30 * 1024 * 1024
+                if len(body) > IMAGE_LIMIT:
+                    # Return metadata only for large images
+                    return 'media:{"type":"' + ct + '","size":' + str(len(body)) + ',"truncated":true}'
+                if len(body) > 0:
+                    import base64
+                    return 'data:' + ct + ';base64,' + base64.b64encode(body).decode('ascii')
             return None
 
         # Check if this is an audio/video response — store metadata only
@@ -191,7 +196,7 @@ def _safe_body_preview(body, response_headers=None):
             return 'media:{"type":"' + ct + '","size":' + str(body_len) + '}'
 
         # Non-image: truncate to limit
-        limit = _CFG.get('body_limit', 2 * 1024 * 1024)
+        limit = _CFG.get('body_limit', 10 * 1024 * 1024)
         truncated = False
         if isinstance(body, bytes):
             if len(body) == 0:
@@ -231,14 +236,12 @@ def _is_preview_truncated(body, response_headers=None):
         return False
     ct = _detect_content_type(response_headers)
     if ct and ct.startswith('image/'):
-        limit = _CFG.get('body_limit', 2 * 1024 * 1024)
-        try:
-            return isinstance(body, bytes) and len(body) > limit
-        except Exception:
-            return False
+        if isinstance(body, bytes):
+            return len(body) > 30 * 1024 * 1024
+        return False
     if ct and (ct.startswith('audio/') or ct.startswith('video/')):
         return False
-    limit = _CFG.get('body_limit', 2 * 1024 * 1024)
+    limit = _CFG.get('body_limit', 10 * 1024 * 1024)
     try:
         if isinstance(body, bytes):
             return len(body) > limit

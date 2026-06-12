@@ -2,11 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String settingsPageSource() => [
+      'lib/pages/settings_page.dart',
+      'lib/pages/settings_actions.dart',
+      'lib/pages/settings_sections.dart',
+      'lib/pages/settings_widgets.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
 void main() {
   test(
       'settings page views full exported diagnostics instead of memory-only logs',
       () {
-    final source = File('lib/pages/settings_page.dart').readAsStringSync();
+    final source = settingsPageSource();
     final viewBody = RegExp(
       r'Future<void> _viewSystemLogs\(\) async \{([\s\S]*?)\r?\n  }\r?\n\r?\n  Future<void> _exportSystemLogs',
     ).firstMatch(source)!.group(1)!;
@@ -18,8 +25,7 @@ void main() {
   test(
       'system log export uses configured working directory and native fallback otherwise',
       () {
-    final settingsSource =
-        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsSource = settingsPageSource();
     final bridgeSource =
         File('lib/services/native_bridge.dart').readAsStringSync();
     final activitySource =
@@ -85,8 +91,7 @@ void main() {
   test(
       'settings page has one complete log export and no snapshot or package actions',
       () {
-    final settingsSource =
-        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsSource = settingsPageSource();
 
     expect(settingsSource,
         contains("final timestamp = DateFormat('yyyyMMdd_HHmmss')"));
@@ -107,8 +112,7 @@ void main() {
   test(
       'settings page exposes searchable log viewer with unified dropdown borders',
       () {
-    final settingsSource =
-        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsSource = settingsPageSource();
 
     expect(settingsSource,
         contains('class _SystemLogViewPage extends StatefulWidget'));
