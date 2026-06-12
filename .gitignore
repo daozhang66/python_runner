@@ -60,6 +60,7 @@ pubspec.lock
 apptb.png
 play_store_512.png
 docs/*
+!docs/apk-size-report.md
 !docs/security-model.md
 
 # Flutter repo-specific
