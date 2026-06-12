@@ -6,33 +6,25 @@ typedef IsolateCallback<Res> = void Function(Res res);
 class _IsolateTasker<Req, Res> {
   final String name;
   late bool _closed;
+  final IsolateRunnable<Req, Res> _runnable;
 
-  late IsolateManager<Res, Req>? _isolateManager;
-
-  _IsolateTasker(this.name, IsolateRunnable<Req, Res> runnable) {
+  _IsolateTasker(this.name, IsolateRunnable<Req, Res> runnable)
+      : _runnable = runnable {
     _closed = false;
-    _isolateManager = IsolateManager.create(
-      runnable,
-      concurrent: 1, // one is enough
-    );
   }
 
   void run(Req req, IsolateCallback<Res> callback) async {
     if (_closed) {
       return;
     }
-    _isolateManager?.compute(req, callback: (message) async {
-      if (_closed) {
-        return false;
-      }
-      callback(message);
-      return true;
-    });
+    final Res message = await compute(_runnable, req, debugLabel: name);
+    if (_closed) {
+      return;
+    }
+    callback(message);
   }
 
   void close() {
     _closed = true;
-    _isolateManager?.stop();
-    _isolateManager = null;
   }
 }

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_logger.dart';
 import 'http_inspector_store.dart';
 import 'native_bridge.dart';
+import 'network_debug_config.dart';
 import 'update_service.dart';
 
 class AppUpdateManager {
@@ -201,6 +202,68 @@ class AppUpdateManager {
     final asset = updateInfo.apkAsset;
     if (asset == null) return;
 
+    // SECURITY: Block auto-install when global network debug hooks affect updates.
+    final netDebugConfig = NetworkDebugConfig.instance;
+    if (netDebugConfig.affectsGlobalHttpClients) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('安全警告'),
+          content: const Text(
+            '当前已启用网络代理或"允许不安全证书"调试选项。\n\n'
+            '在此模式下无法自动安装更新，以防止调试代理或中间人攻击影响更新链路。\n'
+            '请先关闭网络调试或手动下载验证。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _bridge.openUrl(updateInfo.htmlUrl);
+              },
+              child: const Text('打开 Release 页面'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // SECURITY: Require SHA-256 checksum for automatic installation
+    final assetSha256 = asset.sha256;
+    if (assetSha256 == null || assetSha256.isEmpty) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('安全警告'),
+          content: const Text(
+            '该版本缺少完整性校验信息（SHA-256）。\n\n'
+            '为了安全，无法自动安装此更新。\n'
+            '您可以访问 GitHub Release 页面手动下载并验证。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _bridge.openUrl(updateInfo.htmlUrl);
+              },
+              child: const Text('打开 Release 页面'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     await HttpInspectorStore.instance.flush();
 
     // Apply GitHub mirror prefix if configured
@@ -384,6 +447,7 @@ class AppUpdateManager {
         downloadUrl,
         fileName: asset.name,
         version: updateInfo.latestVersion,
+        sha256: assetSha256,
       );
       await finished.future;
     } catch (error) {

@@ -48,6 +48,7 @@ class MainActivity : FlutterActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val scriptFileStore by lazy { ScriptFileStore(filesDir) }
     private val apkInstaller by lazy { ApkInstaller(this) }
     private val downloadManager by lazy {
         DownloadManager(this) { event ->
@@ -135,32 +136,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun scriptsDir(): File {
-        val dir = File(filesDir, "scripts")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+        return scriptFileStore.scriptsDir()
     }
 
     private fun normalizeScriptName(name: String): String {
-        val safeName = name.trim()
-        require(safeName.isNotEmpty()) { "脚本名称不能为空" }
-        require(safeName != "." && safeName != "..") { "非法脚本名称" }
-        require(!safeName.contains('/') && !safeName.contains('\\')) {
-            "脚本名称不能包含路径分隔符"
-        }
-        require(safeName.none { it.code < 32 || it.code == 127 }) {
-            "脚本名称不能包含控制字符"
-        }
-        return safeName
+        return scriptFileStore.normalizeScriptName(name)
     }
 
     private fun safeScriptFile(name: String): File {
-        val safeName = normalizeScriptName(name)
-        val scriptsRoot = scriptsDir().canonicalFile
-        val target = File(scriptsRoot, safeName).canonicalFile
-        require(target.toPath().startsWith(scriptsRoot.toPath()) && target.name == safeName) {
-            "脚本路径越界"
-        }
-        return target
+        return scriptFileStore.safeScriptFile(name)
     }
 
     private fun scriptProjectsDir(): File {
@@ -298,6 +282,11 @@ class MainActivity : FlutterActivity() {
         // MethodChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
             .setMethodCallHandler { call, result ->
+                val contractError = NativeBridgeContract.validate(call.method, call.arguments)
+                if (contractError != null) {
+                    result.error(NativeBridgeContract.ERROR_CODE, contractError, null)
+                    return@setMethodCallHandler
+                }
                 when (call.method) {
                     "createScript" -> {
                         val name = call.argument<String>("name") ?: ""
@@ -430,7 +419,9 @@ class MainActivity : FlutterActivity() {
                     "downloadAndInstallApk" -> {
                         val url = call.argument<String>("url") ?: ""
                         val fileName = call.argument<String>("fileName") ?: "python_runner_update.apk"
-                        handleStartApkDownload(url, fileName, "", "", result)
+                        val version = call.argument<String>("version") ?: ""
+                        val sha256 = call.argument<String>("sha256") ?: ""
+                        handleStartApkDownload(url, fileName, version, sha256, result)
                     }
                     "startApkDownload" -> {
                         val url = call.argument<String>("url") ?: ""
@@ -556,65 +547,44 @@ class MainActivity : FlutterActivity() {
 
     // --- Script Management ---
 
+    private fun scriptFileErrorCode(e: Exception): String {
+        val message = e.message.orEmpty()
+        return if (
+            message.contains("脚本已存在") ||
+            message.contains("脚本不存在") ||
+            message.contains("目标名称已存在")
+        ) "1001" else "1002"
+    }
+
     private fun handleCreateScript(name: String, content: String, result: MethodChannel.Result) {
         try {
-            val file = safeScriptFile(name)
-            if (file.exists()) {
-                result.error("1001", "脚本已存在 $name", null)
-                return
-            }
-            file.writeText(content)
-            result.success(mapOf("name" to name, "path" to file.absolutePath))
+            result.success(scriptFileStore.createScript(name, content))
         } catch (e: Exception) {
-            result.error("1002", "创建脚本失败: ${e.message}", null)
+            result.error(scriptFileErrorCode(e), "创建脚本失败: ${e.message}", null)
         }
     }
 
     private fun handleDeleteScript(name: String, result: MethodChannel.Result) {
         try {
-            val file = safeScriptFile(name)
-            if (!file.exists()) {
-                result.error("1001", "脚本不存在 $name", null)
-                return
-            }
-            file.delete()
+            scriptFileStore.deleteScript(name)
             result.success(true)
         } catch (e: Exception) {
-            result.error("1002", "删除脚本失败: ${e.message}", null)
+            result.error(scriptFileErrorCode(e), "删除脚本失败: ${e.message}", null)
         }
     }
 
     private fun handleRenameScript(oldName: String, newName: String, result: MethodChannel.Result) {
         try {
-            val oldFile = safeScriptFile(oldName)
-            val newFile = safeScriptFile(newName)
-            if (!oldFile.exists()) {
-                result.error("1001", "脚本不存在 $oldName", null)
-                return
-            }
-            if (newFile.exists()) {
-                result.error("1001", "目标名称已存在 $newName", null)
-                return
-            }
-            oldFile.renameTo(newFile)
+            scriptFileStore.renameScript(oldName, newName)
             result.success(true)
         } catch (e: Exception) {
-            result.error("1002", "重命名失败: ${e.message}", null)
+            result.error(scriptFileErrorCode(e), "重命名失败: ${e.message}", null)
         }
     }
 
     private fun handleListScripts(result: MethodChannel.Result) {
         try {
-            val files = scriptsDir().listFiles()?.filter { it.isFile && it.name.endsWith(".py") } ?: emptyList()
-            val scripts = files.map { file ->
-                mapOf(
-                    "name" to file.name,
-                    "path" to file.absolutePath,
-                    "modifiedAt" to file.lastModified(),
-                    "size" to file.length()
-                )
-            }.sortedByDescending { it["modifiedAt"] as Long }
-            result.success(scripts)
+            result.success(scriptFileStore.listScripts())
         } catch (e: Exception) {
             result.error("1002", "列出脚本失败: ${e.message}", null)
         }
@@ -622,21 +592,15 @@ class MainActivity : FlutterActivity() {
 
     private fun handleReadScript(name: String, result: MethodChannel.Result) {
         try {
-            val file = safeScriptFile(name)
-            if (!file.exists()) {
-                result.error("1001", "脚本不存在 $name", null)
-                return
-            }
-            result.success(file.readText())
+            result.success(scriptFileStore.readScript(name))
         } catch (e: Exception) {
-            result.error("1002", "读取脚本失败: ${e.message}", null)
+            result.error(scriptFileErrorCode(e), "读取脚本失败: ${e.message}", null)
         }
     }
 
     private fun handleSaveScript(name: String, content: String, result: MethodChannel.Result) {
         try {
-            val file = safeScriptFile(name)
-            file.writeText(content)
+            scriptFileStore.saveScript(name, content)
             result.success(true)
         } catch (e: Exception) {
             result.error("1002", "保存脚本失败: ${e.message}", null)

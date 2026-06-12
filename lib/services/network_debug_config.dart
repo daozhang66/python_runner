@@ -21,6 +21,7 @@ class NetworkDebugConfig {
   int get proxyPort => _proxyPort;
   bool get hasProxy =>
       _debugModeEnabled && _proxyHost.isNotEmpty && _proxyPort > 0;
+  bool get affectsGlobalHttpClients => allowInsecureCerts || hasProxy;
   String get proxyAddress => '$_proxyHost:$_proxyPort';
 
   /// Load configuration from SharedPreferences.

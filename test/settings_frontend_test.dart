@@ -2,10 +2,17 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String settingsPageSource() => [
+      'lib/pages/settings_page.dart',
+      'lib/pages/settings_actions.dart',
+      'lib/pages/settings_sections.dart',
+      'lib/pages/settings_widgets.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
 void main() {
   test('settings page exposes grouped sections without duplicate runtime card',
       () {
-    final source = File('lib/pages/settings_page.dart').readAsStringSync();
+    final source = settingsPageSource();
 
     expect(source, contains('Widget _buildAppearanceSection('));
     expect(source, contains('Widget _buildRuntimeSection('));

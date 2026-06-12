@@ -1,4 +1,7 @@
 pluginManagement {
+    def androidAgpVersion = providers.gradleProperty("androidAgpVersion").get()
+    def kotlinGradlePluginVersion = providers.gradleProperty("kotlinGradlePluginVersion").get()
+
     def flutterSdkPath = {
         def properties = new Properties()
         file("local.properties").withInputStream { properties.load(it) }
@@ -20,8 +23,13 @@ pluginManagement {
 
     resolutionStrategy {
         eachPlugin {
-            if (requested.id.id == "com.android.application") {
-                useModule("com.android.tools.build:gradle:8.9.3")
+            if (requested.id.id == "com.android.application" ||
+                requested.id.id == "com.android.library") {
+                useModule("com.android.tools.build:gradle:${androidAgpVersion}")
+            }
+            if (requested.id.id == "kotlin-android" ||
+                requested.id.id == "org.jetbrains.kotlin.android") {
+                useModule("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinGradlePluginVersion}")
             }
         }
     }
@@ -29,8 +37,9 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.9.3" apply false
-    id "org.jetbrains.kotlin.android" version "2.1.10" apply false
+    id "com.android.application" version "${androidAgpVersion}" apply false
+    id "com.android.library" version "${androidAgpVersion}" apply false
+    id "org.jetbrains.kotlin.android" version "${kotlinGradlePluginVersion}" apply false
 }
 
 include ":app"

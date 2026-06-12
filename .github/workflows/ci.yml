@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+
+      - run: flutter analyze --fatal-infos
+
+      - run: flutter test
+
+  build-apk:
+    runs-on: ubuntu-latest
+    needs: analyze-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Create CI release signing key
+        run: |
+          keytool -genkeypair \
+            -keystore android/ci-release.jks \
+            -storepass ci-release-pass \
+            -keypass ci-release-pass \
+            -alias ci-release \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=CI,O=Python Runner,C=CN"
+          {
+            echo "PYRUNNER_RELEASE_STORE_FILE=ci-release.jks"
+            echo "PYRUNNER_RELEASE_STORE_PASSWORD=ci-release-pass"
+            echo "PYRUNNER_RELEASE_KEY_ALIAS=ci-release"
+            echo "PYRUNNER_RELEASE_KEY_PASSWORD=ci-release-pass"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Verify release manifest and size budget
+        working-directory: android
+        run: ./gradlew verifyReleaseManifestPolicy reportReleaseApkSize
+
+      - name: Verify release APK signature
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+      - name: Verify proot native libraries are STORED
+        run: |
+          python3 - <<'PY'
+          import sys
+          import zipfile
+
+          apk = "build/app/outputs/flutter-apk/app-release.apk"
+          targets = [
+              "lib/arm64-v8a/libproot.so",
+              "lib/arm64-v8a/liblinuxlike_loader.so",
+              "lib/arm64-v8a/libtalloc2.so",
+          ]
+          with zipfile.ZipFile(apk) as archive:
+              for target in targets:
+                  info = archive.getinfo(target)
+                  if info.compress_type != zipfile.ZIP_STORED:
+                      sys.exit(f"{target} is not STORED in {apk}")
+          print("proot native libraries are STORED")
+          PY
+
+      - name: Upload APK size report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-size-report
+          path: build/app/reports/apk-size/release-size.txt

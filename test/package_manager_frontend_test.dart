@@ -18,7 +18,7 @@ void main() {
     expect(source, contains("hintText: '版本'"));
     expect(source, contains('SizedBox(width: 88'));
     expect(source, contains('AppFilePickerPage.pickFile'));
-    expect(source, contains('FilePicker.platform.pickFiles'));
+    expect(source, contains('FilePicker.pickFiles'));
     expect(source, contains('installRequirementsFromContent'));
     expect(source, contains("exactFileName: 'requirements.txt'"));
     expect(source, contains("'requirements.txt'"));

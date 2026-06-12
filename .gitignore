@@ -59,7 +59,8 @@ pubspec.lock
 # Store assets & local docs
 apptb.png
 play_store_512.png
-docs/
+docs/*
+!docs/security-model.md
 
 # Flutter repo-specific
 /bin/cache/

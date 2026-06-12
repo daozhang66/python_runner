@@ -31,6 +31,7 @@ class DownloadManager(
     private val jobs = ConcurrentHashMap<String, Job>()
     private val tasks = ConcurrentHashMap<String, DownloadTask>()
     private val retryDelaysMs = longArrayOf(2_000L, 4_000L, 8_000L)
+    private val sha256Pattern = Regex("^[a-fA-F0-9]{64}$")
 
     private val updatesDir: File
         get() {
@@ -48,7 +49,8 @@ class DownloadManager(
         version: String,
         sha256: String
     ): String {
-        val task = loadOrCreateTask(url, fileName, version, sha256)
+        val normalizedSha256 = requireSha256(sha256)
+        val task = loadOrCreateTask(url, fileName, version, normalizedSha256)
         launchDownload(task.copy(status = DownloadStatus.PENDING, lastErrorCode = "", lastErrorMessage = ""))
         return task.taskId
     }
@@ -84,7 +86,14 @@ class DownloadManager(
     fun completedFile(taskId: String): File? {
         val task = tasks[taskId] ?: loadTask(taskId) ?: return null
         val file = File(task.finalFilePath)
-        return if (file.exists() && file.length() > 0L) file else null
+        if (!file.exists() || file.length() <= 0L) return null
+        val expectedSha256 = normalizeSha256OrNull(task.sha256) ?: return null
+        val actualSha256 = sha256(file)
+        if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+            file.delete()
+            return null
+        }
+        return file
     }
 
     private fun launchDownload(task: DownloadTask) {
@@ -144,7 +153,8 @@ class DownloadManager(
     }
 
     private suspend fun performDownload(inputTask: DownloadTask) {
-        var task = inputTask.withStatus(DownloadStatus.CHECKING)
+        val expectedSha256 = requireSha256(inputTask.sha256)
+        var task = inputTask.copy(sha256 = expectedSha256).withStatus(DownloadStatus.CHECKING)
         tasks[task.taskId] = task
         writeState(task)
         emit(task)
@@ -270,12 +280,11 @@ class DownloadManager(
             partFile.delete()
         }
 
-        if (task.sha256.isNotBlank()) {
-            val actual = sha256(finalFile)
-            if (!actual.equals(task.sha256, ignoreCase = true)) {
-                finalFile.delete()
-                throw IllegalStateException("SHA256 校验失败")
-            }
+        val expectedSha256 = requireSha256(task.sha256)
+        val actual = sha256(finalFile)
+        if (!actual.equals(expectedSha256, ignoreCase = true)) {
+            finalFile.delete()
+            throw IllegalStateException("SHA256 校验失败")
         }
 
         val completed = task.withStatus(
@@ -298,9 +307,14 @@ class DownloadManager(
         val taskId = taskIdFor(safeFileName, version)
         val stateFile = stateFileFor(taskId)
         val existing = readTask(stateFile)
-        if (existing != null && existing.url == url) {
-            tasks[taskId] = existing
-            return existing
+        if (existing != null &&
+            existing.url == url &&
+            existing.sha256.equals(sha256, ignoreCase = true)
+        ) {
+            val normalizedExisting = existing.copy(sha256 = sha256)
+            tasks[taskId] = normalizedExisting
+            writeState(normalizedExisting)
+            return normalizedExisting
         }
 
         val finalFile = File(updatesDir, safeFileName)
@@ -493,6 +507,16 @@ class DownloadManager(
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun requireSha256(value: String): String {
+        return normalizeSha256OrNull(value)
+            ?: throw IllegalArgumentException("APK download requires a valid SHA-256 checksum")
+    }
+
+    private fun normalizeSha256OrNull(value: String): String? {
+        val normalized = value.trim().lowercase(Locale.US)
+        return normalized.takeIf { sha256Pattern.matches(it) }
     }
 
     private fun taskIdFor(fileName: String, version: String): String {

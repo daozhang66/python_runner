@@ -2,10 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String networkInspectorSource() => [
+      'lib/pages/network_inspector_page.dart',
+      'lib/pages/network_inspector_widgets.dart',
+      'lib/pages/network_inspector_detail.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
 void main() {
   test('network inspector uses dashboard and request badges', () {
-    final source =
-        File('lib/pages/network_inspector_page.dart').readAsStringSync();
+    final source = networkInspectorSource();
 
     expect(source, contains('Widget _buildRequestDashboard('));
     expect(source, contains('Widget _buildMethodBadge('));
@@ -43,8 +48,7 @@ void main() {
   });
 
   test('network inspector exposes non-http network method filters', () {
-    final source =
-        File('lib/pages/network_inspector_page.dart').readAsStringSync();
+    final source = networkInspectorSource();
 
     expect(source, contains("'DNS'"));
     expect(source, contains("'CONNECT'"));

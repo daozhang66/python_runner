@@ -25,12 +25,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('记录响应内容前 2 MB（增加内存占用）'),
+      find.text('文本前 10 MB，图片最大 30 MB（增加内存占用）'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('记录响应内容前 2 MB（增加内存占用）'), findsOneWidget);
+    expect(find.text('文本前 10 MB，图片最大 30 MB（增加内存占用）'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('检查更新'),

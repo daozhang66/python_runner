@@ -1,13 +1,14 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'app_logger.dart';
+import 'native_bridge_contract.dart';
 import '../models/app_file_entry.dart';
 import '../models/script_project_file.dart';
 import 'project_path_validator.dart';
 import 'script_name_validator.dart';
 
 class NativeBridge {
-  static const _methodChannel = MethodChannel('com.daozhang.py/native_bridge');
+  static const _methodChannel = MethodChannel(NativeBridgeContract.channelName);
   static const _logStreamChannel = EventChannel('com.daozhang.py/log_stream');
   static const _installProgressChannel =
       EventChannel('com.daozhang.py/install_progress');
@@ -451,22 +452,31 @@ class NativeBridge {
     return result.toString();
   }
 
-  Future<String> downloadAndInstallApk(String url,
-      {required String fileName}) async {
-    return startApkDownload(url, fileName: fileName);
+  Future<String> downloadAndInstallApk(
+    String url, {
+    required String fileName,
+    required String sha256,
+    String version = '',
+  }) async {
+    return startApkDownload(
+      url,
+      fileName: fileName,
+      version: version,
+      sha256: sha256,
+    );
   }
 
   Future<String> startApkDownload(
     String url, {
     required String fileName,
     String version = '',
-    String? sha256,
+    required String sha256,
   }) async {
     final result = await _invoke('startApkDownload', {
       'url': url,
       'fileName': fileName,
       'version': version,
-      'sha256': sha256 ?? '',
+      'sha256': sha256,
     });
     return result?.toString() ?? '';
   }
@@ -500,7 +510,18 @@ class NativeBridge {
 
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
     try {
+      NativeBridgeContract.validate(method, arguments);
       return await _methodChannel.invokeMethod(method, arguments);
+    } on NativeBridgeContractException catch (e) {
+      AppLogger.instance.error(
+        'NativeBridge参数校验失败: $method',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      throw NativeBridgeException(
+        code: NativeBridgeContract.contractErrorCode,
+        message: e.message,
+      );
     } on PlatformException catch (e) {
       AppLogger.instance.error(
         'NativeBridge调用失败: $method',

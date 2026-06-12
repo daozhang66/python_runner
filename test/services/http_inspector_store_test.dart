@@ -164,5 +164,48 @@ void main() {
         }
       }
     });
+
+    test('flush throws in tests when persistence fails', () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_store_error_');
+      try {
+        final blocker = File('${tempDir.path}${Platform.pathSeparator}blocker');
+        await blocker.writeAsString('not a directory');
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => Directory(blocker.path),
+          persistDebounce: const Duration(milliseconds: 5),
+        );
+        await store.ensureLoaded();
+
+        store.addFromJson({
+          'id': 'req-fail',
+          'timestamp': 1710000000000,
+          'method': 'get',
+          'url': 'https://example.com/fail',
+          'request_headers': const {},
+          'status_code': 200,
+        });
+
+        await expectLater(store.flush(), throwsA(isA<FileSystemException>()));
+        expect(store.lastStorageError, isA<FileSystemException>());
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
+
+    test('app provides store and network inspector reads injection point', () {
+      final mainSource = File('lib/main.dart').readAsStringSync();
+      final pageSource =
+          File('lib/pages/network_inspector_page.dart').readAsStringSync();
+
+      expect(
+        mainSource,
+        contains('ChangeNotifierProvider.value(value: httpInspectorStore)'),
+      );
+      expect(pageSource, contains('context.read<HttpInspectorStore?>()'));
+      expect(pageSource, contains('nextStore'));
+    });
   });
 }

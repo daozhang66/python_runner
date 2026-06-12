@@ -323,11 +323,15 @@ void main() {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
+    final scriptStore = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptFileStore.kt',
+    ).readAsStringSync();
 
     expect(activity, contains('private fun normalizeScriptName('));
     expect(activity, contains('private fun safeScriptFile('));
-    expect(activity, contains('canonicalFile'));
-    expect(activity, contains('startsWith(scriptsRoot.toPath())'));
+    expect(activity, contains('scriptFileStore.safeScriptFile(name)'));
+    expect(scriptStore, contains('canonicalFile'));
+    expect(scriptStore, contains('startsWith(scriptsRoot.toPath())'));
     expect(activity, isNot(contains('File(scriptsDir(), name)')));
     expect(activity, isNot(contains('File(scriptsDir(), oldName)')));
     expect(activity, isNot(contains('File(scriptsDir(), newName)')));

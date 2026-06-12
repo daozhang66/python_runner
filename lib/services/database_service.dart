@@ -1,11 +1,25 @@
-import 'package:sqflite/sqflite.dart';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/script_file.dart';
 import '../models/script_group.dart';
 
 class DatabaseService {
-  static Database? _db;
-  static Future<Database>? _dbFuture;
+  DatabaseService({String? databasePath}) : _databasePath = databasePath;
+
+  @visibleForTesting
+  DatabaseService.test({required String databasePath})
+      : _databasePath = databasePath;
+
+  static const int schemaVersion = 5;
+  static const String databaseFileName = 'python_runner.db';
+
+  Database? _db;
+  Future<Database>? _dbFuture;
+
+  final String? _databasePath;
 
   Future<Database> get database {
     if (_db != null) return Future.value(_db!);
@@ -17,17 +31,132 @@ class DatabaseService {
   }
 
   Future<Database> _initDb() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'python_runner.db');
-    return openDatabase(
-      path,
-      version: 5,
-      onCreate: (db, version) async => _createTables(db),
-      onUpgrade: _onUpgrade,
+    final path =
+        _databasePath ?? join(await getDatabasesPath(), databaseFileName);
+    await _guardUnsupportedSchema(path);
+    try {
+      return await openDatabase(
+        path,
+        version: schemaVersion,
+        onCreate: (db, version) async => _createTables(db),
+        onUpgrade: _onUpgrade,
+        onDowngrade: _onDowngrade,
+      );
+    } catch (error) {
+      final backupPath = await _backupDatabase(path, reason: 'open_failed');
+      throw DatabaseOpenException(
+        '无法打开数据库，已保留原数据库${backupPath == null ? '' : '并备份到 $backupPath'}。',
+        cause: error,
+        backupPath: backupPath,
+      );
+    }
+  }
+
+  Future<void> _guardUnsupportedSchema(String path) async {
+    if (!await databaseExists(path)) return;
+    Database? db;
+    try {
+      db = await openDatabase(path, readOnly: true, singleInstance: false);
+      final version = await db.getVersion();
+      if (version > schemaVersion) {
+        final backupPath =
+            await _backupDatabase(path, reason: 'future_v$version');
+        throw UnsupportedDatabaseVersionException(
+          currentVersion: schemaVersion,
+          foundVersion: version,
+          backupPath: backupPath,
+        );
+      }
+    } finally {
+      await db?.close();
+    }
+  }
+
+  Future<String?> _backupDatabase(String path, {required String reason}) async {
+    final source = File(path);
+    if (!await source.exists()) return null;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final backupPath = '$path.backup.$reason.$timestamp';
+    await source.copy(backupPath);
+    return backupPath;
+  }
+
+  Future<void> _onDowngrade(Database db, int oldVersion, int newVersion) async {
+    throw UnsupportedDatabaseVersionException(
+      currentVersion: newVersion,
+      foundVersion: oldVersion,
+      backupPath: null,
     );
   }
 
-  Future<void> _createTables(Database db) async {
+  @visibleForTesting
+  Future<Database> openForTest() => _initDb();
+
+  @visibleForTesting
+  Future<void> closeForTest() async {
+    await _db?.close();
+    _db = null;
+    _dbFuture = null;
+  }
+
+  @visibleForTesting
+  static Future<void> createSchemaForTest(
+    Database db,
+    int version,
+  ) async {
+    if (version < 1 || version > schemaVersion) {
+      throw ArgumentError.value(
+        version,
+        'version',
+        'Unsupported schema version',
+      );
+    }
+    await db.execute('''
+      CREATE TABLE scripts (
+        name TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        modifiedAt INTEGER NOT NULL,
+        runCount INTEGER DEFAULT 0${version >= 2 ? ',\n        isPinned INTEGER DEFAULT 0' : ''}${version >= 3 ? ',\n        sortOrder INTEGER DEFAULT 0' : ''}${version >= 4 ? ',\n        groupId INTEGER' : ''}
+      )
+    ''');
+    if (version >= 4) {
+      await db.execute('''
+        CREATE TABLE script_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          sortOrder INTEGER DEFAULT 0,
+          createdAt INTEGER NOT NULL,
+          modifiedAt INTEGER NOT NULL${version >= 5 ? ',\n          projectKey TEXT,\n          mainFilePath TEXT,\n          isProject INTEGER DEFAULT 0' : ''}
+        )
+      ''');
+    }
+    if (version >= 5) {
+      await db.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_script_groups_project_key
+        ON script_groups(projectKey)
+        WHERE projectKey IS NOT NULL
+      ''');
+    }
+    await db.setVersion(version);
+  }
+
+  @visibleForTesting
+  static Future<void> createFutureSchemaForTest(
+    String path,
+    int version,
+  ) async {
+    final db = await openDatabase(
+      path,
+      version: version,
+      onCreate: (db, version) async => db.setVersion(version),
+      singleInstance: false,
+    );
+    await db.setVersion(version);
+    await db.close();
+  }
+
+  static Future<void> _createTables(Database db) async {
     await db.execute('''
       CREATE TABLE scripts (
         name TEXT PRIMARY KEY,
@@ -55,7 +184,11 @@ class DatabaseService {
     await _createProjectGroupIndexes(db);
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
       await db
           .execute('ALTER TABLE scripts ADD COLUMN isPinned INTEGER DEFAULT 0');
@@ -87,7 +220,7 @@ class DatabaseService {
     }
   }
 
-  Future<void> _createProjectGroupIndexes(Database db) async {
+  static Future<void> _createProjectGroupIndexes(Database db) async {
     await db.execute('''
       CREATE UNIQUE INDEX IF NOT EXISTS idx_script_groups_project_key
       ON script_groups(projectKey)
@@ -95,7 +228,7 @@ class DatabaseService {
     ''');
   }
 
-  Future<void> _migrateSortOrder(Database db) async {
+  static Future<void> _migrateSortOrder(Database db) async {
     final maps =
         await db.query('scripts', orderBy: 'isPinned DESC, modifiedAt DESC');
     final batch = db.batch();
@@ -261,4 +394,35 @@ class DatabaseService {
     }
     await batch.commit();
   }
+}
+
+class DatabaseOpenException implements Exception {
+  DatabaseOpenException(
+    this.message, {
+    this.cause,
+    this.backupPath,
+  });
+
+  final String message;
+  final Object? cause;
+  final String? backupPath;
+
+  @override
+  String toString() => 'DatabaseOpenException: $message';
+}
+
+class UnsupportedDatabaseVersionException implements Exception {
+  UnsupportedDatabaseVersionException({
+    required this.currentVersion,
+    required this.foundVersion,
+    this.backupPath,
+  });
+
+  final int currentVersion;
+  final int foundVersion;
+  final String? backupPath;
+
+  @override
+  String toString() =>
+      'UnsupportedDatabaseVersionException: database schema $foundVersion is newer than supported schema $currentVersion';
 }

@@ -2,6 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String scriptListSource() => [
+      'lib/pages/script_list_page.dart',
+      'lib/pages/script_list_actions.dart',
+      'lib/pages/script_list_content.dart',
+      'lib/pages/script_list_widgets.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
 void main() {
   test('script groups have persisted model and database support', () {
     final groupModel = File('lib/models/script_group.dart');
@@ -21,7 +28,7 @@ void main() {
     expect(groupModelSource, contains('final int sortOrder;'));
     expect(scriptModelSource, contains('final int? groupId;'));
     expect(scriptModelSource, contains("'groupId': groupId"));
-    expect(dbSource, contains('version: 5'));
+    expect(dbSource, contains('schemaVersion = 5'));
     expect(dbSource, contains('CREATE TABLE script_groups'));
     expect(dbSource, contains('projectKey TEXT'));
     expect(dbSource, contains('mainFilePath TEXT'));
@@ -41,7 +48,7 @@ void main() {
   test(
       'script homepage shows folders and ungrouped scripts instead of an ungrouped folder',
       () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
 
     expect(source, contains("case 'add_group':"));
     expect(source, contains("const Text('添加分组')"));
@@ -59,7 +66,7 @@ void main() {
   test(
       'group detail hides menu and homepage ungrouped scripts stay reorderable',
       () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
     final mainSource = File('lib/main.dart').readAsStringSync();
 
     expect(source, contains('actions: _activeGroupId == null'));
@@ -94,7 +101,7 @@ void main() {
   });
 
   test('move-to-group sheet is scrollable when there are many groups', () {
-    final source = File('lib/pages/script_list_page.dart').readAsStringSync();
+    final source = scriptListSource();
 
     expect(source, contains('isScrollControlled: true'));
     expect(source, contains('DraggableScrollableSheet('));
