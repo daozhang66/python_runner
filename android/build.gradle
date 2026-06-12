@@ -3,11 +3,11 @@ buildscript {
     def kotlinGradlePluginVersion = providers.gradleProperty("kotlinGradlePluginVersion").get()
 
     repositories {
+        google()
+        mavenCentral()
         maven { url "https://maven.aliyun.com/repository/google" }
         maven { url "https://maven.aliyun.com/repository/central" }
         maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
-        google()
-        mavenCentral()
     }
     dependencies {
         classpath "com.android.tools.build:gradle:${androidAgpVersion}"
@@ -18,10 +18,10 @@ buildscript {
 
 allprojects {
     repositories {
-        maven { url "https://maven.aliyun.com/repository/google" }
-        maven { url "https://maven.aliyun.com/repository/central" }
         google()
         mavenCentral()
+        maven { url "https://maven.aliyun.com/repository/google" }
+        maven { url "https://maven.aliyun.com/repository/central" }
     }
 }
 
@@ -31,11 +31,11 @@ subprojects {
 
     buildscript {
         repositories {
+            google()
+            mavenCentral()
             maven { url "https://maven.aliyun.com/repository/google" }
             maven { url "https://maven.aliyun.com/repository/central" }
             maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
-            google()
-            mavenCentral()
         }
         configurations.matching { it.name == "classpath" }.configureEach {
             resolutionStrategy.eachDependency { details ->

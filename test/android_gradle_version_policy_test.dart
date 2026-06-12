@@ -25,5 +25,11 @@ void main() {
 
     expect(androidGradleFiles, isNot(contains('8.9.3')));
     expect(androidGradleFiles, isNot(contains('2.1.10')));
+
+    final firstOfficialRepo = androidGradleFiles.indexOf('google()');
+    final firstMirrorRepo = androidGradleFiles.indexOf('maven.aliyun.com');
+    expect(firstOfficialRepo, isNonNegative);
+    expect(firstMirrorRepo, isNonNegative);
+    expect(firstOfficialRepo, lessThan(firstMirrorRepo));
   });
 }
