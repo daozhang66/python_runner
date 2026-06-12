@@ -33,6 +33,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable

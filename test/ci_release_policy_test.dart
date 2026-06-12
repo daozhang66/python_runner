@@ -7,6 +7,8 @@ void main() {
     final ci = File('.github/workflows/ci.yml').readAsStringSync();
 
     expect(ci, contains('flutter build apk --debug'));
+    expect(ci, contains('actions/setup-python@v5'));
+    expect(ci, contains("python-version: '3.11'"));
     expect(ci, contains('flutter build apk --release'));
     expect(ci, contains('verifyReleaseManifestPolicy'));
     expect(ci, contains('reportReleaseApkSize'));
