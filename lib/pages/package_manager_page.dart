@@ -184,17 +184,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
           _buildInstallPanel(provider),
           if (provider.loadingPackages)
             const LinearProgressIndicator(minHeight: 2),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: AppSearchBar(
-              controller: _searchController,
-              hintText: '搜索已安装的库...',
-              onChanged: (v) =>
-                  setState(() => _searchQuery = v.trim().toLowerCase()),
-              onClear: () => _searchController.clear(),
-            ),
-          ),
-          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -208,13 +197,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                       fontSize: 13, fontWeight: FontWeight.w600),
                   unselectedLabelStyle: const TextStyle(fontSize: 13),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
-                onPressed: provider.loadingPackages
-                    ? null
-                    : () => provider.loadPackages(forceRefresh: true),
-                visualDensity: VisualDensity.compact,
               ),
             ],
           ),
@@ -238,69 +220,108 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     final result = _getInstallResult(provider.installLog);
     final colors = Theme.of(context).colorScheme;
 
-    return AppSectionCard(
-      icon: Icons.add_box_outlined,
-      title: '安装库',
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-          child: _buildCompactInstallFields(provider),
-        ),
-        if (provider.installing)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: LinearProgressIndicator(minHeight: 3),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppThemeColors.cardSurface(colors),
+        border: Border(
+          bottom: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.45),
           ),
-        if (provider.installLog.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (!provider.installing && result != null)
-                      AppStatusBadge(
-                        label: result == _InstallResult.success ? '成功' : '失败',
-                        tone: result == _InstallResult.success
-                            ? AppBadgeTone.success
-                            : AppBadgeTone.error,
-                      )
-                    else
-                      const AppStatusBadge(
-                        label: '安装中',
-                        tone: AppBadgeTone.info,
-                      ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 16),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () =>
-                          _copyInstallLog(context, provider.installLog),
-                      tooltip: '复制日志',
-                    ),
-                  ],
-                ),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 72),
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppThemeColors.softSurface(colors),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(
-                    provider.installLog.reversed.take(3).join('\n'),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 10.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-              ],
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildCompactInstallFields(provider),
+          if (provider.installing)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (provider.installLog.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _buildCompactInstallLog(provider, result),
+            ),
+          const SizedBox(height: 6),
+          _buildSearchAndRefreshRow(provider),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactInstallLog(
+    PackageProvider provider,
+    _InstallResult? result,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final statusBadge = !provider.installing && result != null
+        ? AppStatusBadge(
+            label: result == _InstallResult.success ? '成功' : '失败',
+            tone: result == _InstallResult.success
+                ? AppBadgeTone.success
+                : AppBadgeTone.error,
+          )
+        : const AppStatusBadge(label: '安装中', tone: AppBadgeTone.info);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 36),
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: AppThemeColors.softSurface(colors),
+        borderRadius: BorderRadius.circular(8),
+        border:
+            Border.all(color: colors.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          statusBadge,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              provider.installLog.last,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _copyInstallLog(context, provider.installLog),
+            tooltip: '复制日志',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndRefreshRow(PackageProvider provider) {
+    return Row(
+      children: [
+        Expanded(
+          child: AppSearchBar(
+            controller: _searchController,
+            hintText: '搜索已安装的库...',
+            onChanged: (v) =>
+                setState(() => _searchQuery = v.trim().toLowerCase()),
+            onClear: () => _searchController.clear(),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: IconButton(
+            icon: const Icon(Icons.refresh, size: 20),
+            onPressed: provider.loadingPackages
+                ? null
+                : () => provider.loadPackages(forceRefresh: true),
+            visualDensity: VisualDensity.compact,
+            tooltip: '刷新',
+          ),
+        ),
       ],
     );
   }
@@ -311,25 +332,36 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         : 'requirements.txt 仅支持 Linux-like';
     return Row(
       children: [
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(Icons.add_box_outlined,
+              size: 22, color: Theme.of(context).colorScheme.primary),
+        ),
+        const SizedBox(width: 8),
         Expanded(
-          child: TextField(
-            controller: _packageController,
-            enableSuggestions: false,
-            autocorrect: false,
-            decoration: const InputDecoration(
-              hintText: '包名',
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _packageController,
+              enableSuggestions: false,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                hintText: '包名',
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              onSubmitted: (_) => _install(),
             ),
-            onSubmitted: (_) => _install(),
           ),
         ),
         const SizedBox(width: 8),
-        SizedBox(width: 88, child: _buildVersionField()),
+        SizedBox(width: 82, height: 38, child: _buildVersionField()),
         const SizedBox(width: 8),
         SizedBox(
-          width: 40,
-          height: 40,
+          width: 38,
+          height: 38,
           child: Tooltip(
             message: requirementsTooltip,
             child: IconButton(
@@ -344,8 +376,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         ),
         const SizedBox(width: 8),
         SizedBox(
-          width: 76,
-          height: 40,
+          width: 72,
+          height: 38,
           child: FilledButton(
             onPressed: provider.installing ? null : _install,
             style: FilledButton.styleFrom(
@@ -367,7 +399,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       decoration: const InputDecoration(
         hintText: '版本',
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       onSubmitted: (_) => _install(),
     );

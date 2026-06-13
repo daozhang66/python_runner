@@ -136,6 +136,13 @@ extension _ScriptListActions on _ScriptListPageState {
   }
 
   bool _handleBackNavigation() {
+    if (_groupSelectMode) {
+      setState(() {
+        _groupSelectMode = false;
+        _selectedGroupIds.clear();
+      });
+      return true;
+    }
     if (_multiSelectMode) {
       setState(() {
         _multiSelectMode = false;
@@ -191,7 +198,34 @@ extension _ScriptListActions on _ScriptListPageState {
   void _enterMultiSelect() {
     setState(() {
       _multiSelectMode = true;
+      _groupSelectMode = false;
       _selectedScripts.clear();
+      _selectedGroupIds.clear();
+    });
+  }
+
+  void _enterGroupSelect({ScriptGroup? initialGroup}) {
+    final id = initialGroup?.id;
+    setState(() {
+      _groupSelectMode = true;
+      _multiSelectMode = false;
+      _searchMode = false;
+      _searchQuery = '';
+      _selectedScripts.clear();
+      _selectedGroupIds.clear();
+      if (id != null) _selectedGroupIds.add(id);
+    });
+  }
+
+  void _toggleGroupSelection(ScriptGroup group) {
+    final id = group.id;
+    if (id == null) return;
+    setState(() {
+      if (_selectedGroupIds.contains(id)) {
+        _selectedGroupIds.remove(id);
+      } else {
+        _selectedGroupIds.add(id);
+      }
     });
   }
 
@@ -220,6 +254,8 @@ extension _ScriptListActions on _ScriptListPageState {
       _searchQuery = '';
       _selectedScripts.clear();
       _multiSelectMode = false;
+      _selectedGroupIds.clear();
+      _groupSelectMode = false;
     });
   }
 
@@ -231,6 +267,8 @@ extension _ScriptListActions on _ScriptListPageState {
       _searchQuery = '';
       _selectedScripts.clear();
       _multiSelectMode = false;
+      _selectedGroupIds.clear();
+      _groupSelectMode = false;
     });
   }
 
@@ -256,6 +294,9 @@ extension _ScriptListActions on _ScriptListPageState {
         break;
       case 'select':
         _enterMultiSelect();
+        break;
+      case 'select_groups':
+        _enterGroupSelect();
         break;
     }
   }
@@ -732,6 +773,54 @@ extension _ScriptListActions on _ScriptListPageState {
     }
   }
 
+  Future<void> _deleteSelectedGroups() async {
+    final ids = _selectedGroupIds.toList();
+    if (ids.isEmpty) return;
+    final provider = context.read<ScriptProvider>();
+    final groups = provider.groups.where((group) {
+      final id = group.id;
+      return id != null && ids.contains(id);
+    }).toList();
+    if (groups.isEmpty) return;
+
+    final projectCount = groups.where((group) => group.isProject).length;
+    final regularCount = groups.length - projectCount;
+    final content = projectCount > 0
+        ? '确定要删除选中的 $regularCount 个分组和 $projectCount 个项目吗？项目文件会一并删除，普通分组内脚本会回到首页。'
+        : '确定要删除选中的 $regularCount 个分组吗？分组内脚本会回到首页。';
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: '批量删除分组',
+      content: content,
+      confirmText: '删除 ${groups.length} 个',
+      confirmColor: Theme.of(context).colorScheme.error,
+    );
+    if (!confirmed || !mounted) return;
+
+    var ok = 0;
+    for (final group in groups) {
+      final id = group.id;
+      if (id == null) continue;
+      final success = await provider.deleteGroup(id);
+      if (success) ok++;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已删除 $ok 个分组'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    setState(() {
+      if (_activeGroupId != null && ids.contains(_activeGroupId)) {
+        _activeGroupId = null;
+        _activeGroupName = null;
+      }
+      _groupSelectMode = false;
+      _selectedGroupIds.clear();
+    });
+  }
+
   Future<void> _moveScriptsToGroup(
       Set<String> names, int? groupId, String targetLabel) async {
     if (names.isEmpty) return;
@@ -991,6 +1080,14 @@ extension _ScriptListActions on _ScriptListPageState {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(Icons.library_add_check_outlined),
+              title: const Text('多选管理'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _enterGroupSelect(initialGroup: group);
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
               title: Text(group.isProject ? '重命名项目' : '重命名分组'),

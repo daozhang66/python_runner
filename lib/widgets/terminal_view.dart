@@ -6,6 +6,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/log_entry.dart';
 import '../utils/ansi_parser.dart';
 
+enum TerminalColorMode { dark, light, system, monochrome }
+
+extension on TerminalColorMode {
+  String get label {
+    switch (this) {
+      case TerminalColorMode.dark:
+        return '深色终端';
+      case TerminalColorMode.light:
+        return '浅色终端';
+      case TerminalColorMode.system:
+        return '跟随系统';
+      case TerminalColorMode.monochrome:
+        return '黑白输出';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case TerminalColorMode.dark:
+        return Icons.dark_mode_outlined;
+      case TerminalColorMode.light:
+        return Icons.light_mode_outlined;
+      case TerminalColorMode.system:
+        return Icons.contrast_outlined;
+      case TerminalColorMode.monochrome:
+        return Icons.format_color_reset_outlined;
+    }
+  }
+}
+
 /// Unified terminal widget. Log lines stay virtualized for large output, while
 /// SelectionArea owns text selection so dragging can cross visible lines.
 /// Toolbar provides copy-all; scrolling works on the whole output area.
@@ -48,6 +78,7 @@ class TerminalViewState extends State<TerminalView> {
   bool _searchVisible = false;
   String _searchQuery = '';
   bool _filterErrors = false;
+  TerminalColorMode _colorMode = TerminalColorMode.dark;
   final _searchController = TextEditingController();
   final Map<int, Offset> _scalePointers = {};
   double? _pointerScaleStartDistance;
@@ -55,6 +86,7 @@ class TerminalViewState extends State<TerminalView> {
   static const double _fontSizeMin = 6.0;
   static const double _fontSizeMax = 32.0;
   static const String _fontSizePrefsKey = 'terminal_font_size';
+  static const String _colorModePrefsKey = 'terminal_color_mode';
   static const int _maxAnsiCacheEntries = 6000;
 
   final LinkedHashMap<String, List<TextSpan>> _ansiCache =
@@ -66,6 +98,7 @@ class TerminalViewState extends State<TerminalView> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadFontSize();
+    _loadColorMode();
   }
 
   Future<void> _loadFontSize() async {
@@ -80,6 +113,32 @@ class TerminalViewState extends State<TerminalView> {
   Future<void> _persistFontSize() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizePrefsKey, _fontSize);
+  }
+
+  Future<void> _loadColorMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_colorModePrefsKey);
+    if (!mounted) return;
+    if (saved == null) {
+      await prefs.setString(_colorModePrefsKey, TerminalColorMode.dark.name);
+      return;
+    }
+    final mode = TerminalColorMode.values.cast<TerminalColorMode?>().firstWhere(
+          (item) => item?.name == saved,
+          orElse: () => null,
+        );
+    if (mode == null) return;
+    setState(() => _colorMode = mode);
+  }
+
+  Future<void> _setColorMode(TerminalColorMode mode) async {
+    if (_colorMode == mode) return;
+    setState(() {
+      _colorMode = mode;
+      _ansiCache.clear();
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_colorModePrefsKey, mode.name);
   }
 
   double? _currentPointerDistance() {
@@ -204,20 +263,47 @@ class TerminalViewState extends State<TerminalView> {
       case LogType.info:
         return colors.primary;
       case LogType.stdout:
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final isDark = _terminalBrightness() == Brightness.dark;
         return isDark ? const Color(0xFFE6EDF3) : colors.onSurface;
     }
   }
 
+  Brightness _terminalBrightness() {
+    switch (_colorMode) {
+      case TerminalColorMode.dark:
+      case TerminalColorMode.monochrome:
+        return Brightness.dark;
+      case TerminalColorMode.light:
+        return Brightness.light;
+      case TerminalColorMode.system:
+        return Theme.of(context).brightness;
+    }
+  }
+
+  AnsiPalette _ansiPalette() {
+    if (_colorMode == TerminalColorMode.monochrome) {
+      return AnsiPalette.monochrome;
+    }
+    return _terminalBrightness() == Brightness.dark
+        ? AnsiPalette.dark
+        : AnsiPalette.light;
+  }
+
   List<TextSpan> _getSpans(LogEntry log, Color defaultColor) {
-    final key = '${log.type.name}|${defaultColor.toARGB32()}|${log.content}';
+    final palette = _ansiPalette();
+    final key =
+        '${log.type.name}|${defaultColor.toARGB32()}|${palette.name}|${log.content}';
     final cached = _ansiCache.remove(key);
     if (cached != null) {
       _ansiCache[key] = cached;
       return cached;
     }
 
-    final parsed = AnsiParser.parse(log.content, defaultColor: defaultColor);
+    final parsed = AnsiParser.parse(
+      log.content,
+      defaultColor: defaultColor,
+      palette: palette,
+    );
     _ansiCache[key] = parsed;
     if (_ansiCache.length > _maxAnsiCacheEntries) {
       _ansiCache.remove(_ansiCache.keys.first);
@@ -269,6 +355,7 @@ class TerminalViewState extends State<TerminalView> {
           fontSize: _fontSize,
           height: 1.5,
           color: span.style?.color ?? color,
+          backgroundColor: span.style?.backgroundColor,
           fontWeight: span.style?.fontWeight,
         ),
       ));
@@ -295,14 +382,25 @@ class TerminalViewState extends State<TerminalView> {
     Color barColor,
     List<LogEntry> logs,
   ) {
+    final isDark = _terminalBrightness() == Brightness.dark;
+    final toolbarText = isDark ? const Color(0xFFC9D1D9) : colors.onSurface;
+    final toolbarMuted =
+        isDark ? const Color(0xFF8B949E) : colors.onSurfaceVariant;
+    final toolbarActive = isDark ? const Color(0xFF79C0FF) : colors.primary;
+    final toolbarError = isDark ? const Color(0xFFF85149) : colors.error;
+    final toolbarBorder = isDark
+        ? const Color(0xFF30363D)
+        : colors.outlineVariant.withValues(alpha: 0.3);
+    final copyButtonBg = isDark
+        ? const Color(0xFF21262D)
+        : colors.primaryContainer.withValues(alpha: 0.4);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
         color: barColor,
         border: Border(
-          bottom: BorderSide(
-            color: colors.outlineVariant.withValues(alpha: 0.3),
-          ),
+          bottom: BorderSide(color: toolbarBorder),
         ),
       ),
       child: Row(
@@ -311,9 +409,7 @@ class TerminalViewState extends State<TerminalView> {
             IconButton(
               icon: Icon(Icons.format_list_numbered,
                   size: 18,
-                  color: _showLineNumbers
-                      ? colors.primary
-                      : colors.onSurfaceVariant),
+                  color: _showLineNumbers ? toolbarActive : toolbarMuted),
               visualDensity: VisualDensity.compact,
               onPressed: () =>
                   setState(() => _showLineNumbers = !_showLineNumbers),
@@ -323,8 +419,8 @@ class TerminalViewState extends State<TerminalView> {
             icon: Icon(Icons.search,
                 size: 18,
                 color: _searchVisible || _filterErrors
-                    ? colors.primary
-                    : colors.onSurfaceVariant),
+                    ? toolbarActive
+                    : toolbarMuted),
             visualDensity: VisualDensity.compact,
             onPressed: () => setState(() {
               _searchVisible = !_searchVisible;
@@ -337,11 +433,34 @@ class TerminalViewState extends State<TerminalView> {
           ),
           if (_filterErrors)
             IconButton(
-              icon: Icon(Icons.error_outline, size: 18, color: colors.error),
+              icon: Icon(Icons.error_outline, size: 18, color: toolbarError),
               visualDensity: VisualDensity.compact,
               onPressed: () => setState(() => _filterErrors = false),
               tooltip: '显示全部',
             ),
+          PopupMenuButton<TerminalColorMode>(
+            tooltip: '终端主题',
+            icon: Icon(_colorMode.icon, size: 18, color: toolbarMuted),
+            onSelected: _setColorMode,
+            itemBuilder: (context) => TerminalColorMode.values
+                .map(
+                  (mode) => PopupMenuItem<TerminalColorMode>(
+                    value: mode,
+                    child: Row(
+                      children: [
+                        Icon(mode.icon,
+                            size: 18,
+                            color: mode == _colorMode
+                                ? colors.primary
+                                : colors.onSurfaceVariant),
+                        const SizedBox(width: 12),
+                        Text(mode.label),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
           const Spacer(),
           if (logs.isNotEmpty)
             TextButton.icon(
@@ -349,13 +468,16 @@ class TerminalViewState extends State<TerminalView> {
               icon: const Icon(Icons.copy, size: 16),
               label: const Text('全部复制', style: TextStyle(fontSize: 12)),
               style: TextButton.styleFrom(
+                foregroundColor: toolbarText,
+                iconColor: toolbarActive,
+                backgroundColor: copyButtonBg,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
             ),
           if (widget.onClear != null && logs.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
+              icon: Icon(Icons.delete_outline, size: 18, color: toolbarMuted),
               visualDensity: VisualDensity.compact,
               onPressed: widget.onClear,
               tooltip: '清空',
@@ -366,23 +488,20 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   Widget _buildStdinPrompt(ColorScheme colors) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: widget.waitingForInput
-            ? colors.primary.withValues(alpha: 0.15)
-            : colors.onSurface.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(4),
-      ),
+    final isDark = _terminalBrightness() == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 8),
       child: Text(
         '>',
+        textAlign: TextAlign.center,
         style: TextStyle(
           fontFamily: 'monospace',
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          height: 1,
+          fontWeight: FontWeight.w700,
           color: widget.waitingForInput
               ? colors.primary
-              : colors.onSurface.withValues(alpha: 0.2),
+              : (isDark ? const Color(0xFF8B949E) : colors.onSurfaceVariant),
         ),
       ),
     );
@@ -393,14 +512,28 @@ class TerminalViewState extends State<TerminalView> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = _terminalBrightness() == Brightness.dark;
     final logs = widget.logs;
     final displayLogs = _filteredLogs();
     final bgColor = isDark ? const Color(0xFF0D1117) : const Color(0xFFFAFAFA);
     final inputBarColor =
         isDark ? const Color(0xFF161B22) : const Color(0xFFF0F0F0);
+    final inputFillColor =
+        isDark ? const Color(0xFF0D1117) : const Color(0xFFFFFFFF);
+    final inputTextColor = isDark ? const Color(0xFFE6EDF3) : colors.onSurface;
+    final inputHintColor = isDark
+        ? const Color(0xFF8B949E)
+        : colors.onSurfaceVariant.withValues(alpha: 0.55);
+    final inputBorderColor = widget.waitingForInput
+        ? colors.primary.withValues(alpha: 0.72)
+        : colors.outlineVariant.withValues(alpha: isDark ? 0.35 : 0.55);
     final barColor =
         isDark ? const Color(0xFF161B22) : colors.surfaceContainerHighest;
+    final toolbarTextColor =
+        isDark ? const Color(0xFFC9D1D9) : colors.onSurface;
+    final toolbarHintColor =
+        isDark ? const Color(0xFF8B949E) : colors.onSurfaceVariant;
+    final toolbarErrorColor = isDark ? const Color(0xFFF85149) : colors.error;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -425,13 +558,16 @@ class TerminalViewState extends State<TerminalView> {
                       autofocus: true,
                       enableSuggestions: false,
                       autocorrect: false,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
+                      style: TextStyle(fontSize: 13, color: toolbarTextColor),
+                      cursorColor:
+                          isDark ? const Color(0xFF79C0FF) : colors.primary,
+                      decoration: InputDecoration(
                         hintText: '搜索日志...',
+                        hintStyle: TextStyle(color: toolbarHintColor),
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
                       ),
                       onChanged: (v) => setState(() => _searchQuery = v),
                     ),
@@ -440,15 +576,15 @@ class TerminalViewState extends State<TerminalView> {
                     icon: Icon(Icons.error_outline,
                         size: 18,
                         color: _filterErrors
-                            ? colors.error
-                            : colors.onSurfaceVariant),
+                            ? toolbarErrorColor
+                            : toolbarHintColor),
                     visualDensity: VisualDensity.compact,
                     onPressed: () =>
                         setState(() => _filterErrors = !_filterErrors),
                     tooltip: _filterErrors ? '显示全部' : '仅看错误',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: Icon(Icons.close, size: 18, color: toolbarHintColor),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => setState(() {
                       _searchVisible = false;
@@ -554,57 +690,67 @@ class TerminalViewState extends State<TerminalView> {
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-                  child: Row(
-                    children: [
-                      _buildStdinPrompt(colors),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _stdinController,
-                          focusNode: _stdinFocusNode,
-                          enabled: widget.waitingForInput,
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            color: isDark ? Colors.white : colors.onSurface,
-                          ),
-                          cursorColor: colors.primary,
-                          decoration: InputDecoration(
-                            hintText: widget.waitingForInput
-                                ? '输入内容...'
-                                : '等待脚本请求输入...',
-                            hintStyle: TextStyle(
-                              color: isDark
-                                  ? Colors.white30
-                                  : colors.onSurfaceVariant
-                                      .withValues(alpha: 0.4),
-                              fontSize: 13,
+                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    decoration: BoxDecoration(
+                      color: inputFillColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: inputBorderColor, width: 1.1),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildStdinPrompt(colors),
+                        Expanded(
+                          child: TextField(
+                            controller: _stdinController,
+                            focusNode: _stdinFocusNode,
+                            enabled: widget.waitingForInput,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                              color: inputTextColor,
                             ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 8),
-                          ),
-                          onSubmitted: widget.waitingForInput
-                              ? (_) => _submitStdin()
-                              : null,
-                        ),
-                      ),
-                      if (widget.waitingForInput)
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _submitStdin,
-                            borderRadius: BorderRadius.circular(20),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(Icons.send_rounded,
-                                  size: 20, color: colors.primary),
+                            cursorColor: colors.primary,
+                            decoration: InputDecoration(
+                              hintText: widget.waitingForInput
+                                  ? '输入内容...'
+                                  : '等待脚本请求输入...',
+                              hintStyle: TextStyle(
+                                color: inputHintColor,
+                                fontSize: 13,
+                              ),
+                              filled: false,
+                              fillColor: Colors.transparent,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 0, vertical: 13),
                             ),
+                            onSubmitted: widget.waitingForInput
+                                ? (_) => _submitStdin()
+                                : null,
                           ),
                         ),
-                    ],
+                        if (widget.waitingForInput)
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _submitStdin,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Icon(Icons.send_rounded,
+                                    size: 20, color: colors.primary),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),

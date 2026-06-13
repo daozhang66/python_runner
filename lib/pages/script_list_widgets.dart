@@ -7,6 +7,7 @@ class _ScriptFolderCard extends StatelessWidget {
   final bool isProject;
   final bool hasMainFile;
   final bool grid;
+  final bool? selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -18,6 +19,7 @@ class _ScriptFolderCard extends StatelessWidget {
     this.isProject = false,
     this.hasMainFile = false,
     required this.grid,
+    this.selected,
     this.onTap,
     this.onLongPress,
   });
@@ -39,10 +41,23 @@ class _ScriptFolderCard extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    icon,
-                    size: 42,
-                    color: AppThemeColors.softIconColor(context, colors),
+                  Row(
+                    children: [
+                      Icon(
+                        icon,
+                        size: 42,
+                        color: AppThemeColors.softIconColor(context, colors),
+                      ),
+                      const Spacer(),
+                      if (selected != null)
+                        Icon(
+                          selected!
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked,
+                          size: 22,
+                          color: selected! ? colors.primary : colors.outline,
+                        ),
+                    ],
                   ),
                   const Spacer(),
                   Text(
@@ -113,8 +128,17 @@ class _ScriptFolderCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded,
-                      color: colors.onSurfaceVariant),
+                  if (selected != null)
+                    Icon(
+                      selected!
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked,
+                      size: 24,
+                      color: selected! ? colors.primary : colors.outline,
+                    )
+                  else
+                    Icon(Icons.chevron_right_rounded,
+                        color: colors.onSurfaceVariant),
                 ],
               ),
       ),
@@ -122,7 +146,7 @@ class _ScriptFolderCard extends StatelessWidget {
 
     return _ScriptCardSurface(
       colors: colors,
-      selected: false,
+      selected: selected == true,
       pinned: false,
       margin: grid
           ? EdgeInsets.zero

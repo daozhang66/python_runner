@@ -64,12 +64,13 @@ void main() {
   });
 
   test(
-      'group detail hides menu and homepage ungrouped scripts stay reorderable',
+      'group detail exposes multi-select and homepage ungrouped scripts stay reorderable',
       () {
     final source = scriptListSource();
     final mainSource = File('lib/main.dart').readAsStringSync();
 
     expect(source, contains('actions: _activeGroupId == null'));
+    expect(source, contains('onPressed: _enterMultiSelect'));
     expect(source, contains('Widget _buildFolderHomeScriptListItem('));
     expect(source, contains('final pinnedScripts ='));
     expect(
@@ -98,6 +99,22 @@ void main() {
     expect(source, contains('_activeGroupId != null'));
     expect(source, contains('_closeGroup();'));
     expect(mainSource, contains('controller: _scriptListController'));
+  });
+
+  test('homepage groups support multi-select management', () {
+    final source = scriptListSource();
+
+    expect(source, contains('bool _groupSelectMode'));
+    expect(source, contains('final Set<int> _selectedGroupIds'));
+    expect(source, contains("value: 'select_groups'"));
+    expect(source, contains("title: Text('分组多选')"));
+    expect(source, contains('void _enterGroupSelect'));
+    expect(source, contains('void _toggleGroupSelection'));
+    expect(source, contains('Future<void> _deleteSelectedGroups'));
+    expect(source, contains("title: '批量删除分组'"));
+    expect(source, contains('selected: _groupSelectMode'));
+    expect(source, contains('selected: selected == true'));
+    expect(source, contains('Icons.library_add_check_outlined'));
   });
 
   test('move-to-group sheet is scrollable when there are many groups', () {
