@@ -75,11 +75,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
   String _searchQuery = '';
   bool _searchMode = false;
   bool _multiSelectMode = false;
+  bool _groupSelectMode = false;
   bool _linuxLikeSelected = false;
   bool _linuxLikeAvailable = false;
   int? _activeGroupId;
   String? _activeGroupName;
   final Set<String> _selectedScripts = {};
+  final Set<int> _selectedGroupIds = {};
 
   bool get _canUseProjects => _linuxLikeSelected && _linuxLikeAvailable;
 
@@ -203,6 +205,14 @@ class _ScriptListPageState extends State<ScriptListPage> {
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        const PopupMenuItem(
+          value: 'select_groups',
+          child: ListTile(
+            leading: Icon(Icons.library_add_check_outlined),
+            title: Text('分组多选'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
       ],
     );
   }
@@ -234,103 +244,148 @@ class _ScriptListPageState extends State<ScriptListPage> {
             .toList();
     final allSelected = scripts.isNotEmpty &&
         scripts.every((s) => _selectedScripts.contains(s.name));
+    final selectableGroups = _activeGroupId == null
+        ? provider.groups.where((group) => group.id != null).toList()
+        : <ScriptGroup>[];
+    final allGroupsSelected = selectableGroups.isNotEmpty &&
+        selectableGroups.every((group) => _selectedGroupIds.contains(group.id));
     final showFolderHome = _activeGroupId == null && _searchQuery.isEmpty;
     final hasBodyContent = showFolderHome
         ? provider.groups.isNotEmpty || scripts.isNotEmpty
         : scripts.isNotEmpty;
 
     return Scaffold(
-      appBar: _multiSelectMode
+      appBar: _groupSelectMode
           ? AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => setState(() {
-                  _multiSelectMode = false;
-                  _selectedScripts.clear();
+                  _groupSelectMode = false;
+                  _selectedGroupIds.clear();
                 }),
               ),
-              title: Text('已选 ${_selectedScripts.length} 个'),
+              title: Text('已选 ${_selectedGroupIds.length} 个分组'),
               actions: [
                 TextButton(
                   onPressed: () => setState(() {
-                    if (allSelected) {
-                      _selectedScripts.clear();
+                    if (allGroupsSelected) {
+                      _selectedGroupIds.clear();
                     } else {
-                      _selectedScripts.addAll(scripts.map((s) => s.name));
+                      _selectedGroupIds
+                        ..clear()
+                        ..addAll(selectableGroups.map((group) => group.id!));
                     }
                   }),
-                  child: Text(allSelected ? '取消全选' : '全选'),
+                  child: Text(allGroupsSelected ? '取消全选' : '全选'),
                 ),
-                if (_selectedScripts.isNotEmpty) ...[
-                  IconButton(
-                    icon: const Icon(Icons.drive_file_move_outline),
-                    tooltip: '移动到分组',
-                    onPressed: _showMoveToGroupSheet,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.file_download_outlined),
-                    tooltip: '批量导出',
-                    onPressed: _exportSelected,
-                  ),
+                if (_selectedGroupIds.isNotEmpty)
                   IconButton(
                     icon: Icon(Icons.delete_outline,
                         color: Theme.of(context).colorScheme.error),
-                    tooltip: '批量删除',
-                    onPressed: _deleteSelected,
+                    tooltip: '批量删除分组',
+                    onPressed: _deleteSelectedGroups,
                   ),
-                ],
               ],
             )
-          : _searchMode
+          : _multiSelectMode
               ? AppBar(
                   leading: IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: _exitSearch,
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() {
+                      _multiSelectMode = false;
+                      _selectedScripts.clear();
+                      _groupSelectMode = false;
+                      _selectedGroupIds.clear();
+                    }),
                   ),
-                  title: TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      hintText: '搜索脚本...',
-                      border: InputBorder.none,
-                    ),
-                    onChanged: (v) => setState(() => _searchQuery = v),
-                  ),
+                  title: Text('已选 ${_selectedScripts.length} 个'),
                   actions: [
-                    if (_searchQuery.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        if (allSelected) {
+                          _selectedScripts.clear();
+                        } else {
+                          _selectedScripts.addAll(scripts.map((s) => s.name));
+                        }
+                      }),
+                      child: Text(allSelected ? '取消全选' : '全选'),
+                    ),
+                    if (_selectedScripts.isNotEmpty) ...[
                       IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: _clearSearch,
-                        tooltip: '清空搜索',
+                        icon: const Icon(Icons.drive_file_move_outline),
+                        tooltip: '移动到分组',
+                        onPressed: _showMoveToGroupSheet,
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.file_download_outlined),
+                        tooltip: '批量导出',
+                        onPressed: _exportSelected,
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            color: Theme.of(context).colorScheme.error),
+                        tooltip: '批量删除',
+                        onPressed: _deleteSelected,
+                      ),
+                    ],
                   ],
                 )
-              : AppBar(
-                  leading: _activeGroupId == null
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.arrow_back),
-                          onPressed: _closeGroup,
+              : _searchMode
+                  ? AppBar(
+                      leading: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: _exitSearch,
+                      ),
+                      title: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          hintText: '搜索脚本...',
+                          border: InputBorder.none,
                         ),
-                  title: _activeGroupId == null
-                      ? _buildScriptTitleBadge(allScripts.length)
-                      : Text(
-                          _displayGroupName(_activeGroupName ?? '分组'),
-                          style: _maskedNameStyle,
-                        ),
-                  actions: _activeGroupId == null
-                      ? [
-                          _buildScriptNameVisibilityButton(),
+                        onChanged: (v) => setState(() => _searchQuery = v),
+                      ),
+                      actions: [
+                        if (_searchQuery.isNotEmpty)
                           IconButton(
-                            icon: const Icon(Icons.settings_outlined),
-                            onPressed: widget.onSettingsTap,
+                            icon: const Icon(Icons.close),
+                            onPressed: _clearSearch,
+                            tooltip: '清空搜索',
                           ),
-                          _buildScriptMenu(),
-                        ]
-                      : null,
-                ),
+                      ],
+                    )
+                  : AppBar(
+                      leading: _activeGroupId == null
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed: _closeGroup,
+                            ),
+                      title: _activeGroupId == null
+                          ? _buildScriptTitleBadge(allScripts.length)
+                          : Text(
+                              _displayGroupName(_activeGroupName ?? '分组'),
+                              style: _maskedNameStyle,
+                            ),
+                      actions: _activeGroupId == null
+                          ? [
+                              _buildScriptNameVisibilityButton(),
+                              IconButton(
+                                icon: const Icon(Icons.settings_outlined),
+                                onPressed: widget.onSettingsTap,
+                              ),
+                              _buildScriptMenu(),
+                            ]
+                          : [
+                              IconButton(
+                                icon: const Icon(Icons.checklist),
+                                tooltip: '多选管理',
+                                onPressed: _enterMultiSelect,
+                              ),
+                            ],
+                    ),
       body: Column(
         children: [
           if (!_multiSelectMode && _searchQuery.isNotEmpty)

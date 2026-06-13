@@ -48,6 +48,7 @@ extension _ScriptListContent on _ScriptListPageState {
     required String keyPrefix,
     required bool grid,
   }) {
+    final selected = group.id != null && _selectedGroupIds.contains(group.id);
     return _ScriptFolderCard(
       key: ValueKey('${keyPrefix}_${group.id}'),
       name: _displayGroupName(group.name),
@@ -56,8 +57,13 @@ extension _ScriptListContent on _ScriptListPageState {
       isProject: group.isProject,
       hasMainFile: group.mainFilePath != null,
       grid: grid,
-      onTap: _multiSelectMode ? null : () => _openGroup(group),
-      onLongPress: _multiSelectMode ? null : () => _showGroupContextMenu(group),
+      selected: _groupSelectMode ? selected : null,
+      onTap: _groupSelectMode
+          ? () => _toggleGroupSelection(group)
+          : (_multiSelectMode ? null : () => _openGroup(group)),
+      onLongPress: _multiSelectMode
+          ? null
+          : (_groupSelectMode ? null : () => _showGroupContextMenu(group)),
     );
   }
 

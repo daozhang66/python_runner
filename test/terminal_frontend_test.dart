@@ -19,5 +19,22 @@ void main() {
     expect(terminal, contains('_buildTerminalToolbar'));
     expect(terminal, contains('_buildStdinPrompt'));
     expect(terminal, contains('fontFamily:'));
+    expect(terminal, contains('TerminalColorMode.dark'));
+    expect(terminal, contains('_colorModePrefsKey'));
+    expect(terminal, contains('prefs.setString(_colorModePrefsKey'));
+    expect(terminal, contains('inputFillColor'));
+    expect(terminal, contains('inputTextColor'));
+    expect(terminal, contains('inputBorderColor'));
+    expect(terminal, contains('toolbarText'));
+    expect(terminal, contains('toolbarMuted'));
+    expect(terminal, contains('toolbarActive'));
+    expect(terminal, contains('toolbarHintColor'));
+    expect(terminal, contains('foregroundColor: toolbarText'));
+    expect(terminal, contains('iconColor: toolbarActive'));
+    expect(terminal, contains('BoxConstraints(minHeight: 44)'));
+    expect(terminal, contains('Border.all(color: inputBorderColor'));
+    expect(terminal, contains('filled: false'));
+    expect(terminal, contains('fillColor: Colors.transparent'));
+    expect(terminal, contains('border: InputBorder.none'));
   });
 }

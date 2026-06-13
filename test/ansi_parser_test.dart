@@ -23,4 +23,36 @@ void main() {
     expect(rendered, 'ABC');
     expect(AnsiParser.strip(text), 'ABC');
   });
+
+  test('AnsiParser uses a contrast palette for light terminal themes', () {
+    const text = '\x1b[33myellow\x1b[0m \x1b[36mcyan\x1b[0m';
+
+    final darkSpans = AnsiParser.parse(
+      text,
+      defaultColor: Colors.white,
+      palette: AnsiPalette.dark,
+    );
+    final lightSpans = AnsiParser.parse(
+      text,
+      defaultColor: Colors.black,
+      palette: AnsiPalette.light,
+    );
+
+    expect(darkSpans.first.style?.color, const Color(0xFFE0E050));
+    expect(lightSpans.first.style?.color, const Color(0xFFA16207));
+    expect(lightSpans[2].style?.color, const Color(0xFF0E7490));
+  });
+
+  test('AnsiParser monochrome mode strips color while preserving text', () {
+    const text = 'A\x1b[31mB\x1b[0mC';
+
+    final spans = AnsiParser.parse(
+      text,
+      defaultColor: Colors.black,
+      palette: AnsiPalette.monochrome,
+    );
+
+    expect(spans.map((span) => span.text ?? '').join(), 'ABC');
+    expect(spans[1].style?.color, Colors.black);
+  });
 }
