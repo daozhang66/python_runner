@@ -3,16 +3,18 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-      'download engine uses task based native bridge and dedicated progress stream',
-      () {
+  test('app update downloads with Dio and installs through FileProvider', () {
     final nativeBridge =
         File('lib/services/native_bridge.dart').readAsStringSync();
     final updateManager =
         File('lib/services/app_update_manager.dart').readAsStringSync();
+    final downloadService =
+        File('lib/services/download_service.dart').readAsStringSync();
     final mainActivity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
+    final filePaths =
+        File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
 
     final downloadTask = File(
       'android/app/src/main/kotlin/com/daozhang/py/DownloadTask.kt',
@@ -28,33 +30,29 @@ void main() {
     expect(downloadManager.existsSync(), isTrue);
     expect(apkInstaller.existsSync(), isTrue);
 
-    expect(nativeBridge, contains('com.daozhang.py/download_progress'));
-    expect(nativeBridge, contains('downloadProgressStream'));
-    expect(nativeBridge, contains('Future<String> startApkDownload'));
-    expect(nativeBridge, contains('Future<bool> cancelDownload'));
-    expect(nativeBridge, contains('Future<bool> retryDownload'));
-    expect(nativeBridge, contains('Future<String> installDownloadedApk'));
+    expect(downloadService, contains('class DownloadService'));
+    expect(downloadService, contains('Dio(BaseOptions('));
+    expect(downloadService,
+        contains('receiveTimeout: const Duration(minutes: 30)'));
+    expect(downloadService, contains('Future<void> download({'));
+    expect(downloadService, contains('Future<void> downloadWithResume({'));
 
-    expect(mainActivity, contains('DOWNLOAD_PROGRESS_CHANNEL'));
-    expect(mainActivity, contains('downloadSink'));
+    expect(nativeBridge, contains('Future<void> installApkFile'));
+    expect(nativeBridge, contains("_invoke('installApkFile'"));
     expect(mainActivity, contains('DownloadManager('));
     expect(mainActivity, contains('ApkInstaller('));
-    expect(mainActivity, contains('"startApkDownload"'));
-    expect(mainActivity, contains('"cancelDownload"'));
-    expect(mainActivity, contains('"retryDownload"'));
-    expect(mainActivity, contains('"installDownloadedApk"'));
+    expect(mainActivity, contains('"installApkFile"'));
     expect(mainActivity,
         isNot(contains('private fun handleDownloadAndInstallApk(')));
     expect(mainActivity, isNot(contains('ByteArray(8192)')));
 
-    expect(updateManager, contains('downloadProgressStream'));
-    expect(updateManager, contains('startApkDownload'));
-    expect(updateManager, contains('cancelDownload'));
-    expect(updateManager, contains('retryDownload'));
-    expect(updateManager, contains('installDownloadedApk'));
+    expect(updateManager, contains('DownloadService.instance.download'));
+    expect(updateManager, contains('Directory.systemTemp'));
+    expect(updateManager, contains('CancelToken'));
+    expect(updateManager, contains('installApkFile(savePath)'));
     expect(updateManager, contains('下载失败'));
-    expect(updateManager, contains('重试'));
     expect(updateManager, contains('取消'));
+    expect(filePaths, contains('<code-cache-path'));
   });
 
   test(

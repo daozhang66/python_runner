@@ -242,25 +242,45 @@ void main() {
   test('app theme supports optional Material You dynamic color', () {
     final mainSource = File('lib/main.dart').readAsStringSync();
     final settingsSource = settingsPageSource();
+    final themePageSource =
+        File('lib/pages/theme_settings_page.dart').readAsStringSync();
+    final themeProviderSource =
+        File('lib/providers/theme_provider.dart').readAsStringSync();
+    final paletteSource =
+        File('lib/ui/app_theme_palette.dart').readAsStringSync();
     final pubspecSource = File('pubspec.yaml').readAsStringSync();
 
     expect(pubspecSource, contains('dynamic_color:'));
     expect(mainSource,
         contains("import 'package:dynamic_color/dynamic_color.dart';"));
     expect(mainSource, contains('DynamicColorBuilder'));
-    expect(mainSource, contains('_materialYouEnabled'));
-    expect(mainSource, contains("prefs.getBool('material_you_enabled')"));
-    expect(mainSource, contains("prefs.getString('theme_palette')"));
-    expect(mainSource, contains('AppThemePalette.fromKey'));
-    expect(mainSource, contains('onThemePaletteChanged'));
-    expect(mainSource, contains('onMaterialYouChanged'));
+    expect(mainSource, contains('ref.watch(themeProvider)'));
+    expect(mainSource, contains('themeNotifier.setDynamicPrimary'));
+    expect(mainSource, contains('themeState.useDynamicColor'));
+    expect(mainSource, contains('themeState.selectedPreset'));
+    expect(mainSource, contains('themeState.schemeVariant'));
+
+    expect(themeProviderSource, contains("prefs.getBool(_dynamicColorKey)"));
+    expect(
+        themeProviderSource, contains("prefs.getBool('material_you_enabled')"));
+    expect(
+        themeProviderSource, contains("prefs.remove('material_you_enabled')"));
+    expect(themeProviderSource, contains("prefs.getString('theme_palette')"));
+    expect(themeProviderSource, contains("prefs.remove('theme_palette')"));
+    expect(themeProviderSource, contains('Future<void> setUseDynamicColor'));
+    expect(themeProviderSource, contains('Future<void> setPresetTheme'));
+    expect(themeProviderSource, contains('final themeProvider'));
+
     expect(settingsSource, contains('Material You'));
-    expect(settingsSource, contains('widget.currentMaterialYouEnabled'));
+    expect(settingsSource, contains('ThemeSettingsPage'));
+    expect(themePageSource, contains('themeState.useDynamicColor'));
+    expect(themePageSource,
+        contains('AppThemePalette.values.where((p) => p.isSeedBased)'));
+    expect(themePageSource, contains('customColors: themeState.customColors'));
     expect(settingsSource, contains('配色方案'));
-    expect(settingsSource, contains('_showThemeModePicker'));
-    expect(settingsSource, contains('_showThemePalettePicker'));
-    expect(settingsSource, contains('Claude'));
-    expect(settingsSource, contains('Codex'));
+    expect(themePageSource, contains('_showThemeModePicker'));
+    expect(paletteSource, contains("label: 'Claude'"));
+    expect(paletteSource, contains("label: 'Codex'"));
   });
 
   test(
