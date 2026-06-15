@@ -244,7 +244,7 @@ class AppUpdateManager {
       context: context,
       barrierDismissible: false,
       builder: (progressContext) => AlertDialog(
-        title: const Text('Python Runner 更新'),
+        title: const Center(child: Text('更新')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -307,7 +307,11 @@ class AppUpdateManager {
             progressNotifier.value = received / total;
 
             final speed = received > 0 && progressNotifier.value > 0
-                ? (received / (DateTime.now().millisecondsSinceEpoch - startTime.millisecondsSinceEpoch) * 1000).toInt()
+                ? (received /
+                        (DateTime.now().millisecondsSinceEpoch -
+                            startTime.millisecondsSinceEpoch) *
+                        1000)
+                    .toInt()
                 : 0;
 
             progressTextNotifier.value =
