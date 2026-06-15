@@ -5,6 +5,10 @@ import '../providers/theme_provider.dart';
 import '../ui/app_theme_palette.dart';
 import '../widgets/app_dialogs.dart';
 
+// Flutter 3.44.2 deprecated RadioListTile.groupValue/onChanged in favor of
+// RadioGroup; keep using them here until we migrate to RadioGroup ancestor.
+// ignore_for_file: deprecated_member_use
+
 class ThemeSettingsPage extends ConsumerWidget {
   const ThemeSettingsPage({super.key});
 

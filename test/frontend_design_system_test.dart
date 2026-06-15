@@ -31,8 +31,10 @@ void main() {
     expect(emptyState, contains('class AppEmptyState'));
     expect(palette, contains('enum AppThemePalette'));
     expect(palette, contains("label: '海蓝'"));
-    expect(palette, contains("label: '青玉'"));
+    expect(palette, contains("label: '薄荷'"));
+    expect(palette, contains("label: '丁香紫'"));
     expect(palette, contains("label: 'Claude'"));
     expect(palette, contains("label: 'Codex'"));
+    expect(palette, contains('bool get isSeedBased'));
   });
 }

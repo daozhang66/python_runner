@@ -2,6 +2,9 @@
 
 part of 'settings_page.dart';
 
+// Flutter 3.44.2 deprecated RadioListTile.groupValue/onChanged; keep until migrate.
+// ignore_for_file: deprecated_member_use
+
 extension _SettingsActions on _SettingsPageState {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:python_runner/pages/settings_page.dart';
-import 'package:python_runner/ui/app_theme_palette.dart';
 
 void main() {
   testWidgets('settings page shows update controls',
@@ -13,12 +12,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsPage(
-          onThemeChanged: (_) {},
           currentThemeMode: ThemeMode.system,
-          onThemePaletteChanged: (_) {},
-          currentThemePalette: AppThemePalette.ocean,
-          onMaterialYouChanged: (_) {},
-          currentMaterialYouEnabled: true,
         ),
       ),
     );
@@ -49,12 +43,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsPage(
-          onThemeChanged: (_) {},
           currentThemeMode: ThemeMode.system,
-          onThemePaletteChanged: (_) {},
-          currentThemePalette: AppThemePalette.ocean,
-          onMaterialYouChanged: (_) {},
-          currentMaterialYouEnabled: true,
         ),
       ),
     );

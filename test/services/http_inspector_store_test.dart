@@ -202,8 +202,9 @@ void main() {
 
       expect(
         mainSource,
-        contains('ChangeNotifierProvider.value(value: httpInspectorStore)'),
+        contains('legacy_provider.ChangeNotifierProvider.value('),
       );
+      expect(mainSource, contains('value: httpInspectorStore'));
       expect(pageSource, contains('context.read<HttpInspectorStore?>()'));
       expect(pageSource, contains('nextStore'));
     });
