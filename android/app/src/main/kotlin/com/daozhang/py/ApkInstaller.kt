@@ -37,11 +37,12 @@ class ApkInstaller(private val context: Context) {
         }
 
         validateApk(apkFile)
+        val shareableApk = ensureShareableApk(apkFile)
 
         val apkUri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
-            apkFile
+            shareableApk
         )
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(apkUri, "application/vnd.android.package-archive")
@@ -49,7 +50,32 @@ class ApkInstaller(private val context: Context) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(installIntent)
-        return apkFile.absolutePath
+        return shareableApk.absolutePath
+    }
+
+    private fun ensureShareableApk(apkFile: File): File {
+        val canonicalApk = apkFile.canonicalFile
+        val shareRoots = listOf(
+            context.filesDir,
+            context.cacheDir,
+            context.getExternalFilesDir(null)
+        ).filterNotNull().map { it.canonicalFile }
+
+        if (shareRoots.any { canonicalApk.path == it.path || canonicalApk.path.startsWith(it.path + File.separator) }) {
+            return canonicalApk
+        }
+
+        val installCacheDir = File(context.cacheDir, "apk_install")
+        if (!installCacheDir.exists()) installCacheDir.mkdirs()
+        installCacheDir.listFiles()?.forEach { file ->
+            if (file.isFile && file.name.endsWith(".apk")) file.delete()
+        }
+
+        val safeName = canonicalApk.name.takeIf { it.endsWith(".apk", ignoreCase = true) }
+            ?: "app-update.apk"
+        val cachedApk = File(installCacheDir, safeName)
+        canonicalApk.copyTo(cachedApk, overwrite = true)
+        return cachedApk
     }
 
     private fun validateApk(apkFile: File) {

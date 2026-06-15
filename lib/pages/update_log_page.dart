@@ -316,33 +316,16 @@ class _ReleaseLogCard extends StatelessWidget {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                if (entry.releaseName.isNotEmpty)
-                  Text(
-                    entry.releaseName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colors.onSurfaceVariant,
-                    ),
+                Icon(Icons.schedule, size: 12, color: colors.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  _formatDate(entry.publishedAt),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
                   ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.schedule,
-                        size: 12, color: colors.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Text(
-                      _formatDate(entry.publishedAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
