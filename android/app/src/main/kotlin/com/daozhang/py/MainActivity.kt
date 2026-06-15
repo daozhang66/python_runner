@@ -3,9 +3,11 @@
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.ResultReceiver
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -442,6 +444,10 @@ class MainActivity : FlutterActivity() {
                         val taskId = call.argument<String>("taskId") ?: ""
                         handleInstallDownloadedApk(taskId, result)
                     }
+                    "installApkFile" -> {
+                        val filePath = call.argument<String>("filePath") ?: ""
+                        handleInstallApkFile(filePath, result)
+                    }
                     "getAppInfo" -> handleGetAppInfo(result)
                     "getPythonInfo" -> handleGetPythonInfo(result)
                     "getLinuxLikeRuntimeInfo" -> handleGetLinuxLikeRuntimeInfo(result)
@@ -866,20 +872,51 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun deleteProjectPycacheDirectories(projectRoot: File) {
+    private fun deletePythonCacheDirectory(dir: File, rootPath: java.nio.file.Path) {
+        if (!dir.isDirectory || dir.name != "__pycache__") return
+        val path = try {
+            dir.canonicalFile.toPath()
+        } catch (_: Exception) {
+            return
+        }
+        if (path.startsWith(rootPath)) {
+            dir.deleteRecursively()
+        }
+    }
+
+    private fun isBroadPythonCacheCleanupRoot(root: File): Boolean {
+        val path = root.absolutePath.replace('\\', '/').trimEnd('/')
+        return path == "" ||
+            path == "/" ||
+            path == "/storage" ||
+            path == "/storage/emulated" ||
+            path == "/storage/emulated/0" ||
+            path == "/sdcard" ||
+            path == "/mnt"
+    }
+
+    private fun deletePythonCacheDirectories(rootDir: File) {
         try {
-            val root = projectRoot.canonicalFile
+            val root = rootDir.canonicalFile
+            if (!root.isDirectory) return
             val rootPath = root.toPath()
-            root.walkBottomUp().forEach { file ->
+            deletePythonCacheDirectory(File(root, "__pycache__"), rootPath)
+            if (isBroadPythonCacheCleanupRoot(root)) return
+
+            var visited = 0
+            for (file in root.walkBottomUp().maxDepth(8)) {
+                visited += 1
+                if (visited > 5000) break
                 if (file.isDirectory && file.name == "__pycache__") {
-                    val path = file.canonicalFile.toPath()
-                    if (path.startsWith(rootPath)) {
-                        file.deleteRecursively()
-                    }
+                    deletePythonCacheDirectory(file, rootPath)
                 }
             }
         } catch (_: Exception) {
         }
+    }
+
+    private fun deleteProjectPycacheDirectories(projectRoot: File) {
+        deletePythonCacheDirectories(projectRoot)
     }
 
     // --- Script Execution ---
@@ -1114,22 +1151,35 @@ class MainActivity : FlutterActivity() {
                         projectRoot.absolutePath,
                         mainFile.parentFile?.absolutePath
                     ).filterNotNull().distinct(),
-                    projectRoot = projectRoot
+                    projectRoot = projectRoot,
+                    pycacheCleanupRoots = listOf(projectRoot)
                 )
             } else {
                 val scriptFile = safeScriptFile(name)
                 if (!scriptFile.exists()) {
                     throw IllegalArgumentException("脚本不存在 $name")
                 }
+                val resolvedScriptWorkingDir =
+                    linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)
                 LinuxLikeExecutionTarget(
                     displayName = name,
                     scriptFile = scriptFile,
                     executionFilePath = File(
-                        linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir),
+                        resolvedScriptWorkingDir,
                         scriptFile.name
                     ).absolutePath,
-                    workingDir = linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir),
-                    pythonPathEntries = emptyList()
+                    workingDir = resolvedScriptWorkingDir,
+                    pythonPathEntries = emptyList(),
+                    pycacheCleanupRoots = listOfNotNull(
+                        File(resolvedScriptWorkingDir),
+                        scriptFile.parentFile
+                    ).distinctBy {
+                        try {
+                            it.canonicalPath
+                        } catch (_: Exception) {
+                            it.absolutePath
+                        }
+                    }
                 )
             }
         } catch (e: IllegalArgumentException) {
@@ -1147,6 +1197,7 @@ class MainActivity : FlutterActivity() {
         val executionEnvironment = environment?.toMutableMap() ?: mutableMapOf()
         val resolvedWorkingDir = executionTarget.workingDir
         executionEnvironment["HOME"] = resolvedWorkingDir
+        executionTarget.pycacheCleanupRoots.forEach { deletePythonCacheDirectories(it) }
         if (executionTarget.pythonPathEntries.isNotEmpty()) {
             val existingPythonPath = executionEnvironment["PYTHONPATH"]?.takeIf { it.isNotBlank() }
             executionEnvironment["PYTHONPATH"] =
@@ -1223,7 +1274,7 @@ class MainActivity : FlutterActivity() {
                 exitCode = 1
                 _writeScriptErrorLog(executionTarget.displayName, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
             } finally {
-                executionTarget.projectRoot?.let { deleteProjectPycacheDirectories(it) }
+                executionTarget.pycacheCleanupRoots.forEach { deletePythonCacheDirectories(it) }
                 currentExecutionProcess = null
                 currentExecutionThread = null
                 currentExecutionId = null
@@ -2647,6 +2698,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun handleInstallApkFile(filePath: String, result: MethodChannel.Result) {
+        try {
+            val apkFile = java.io.File(filePath)
+            if (!apkFile.exists()) {
+                throw IllegalStateException("APK 文件不存在: $filePath")
+            }
+            val path = apkInstaller.installApk(apkFile)
+            result.success(path)
+        } catch (e: SecurityException) {
+            result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)
+        } catch (e: Exception) {
+            result.error("1012", "打开安装器失败: ${e.message}", null)
+        }
+    }
+
     // --- Helpers ---
 
     private fun sendLog(type: String, message: String) {
@@ -2681,7 +2747,8 @@ class MainActivity : FlutterActivity() {
         val executionFilePath: String,
         val workingDir: String,
         val pythonPathEntries: List<String>,
-        val projectRoot: File? = null
+        val projectRoot: File? = null,
+        val pycacheCleanupRoots: List<File> = emptyList()
     )
 
     private fun runLinuxLikeCommandBlocking(
@@ -2790,15 +2857,53 @@ class MainActivity : FlutterActivity() {
 
     // --- Floating Ball ---
 
+    private fun canShowFloatingBall(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            android.provider.Settings.canDrawOverlays(this)
+    }
+
+    private fun startFloatingBallService(intent: Intent) {
+        startService(intent)
+    }
+
     private fun handleShowFloatingBall(scriptName: String?, result: MethodChannel.Result) {
+        var completed = false
+        var timeoutRunnable: Runnable? = null
         try {
+            if (!canShowFloatingBall()) {
+                result.error("1024", "悬浮窗权限未授予", null)
+                return
+            }
+            timeoutRunnable = Runnable {
+                if (completed) return@Runnable
+                completed = true
+                result.error("1025", "悬浮球服务启动超时，请重新开启或检查系统悬浮窗权限", null)
+            }
+            val receiver = object : ResultReceiver(mainHandler) {
+                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                    if (completed) return
+                    completed = true
+                    timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                    if (resultCode == FloatingBallService.RESULT_SHOW_OK) {
+                        result.success(true)
+                    } else {
+                        val message = resultData?.getString(
+                            FloatingBallService.EXTRA_RESULT_MESSAGE
+                        ) ?: "显示悬浮球失败"
+                        result.error("1020", message, null)
+                    }
+                }
+            }
             val intent = Intent(this, FloatingBallService::class.java).apply {
                 action = FloatingBallService.ACTION_SHOW
                 putExtra(FloatingBallService.EXTRA_SCRIPT_NAME, scriptName ?: "")
+                putExtra(FloatingBallService.EXTRA_RESULT_RECEIVER, receiver)
             }
-            startService(intent)
-            result.success(true)
+            mainHandler.postDelayed(timeoutRunnable!!, 2500L)
+            startFloatingBallService(intent)
         } catch (e: Exception) {
+            completed = true
+            timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
             result.error("1020", "显示悬浮球失败: ${e.message}", null)
         }
     }
@@ -2808,7 +2913,7 @@ class MainActivity : FlutterActivity() {
             val intent = Intent(this, FloatingBallService::class.java).apply {
                 action = FloatingBallService.ACTION_HIDE
             }
-            startService(intent)
+            startFloatingBallService(intent)
             result.success(true)
         } catch (e: Exception) {
             result.error("1021", "隐藏悬浮球失败: ${e.message}", null)
@@ -2817,11 +2922,15 @@ class MainActivity : FlutterActivity() {
 
     private fun handleUpdateFloatingBallStatus(status: String, result: MethodChannel.Result) {
         try {
+            if (!canShowFloatingBall()) {
+                result.error("1024", "悬浮窗权限未授予", null)
+                return
+            }
             val intent = Intent(this, FloatingBallService::class.java).apply {
                 action = FloatingBallService.ACTION_UPDATE_STATUS
                 putExtra(FloatingBallService.EXTRA_STATUS, status)
             }
-            startService(intent)
+            startFloatingBallService(intent)
             result.success(true)
         } catch (e: Exception) {
             result.error("1022", "更新悬浮球状态失败: ${e.message}", null)
@@ -2830,11 +2939,15 @@ class MainActivity : FlutterActivity() {
 
     private fun handlePushFloatingBallOutput(output: String, result: MethodChannel.Result) {
         try {
+            if (!canShowFloatingBall()) {
+                result.error("1024", "悬浮窗权限未授予", null)
+                return
+            }
             val intent = Intent(this, FloatingBallService::class.java).apply {
                 action = FloatingBallService.ACTION_PUSH_OUTPUT
                 putExtra(FloatingBallService.EXTRA_OUTPUT, output)
             }
-            startService(intent)
+            startFloatingBallService(intent)
             result.success(true)
         } catch (e: Exception) {
             result.error("1023", "推送输出失败: ${e.message}", null)

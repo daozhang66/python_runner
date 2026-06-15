@@ -6,64 +6,20 @@ extension _SettingsSections on _SettingsPageState {
   Widget _buildRuntimeSection() {
     return Column(
       children: [
-        // ── Runtime Engine ──
         _SectionCard(
           icon: Icons.memory,
           title: '运行引擎',
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: DropdownButtonFormField<String>(
-                key: ValueKey('$_runtimeBackend-$_engineDropdownKey'),
-                initialValue: _runtimeBackend,
-                borderRadius: BorderRadius.circular(16),
-                dropdownColor:
-                    Theme.of(context).colorScheme.surfaceContainerHigh,
-                iconEnabledColor: Theme.of(context).colorScheme.primary,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  labelText: '运行引擎',
-                  prefixIcon: const Icon(Icons.memory),
-                  border: const OutlineInputBorder(gapPadding: 0),
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppThemeColors.softSurface(
-                    Theme.of(context).colorScheme,
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: RuntimeManager.chaquopyBackendId,
-                    child: Text('Chaquopy（默认）'),
-                  ),
-                  DropdownMenuItem(
-                    value: RuntimeManager.linuxLikeBackendId,
-                    child: Text('Linux-like（实验）'),
-                  ),
-                ],
-                selectedItemBuilder: (context) => [
-                  Text('Chaquopy',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  Text('Linux-like',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      )),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    _saveRuntimeBackend(value);
-                  }
-                },
+            ListTile(
+              leading: const Icon(Icons.memory),
+              title: const Text('运行引擎'),
+              subtitle: Text(
+                _runtimeBackend == RuntimeManager.chaquopyBackendId
+                    ? 'Chaquopy（默认）'
+                    : 'Linux-like（实验）',
               ),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: _showRuntimeBackendPicker,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -75,33 +31,28 @@ extension _SettingsSections on _SettingsPageState {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _installingLinuxLike
-                  ? _InstallProgressCard(
-                      stage: _installStage,
-                      percent: _installPercent,
-                      message: _installMessage,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _installLinuxLikeRuntime,
-                          icon: const Icon(Icons.download_for_offline_outlined),
-                          label: const Text('安装/修复 Linux-like 开发版'),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '会下载约 104MB 的 Debian + Python + pip + build-essential 环境包。',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('管理引擎'),
+              subtitle: Text(
+                _linuxLikeAvailable
+                    ? 'Linux-like 运行引擎已安装'
+                    : '安装 Linux-like 运行引擎',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RuntimeManagerPage(),
+                  ),
+                );
+              },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
             Padding(
@@ -114,12 +65,13 @@ extension _SettingsSections on _SettingsPageState {
                       Text('PyPI 源',
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
-                      Text('留空使用官方源',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
+                      Text(
+                        '留空使用官方源',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -134,13 +86,17 @@ extension _SettingsSections on _SettingsPageState {
                             hintText: 'https://pypi.org/simple',
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                          onPressed: _saveMirror, icon: const Icon(Icons.save)),
+                        onPressed: _saveMirror,
+                        icon: const Icon(Icons.save),
+                      ),
                     ],
                   ),
                   Align(
@@ -155,8 +111,6 @@ extension _SettingsSections on _SettingsPageState {
             ),
           ],
         ),
-
-        // ── Script ──
         _SectionCard(
           icon: Icons.code,
           title: '脚本',
@@ -172,17 +126,19 @@ extension _SettingsSections on _SettingsPageState {
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
                       Text(
-                          _timeout == 0
-                              ? '无限制'
-                              : _timeout >= 3600
-                                  ? '${(_timeout / 3600).toStringAsFixed(1)} 小时'
-                                  : _timeout >= 60
-                                      ? '${(_timeout / 60).toStringAsFixed(0)} 分钟'
-                                      : '$_timeout 秒',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w500)),
+                        _timeout == 0
+                            ? '无限制'
+                            : _timeout >= 3600
+                                ? '${(_timeout / 3600).toStringAsFixed(1)} 小时'
+                                : _timeout >= 60
+                                    ? '${(_timeout / 60).toStringAsFixed(0)} 分钟'
+                                    : '$_timeout 秒',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -228,88 +184,46 @@ extension _SettingsSections on _SettingsPageState {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text('工作目录',
-                          style: Theme.of(context).textTheme.titleSmall),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text('脚本运行时的文件读写目录，留空使用默认',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _workingDirController,
-                          decoration: const InputDecoration(
-                            hintText:
-                                '/storage/emulated/0/Download/PythonRunner',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                          onPressed: _pickWorkingDir,
-                          icon: const Icon(Icons.folder_open)),
-                      IconButton(
-                          onPressed: _saveWorkingDir,
-                          icon: const Icon(Icons.save)),
-                    ],
-                  ),
-                ],
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('工作目录'),
+              subtitle: Text(
+                _workingDir ?? '默认：/storage/emulated/0/Download/PythonRunner',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: _pickWorkingDir,
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('脚本导出目录', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 2),
-                  Text('留空使用默认下载目录',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _exportDirController,
-                          decoration: const InputDecoration(
-                            hintText:
-                                '/storage/emulated/0/Download/PythonRunner',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                          onPressed: _pickExportDir,
-                          icon: const Icon(Icons.folder_open)),
-                      IconButton(
-                          onPressed: _saveExportDir,
-                          icon: const Icon(Icons.save)),
-                    ],
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                '脚本运行时的文件读写目录',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: const Icon(Icons.drive_folder_upload_outlined),
+              title: const Text('脚本导出目录'),
+              subtitle: Text(
+                _exportDir ?? '默认：下载目录',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: _pickExportDir,
             ),
           ],
         ),
@@ -320,7 +234,6 @@ extension _SettingsSections on _SettingsPageState {
   Widget _buildNetworkDebugSection() {
     return Column(
       children: [
-        // ── Network ──
         _SectionCard(
           icon: Icons.http,
           title: '网络',
@@ -335,20 +248,23 @@ extension _SettingsSections on _SettingsPageState {
             ),
             if (_netDebugMode) ...[
               SwitchListTile(
-                secondary: Icon(Icons.lock_open,
-                    color: _netAllowInsecure
-                        ? Theme.of(context).colorScheme.error
-                        : null),
+                secondary: Icon(
+                  Icons.lock_open,
+                  color: _netAllowInsecure
+                      ? Theme.of(context).colorScheme.error
+                      : null,
+                ),
                 title: const Text('允许不安全证书'),
                 subtitle: Text(
                   _netAllowInsecure
                       ? '已开启 — 将信任自签名/抓包证书（降低安全性）'
                       : '关闭 — 严格校验SSL证书',
                   style: TextStyle(
-                      fontSize: 12,
-                      color: _netAllowInsecure
-                          ? Theme.of(context).colorScheme.error
-                          : null),
+                    fontSize: 12,
+                    color: _netAllowInsecure
+                        ? Theme.of(context).colorScheme.error
+                        : null,
+                  ),
                 ),
                 value: _netAllowInsecure,
                 onChanged: _toggleAllowInsecure,
@@ -379,7 +295,9 @@ extension _SettingsSections on _SettingsPageState {
                               labelText: '代理地址',
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                             ),
                           ),
                         ),
@@ -392,21 +310,24 @@ extension _SettingsSections on _SettingsPageState {
                             autocorrect: false,
                             keyboardType: TextInputType.number,
                             inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: const InputDecoration(
                               hintText: '8888',
                               labelText: '端口',
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
-                            onPressed: _saveProxyConfig,
-                            icon: const Icon(Icons.save)),
+                          onPressed: _saveProxyConfig,
+                          icon: const Icon(Icons.save),
+                        ),
                       ],
                     ),
                   ],
@@ -439,20 +360,23 @@ extension _SettingsSections on _SettingsPageState {
               ),
             const Divider(height: 1, indent: 16, endIndent: 16),
             SwitchListTile(
-              secondary: Icon(Icons.tune,
-                  color: _overrideEnabled
-                      ? Theme.of(context).colorScheme.primary
-                      : null),
+              secondary: Icon(
+                Icons.tune,
+                color: _overrideEnabled
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
               title: const Text('启用请求覆盖'),
               subtitle: Text(
                 _overrideEnabled
                     ? '已开启 — 全局覆盖将应用到所有 Python HTTP 请求'
                     : '关闭 — 不修改脚本的默认请求行为',
                 style: TextStyle(
-                    fontSize: 12,
-                    color: _overrideEnabled
-                        ? Theme.of(context).colorScheme.primary
-                        : null),
+                  fontSize: 12,
+                  color: _overrideEnabled
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
               ),
               value: _overrideEnabled,
               onChanged: (v) async {
@@ -473,11 +397,13 @@ extension _SettingsSections on _SettingsPageState {
                       ),
                       actions: [
                         TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('取消')),
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('取消'),
+                        ),
                         TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('确认启用')),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('确认启用'),
+                        ),
                       ],
                     ),
                   );
@@ -487,239 +413,6 @@ extension _SettingsSections on _SettingsPageState {
                 setState(() => _overrideEnabled = v);
               },
             ),
-            if (_requestConfigError != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _requestConfigError!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color:
-                                Theme.of(context).colorScheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (_overrideEnabled) ...[
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('全局 User-Agent',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    const Text('覆盖 requests 等库的默认 UA（如 python-requests/2.x.x）',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _globalUaController,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () async {
-                            await RequestOverrideConfig.instance
-                                .setGlobalUserAgent(_globalUaController.text);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('User-Agent 已保存'),
-                                  duration: Duration(seconds: 1)),
-                            );
-                          },
-                          icon: const Icon(Icons.save),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('全局额外请求头',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    const Text('JSON 格式，如 {"Accept-Language":"zh-CN"}',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _globalHeadersController,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            maxLines: 2,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  '{"Accept-Language":"zh-CN","X-Custom":"value"}',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () async {
-                            final text = _globalHeadersController.text.trim();
-                            try {
-                              await RequestOverrideConfig.instance
-                                  .setGlobalHeaders(text);
-                            } on FormatException catch (e) {
-                              if (!mounted) return;
-                              setState(() {
-                                _requestConfigError =
-                                    RequestOverrideConfig.instance.configError;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(e.message),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                              return;
-                            }
-                            if (!mounted) return;
-                            setState(() {
-                              _requestConfigError =
-                                  RequestOverrideConfig.instance.configError;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('全局请求头已保存'),
-                                  duration: Duration(seconds: 1)),
-                            );
-                          },
-                          icon: const Icon(Icons.save),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('全局 Cookie',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    const Text('注入到所有请求的 Cookie 头',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _globalCookieController,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            decoration: const InputDecoration(
-                              hintText: 'session_id=abc123; token=xyz',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () async {
-                            await RequestOverrideConfig.instance
-                                .setGlobalCookie(_globalCookieController.text);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Cookie 已保存'),
-                                  duration: Duration(seconds: 1)),
-                            );
-                          },
-                          icon: const Icon(Icons.save),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Text('默认 HTTP 超时',
-                            style: TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w500)),
-                        const Spacer(),
-                        Text('$_defaultHttpTimeout 秒',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                    Slider(
-                      value: _defaultHttpTimeout.toDouble(),
-                      min: 5,
-                      max: 120,
-                      divisions: 23,
-                      label: '$_defaultHttpTimeout 秒',
-                      onChanged: (v) =>
-                          setState(() => _defaultHttpTimeout = v.round()),
-                      onChangeEnd: (v) async {
-                        await RequestOverrideConfig.instance
-                            .setDefaultTimeout(v.round());
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.redo),
-                title: const Text('跟随重定向'),
-                subtitle: const Text('是否自动跟随 HTTP 重定向',
-                    style: TextStyle(fontSize: 12)),
-                value: _followRedirects,
-                onChanged: (v) async {
-                  await RequestOverrideConfig.instance.setFollowRedirects(v);
-                  setState(() => _followRedirects = v);
-                },
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.vpn_lock),
-                title: const Text('强制使用代理'),
-                subtitle: const Text('将代理配置强制应用到 Python HTTP 请求',
-                    style: TextStyle(fontSize: 12)),
-                value: _forceProxy,
-                onChanged: (v) async {
-                  await RequestOverrideConfig.instance.setForceProxy(v);
-                  setState(() => _forceProxy = v);
-                },
-              ),
-            ],
           ],
         ),
       ],
@@ -729,18 +422,23 @@ extension _SettingsSections on _SettingsPageState {
   Widget _buildDiagnosticsSection() {
     return Column(
       children: [
-        // ── System Tools ──
         _SectionCard(
           icon: Icons.build_outlined,
           title: '系统工具',
           children: [
             ListTile(
-              leading: const Icon(Icons.visibility_outlined),
-              title: const Text('查看完整日志'),
-              subtitle: const Text('查看完整诊断日志、崩溃日志和脚本错误',
+              leading: const Icon(Icons.article_outlined),
+              title: const Text('应用日志'),
+              subtitle: const Text('查看和筛选系统日志、崩溃日志、脚本错误',
                   style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
-              onTap: _viewSystemLogs,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AppLogsPage(),
+                ),
+              ),
+              onLongPress: _viewSystemLogs,
             ),
             ListTile(
               leading: const Icon(Icons.file_download_outlined),
@@ -749,15 +447,6 @@ extension _SettingsSections on _SettingsPageState {
                   style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _exportSystemLogs,
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error),
-              title: const Text('清空系统日志'),
-              subtitle:
-                  const Text('删除所有系统日志文件', style: TextStyle(fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _clearSystemLogs,
             ),
           ],
         ),
@@ -768,7 +457,6 @@ extension _SettingsSections on _SettingsPageState {
   Widget _buildAboutSection() {
     return Column(
       children: [
-        // ── About ──
         _SectionCard(
           icon: Icons.info_outline,
           title: '关于',
@@ -778,8 +466,10 @@ extension _SettingsSections on _SettingsPageState {
               title: const Text('使用手册'),
               subtitle: const Text('功能说明与操作指南', style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const _UserManualPage())),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const _UserManualPage()),
+              ),
             ),
             ListTile(
               leading: _checkingUpdate
@@ -790,30 +480,24 @@ extension _SettingsSections on _SettingsPageState {
                     )
                   : const Icon(Icons.system_update_alt),
               title: const Text('检查更新'),
-              subtitle: const Text(
-                '从 GitHub Releases 获取最新 APK',
-                style: TextStyle(fontSize: 12),
-              ),
+              subtitle: const Text('从 GitHub Releases 获取最新 APK',
+                  style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _checkingUpdate ? null : _checkForUpdates,
             ),
             ListTile(
               leading: const Icon(Icons.history_outlined),
               title: const Text('更新日志'),
-              subtitle: const Text(
-                '查看 GitHub Releases 历史版本',
-                style: TextStyle(fontSize: 12),
-              ),
+              subtitle: const Text('查看 GitHub Releases 历史版本',
+                  style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _openUpdateLogPage,
             ),
             SwitchListTile(
               secondary: const Icon(Icons.update_outlined),
               title: const Text('启动时自动检查更新'),
-              subtitle: const Text(
-                '每次启动应用时自动检查更新',
-                style: TextStyle(fontSize: 12),
-              ),
+              subtitle:
+                  const Text('每次启动应用时自动检查更新', style: TextStyle(fontSize: 12)),
               value: _autoCheckUpdates,
               onChanged: _setAutoCheckUpdates,
             ),
@@ -850,95 +534,24 @@ extension _SettingsSections on _SettingsPageState {
       children: [
         ListTile(
           leading: const Icon(Icons.palette_outlined),
-          title: const Text('主题模式'),
-          subtitle: Text(
-            switch (widget.currentThemeMode) {
-              ThemeMode.light => '当前：浅色',
-              ThemeMode.dark => '当前：深色',
-              ThemeMode.system => '当前：跟随系统',
-            },
-            style: const TextStyle(fontSize: 12),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: _showThemeModePicker,
-        ),
-        SwitchListTile(
-          secondary: const Icon(Icons.color_lens_outlined),
-          title: const Text('Material You'),
-          subtitle: const Text('Android 12+ 跟随系统壁纸动态取色；关闭后可使用下方自定义配色',
+          title: const Text('主题与配色'),
+          subtitle: const Text('主题模式、Material You、配色方案、自定义颜色、字体',
               style: TextStyle(fontSize: 12)),
-          value: widget.currentMaterialYouEnabled,
-          onChanged: widget.onMaterialYouChanged,
-        ),
-        ListTile(
-          leading: const Icon(Icons.colorize_outlined),
-          title: const Text('配色方案'),
-          subtitle: Text(
-            widget.currentMaterialYouEnabled
-                ? '当前由 Material You 接管；关闭后可切换海蓝、青玉、Claude、Codex'
-                : '当前：${widget.currentThemePalette.label} · ${widget.currentThemePalette.description}',
-            style: const TextStyle(fontSize: 12),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ThemeSettingsPage(),
+            ),
           ),
-          trailing: Icon(
-            widget.currentMaterialYouEnabled
-                ? Icons.block_outlined
-                : Icons.chevron_right,
-          ),
-          onTap:
-              widget.currentMaterialYouEnabled ? null : _showThemePalettePicker,
         ),
         SwitchListTile(
           secondary: const Icon(Icons.bubble_chart),
           title: const Text('悬浮球'),
-          subtitle: const Text('脚本运行时显示悬浮球，点击返回应用，长按查看详情',
+          subtitle: const Text('常驻显示运行状态，点击展开面板，长按查看详情',
               style: TextStyle(fontSize: 12)),
           value: _floatingBallEnabled,
-          onChanged: (v) async {
-            if (v) {
-              try {
-                final hasPermission = await _bridge.checkOverlayPermission();
-                if (!hasPermission) {
-                  if (!mounted) return;
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      title: const Text('需要悬浮窗权限'),
-                      content: const Text('悬浮球需要「显示在其他应用上层」权限。\n\n'
-                          '点击确认后，请在系统设置中开启此权限。'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('取消')),
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('去设置')),
-                      ],
-                    ),
-                  );
-                  if (confirmed == true) {
-                    await _bridge.requestOverlayPermission();
-                  } else {
-                    return;
-                  }
-                }
-              } catch (_) {}
-            }
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('floating_ball_enabled', v);
-            if (!mounted) return;
-            setState(() => _floatingBallEnabled = v);
-            if (v) {
-              try {
-                await _bridge.showFloatingBall('');
-              } catch (_) {}
-            } else {
-              try {
-                await _bridge.hideFloatingBall();
-              } catch (_) {}
-            }
-          },
+          onChanged: _setFloatingBallEnabled,
         ),
       ],
     );

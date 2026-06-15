@@ -8,9 +8,12 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.ResultReceiver
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -36,6 +39,11 @@ class FloatingBallService : Service() {
         const val EXTRA_STATUS = "status"
         const val EXTRA_OUTPUT = "output"
         const val EXTRA_SCRIPT_NAME = "script_name"
+        const val EXTRA_RESULT_RECEIVER = "result_receiver"
+        const val EXTRA_RESULT_MESSAGE = "result_message"
+
+        const val RESULT_SHOW_OK = 1
+        const val RESULT_SHOW_ERROR = 2
 
         const val STATUS_IDLE = "idle"
         const val STATUS_RUNNING = "running"
@@ -87,7 +95,7 @@ class FloatingBallService : Service() {
     // ── Dimensions ──
     private val density by lazy { resources.displayMetrics.density }
     private val ballSizePx by lazy { (48 * density).toInt() }
-    private val collapsedVisiblePx by lazy { (16 * density).toInt() }
+    private val collapsedVisiblePx by lazy { (24 * density).toInt() }
     private val screenWidth: Int get() = resources.displayMetrics.widthPixels
     private val screenHeight: Int get() = resources.displayMetrics.heightPixels
     private val touchSlop by lazy { (10 * density).toInt() }
@@ -108,21 +116,7 @@ class FloatingBallService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_SHOW -> {
-                val name = intent.getStringExtra(EXTRA_SCRIPT_NAME) ?: ""
-                if (name.isNotEmpty()) {
-                    scriptName = name
-                    startTime = System.currentTimeMillis()
-                    addRecentScript(name)
-                    if (ballView == null) {
-                        showBall()
-                    }
-                    updateStatus(STATUS_RUNNING)
-                } else {
-                    if (ballView == null) {
-                        showBall()
-                        updateStatus(STATUS_IDLE)
-                    }
-                }
+                handleShowIntent(intent)
             }
             ACTION_HIDE -> {
                 hideAll()
@@ -150,11 +144,58 @@ class FloatingBallService : Service() {
     // Show / Hide
     // ═══════════════════════════════════════════════════════════
 
-    private fun showBall() {
-        if (ballView != null) return
+    private fun handleShowIntent(intent: Intent) {
+        val receiver = showResultReceiver(intent)
+        try {
+            val name = intent.getStringExtra(EXTRA_SCRIPT_NAME) ?: ""
+            showBall()
+            if (name.isNotEmpty()) {
+                scriptName = name
+                startTime = System.currentTimeMillis()
+                addRecentScript(name)
+                updateStatus(STATUS_RUNNING)
+            } else {
+                scriptName = ""
+                startTime = 0L
+                updateStatus(STATUS_IDLE)
+            }
+            revealBall(5000L)
+            reportShowResult(receiver, success = true)
+        } catch (e: Exception) {
+            Log.w("FloatingBallService", "Failed to show floating ball", e)
+            reportShowResult(
+                receiver,
+                success = false,
+                message = "悬浮球显示失败: ${e.message ?: e.javaClass.simpleName}"
+            )
+        }
+    }
 
-        ballView = createBallView()
-        ballParams = WindowManager.LayoutParams(
+    @Suppress("DEPRECATION")
+    private fun showResultReceiver(intent: Intent): ResultReceiver? {
+        return intent.getParcelableExtra(EXTRA_RESULT_RECEIVER)
+    }
+
+    private fun reportShowResult(
+        receiver: ResultReceiver?,
+        success: Boolean,
+        message: String = ""
+    ) {
+        val data = Bundle().apply {
+            putString(EXTRA_RESULT_MESSAGE, message)
+        }
+        receiver?.send(if (success) RESULT_SHOW_OK else RESULT_SHOW_ERROR, data)
+    }
+
+    private fun showBall() {
+        ballView?.let { existingView ->
+            if (existingView.isAttachedToWindow && ballParams != null) return
+            removeBall()
+            isCollapsed = true
+        }
+
+        val view = createBallView()
+        val params = WindowManager.LayoutParams(
             ballSizePx, ballSizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -166,11 +207,15 @@ class FloatingBallService : Service() {
         }
 
         try {
-            windowManager?.addView(ballView, ballParams)
-            timerHandler.postDelayed({ snapToEdge() }, 100)
-        } catch (_: Exception) {
-            ballView = null
-            ballParams = null
+            windowManager?.addView(view, params)
+                ?: throw IllegalStateException("WindowManager 不可用")
+            ballView = view
+            ballParams = params
+            isCollapsed = false
+        } catch (e: Exception) {
+            removeBall()
+            isCollapsed = true
+            throw e
         }
     }
 
@@ -432,13 +477,19 @@ class FloatingBallService : Service() {
             ?.start()
     }
 
-    private fun expandFromEdge() {
+    private fun revealBall(collapseDelayMs: Long = 5000L) {
+        ballView ?: return
+        cancelCollapse()
         isCollapsed = false
         ballView?.animate()
             ?.translationX(0f)
             ?.setDuration(160)
             ?.start()
-        scheduleCollapse(3000L)
+        scheduleCollapse(collapseDelayMs)
+    }
+
+    private fun expandFromEdge() {
+        revealBall(3000L)
     }
 
     // ═══════════════════════════════════════════════════════════

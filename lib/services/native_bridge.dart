@@ -498,6 +498,11 @@ class NativeBridge {
     return result?.toString() ?? '';
   }
 
+  /// 直接安装指定路径的 APK 文件
+  Future<void> installApkFile(String filePath) async {
+    await _invoke('installApkFile', {'filePath': filePath});
+  }
+
   Map<String, String> _stringMap(dynamic result) {
     final map = result as Map;
     return map.map((k, v) => MapEntry(k.toString(), v.toString()));

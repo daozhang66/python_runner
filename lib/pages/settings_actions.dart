@@ -12,8 +12,8 @@ extension _SettingsActions on _SettingsPageState {
     setState(() {
       _mirrorController.text = prefs.getString('pypi_index_url') ?? '';
       _timeout = prefs.getInt('execution_timeout') ?? 60;
-      _exportDirController.text = prefs.getString('export_dir') ?? '';
-      _workingDirController.text = prefs.getString('working_dir') ?? '';
+      _exportDir = prefs.getString('export_dir');
+      _workingDir = prefs.getString('working_dir');
       _netDebugMode = prefs.getBool('net_debug_mode') ?? false;
       _netAllowInsecure = prefs.getBool('net_allow_insecure') ?? false;
       _proxyHostController.text = prefs.getString('net_proxy_host') ?? '';
@@ -23,13 +23,6 @@ extension _SettingsActions on _SettingsPageState {
       _overrideEnabled = overrideCfg.overrideEnabled;
       _recordRequests = overrideCfg.recordRequests;
       _recordResponseBody = overrideCfg.recordResponseBody;
-      _globalUaController.text = overrideCfg.globalUserAgent;
-      _globalHeadersController.text = overrideCfg.globalHeaders;
-      _globalCookieController.text = overrideCfg.globalCookie;
-      _defaultHttpTimeout = overrideCfg.defaultTimeout;
-      _followRedirects = overrideCfg.followRedirects;
-      _forceProxy = overrideCfg.forceProxy;
-      _requestConfigError = overrideCfg.configError;
       _autoCheckUpdates = autoCheckUpdates;
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
       _runtimeBackend = RuntimeManager.normalizePreferredBackendId(
@@ -47,6 +40,133 @@ extension _SettingsActions on _SettingsPageState {
     } catch (_) {}
   }
 
+  Future<void> _setFloatingBallEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!enabled) {
+      await prefs.setBool('floating_ball_enabled', false);
+      if (!mounted) return;
+      setState(() {
+        _floatingBallEnabled = false;
+        _waitingForFloatingBallPermission = false;
+      });
+      await legacy_provider.Provider.of<ExecutionProvider>(
+        context,
+        listen: false,
+      ).syncFloatingBallVisibility();
+      return;
+    }
+
+    var hasPermission = false;
+    try {
+      hasPermission = await _bridge.checkOverlayPermission();
+    } catch (_) {}
+
+    if (!hasPermission) {
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('需要悬浮窗权限'),
+          content: const Text('悬浮球需要「显示在其他应用上层」权限。\n\n'
+              '点击确认后，请在系统设置中开启此权限，返回应用后会自动显示悬浮球。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('去设置'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      await prefs.setBool('floating_ball_enabled', true);
+      if (!mounted) return;
+      setState(() {
+        _floatingBallEnabled = true;
+        _waitingForFloatingBallPermission = true;
+      });
+      await _bridge.requestOverlayPermission();
+      return;
+    }
+
+    await prefs.setBool('floating_ball_enabled', true);
+    if (!mounted) return;
+    setState(() {
+      _floatingBallEnabled = true;
+      _waitingForFloatingBallPermission = false;
+    });
+    await _syncFloatingBallNow();
+  }
+
+  Future<void> _syncFloatingBallAfterPermissionReturn() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('floating_ball_enabled') ?? false;
+    if (!enabled && !_waitingForFloatingBallPermission) return;
+
+    var hasPermission = false;
+    try {
+      hasPermission = await _bridge.checkOverlayPermission();
+    } catch (_) {}
+
+    if (!mounted) return;
+    if (!hasPermission) {
+      final executionProvider = legacy_provider.Provider.of<ExecutionProvider>(
+        context,
+        listen: false,
+      );
+      final messenger = ScaffoldMessenger.of(context);
+      await prefs.setBool('floating_ball_enabled', false);
+      setState(() {
+        _floatingBallEnabled = false;
+        _waitingForFloatingBallPermission = false;
+      });
+      await executionProvider.syncFloatingBallVisibility();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('未授予悬浮窗权限，悬浮球已关闭')),
+      );
+      return;
+    }
+
+    setState(() {
+      _floatingBallEnabled = true;
+      _waitingForFloatingBallPermission = false;
+    });
+    await _syncFloatingBallNow();
+  }
+
+  Future<void> _syncFloatingBallNow() async {
+    final executionProvider = legacy_provider.Provider.of<ExecutionProvider>(
+      context,
+      listen: false,
+    );
+    try {
+      await executionProvider.syncFloatingBallVisibility(throwOnError: true);
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      if (!mounted || !_floatingBallEnabled) return;
+      await executionProvider.syncFloatingBallVisibility(throwOnError: true);
+    } catch (e) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('floating_ball_enabled', false);
+      await executionProvider.syncFloatingBallVisibility();
+      if (!mounted) return;
+      setState(() {
+        _floatingBallEnabled = false;
+        _waitingForFloatingBallPermission = false;
+      });
+      final message = e is NativeBridgeException ? e.message : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('悬浮球显示失败：$message')),
+      );
+    }
+  }
+
   Future<void> _saveRuntimeBackend(String backendId) async {
     final normalizedBackendId =
         RuntimeManager.normalizePreferredBackendId(backendId);
@@ -55,7 +175,6 @@ extension _SettingsActions on _SettingsPageState {
     if (normalizedBackendId == RuntimeManager.linuxLikeBackendId &&
         !_linuxLikeAvailable) {
       if (!mounted) return;
-      setState(() => _engineDropdownKey++); // Force dropdown widget to recreate
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Linux-like 未安装，请先点击下方「安装/修复」按钮'),
@@ -78,71 +197,53 @@ extension _SettingsActions on _SettingsPageState {
     );
   }
 
-  Future<void> _installLinuxLikeRuntime() async {
-    if (_installingLinuxLike) return;
-    setState(() {
-      _installingLinuxLike = true;
-      _installStage = 'manifest';
-      _installPercent = 0;
-      _installMessage = '获取版本信息...';
-    });
+  Future<void> _showRuntimeBackendPicker() async {
+    final selected = await showDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          final enableBlur =
+              ref.watch(themeProvider.select((s) => s.enableBlurEffect));
+          final dialog = AlertDialog(
+            backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
+            surfaceTintColor: Colors.transparent,
+            title: const Text('选择运行引擎'),
+            contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RadioListTile<String>(
+                  value: RuntimeManager.chaquopyBackendId,
+                  groupValue: _runtimeBackend,
+                  title: const Text('Chaquopy（默认）'),
+                  subtitle: const Text('基于 Python 官方实现，稳定可靠'),
+                  onChanged: (value) => Navigator.pop(ctx, value),
+                ),
+                RadioListTile<String>(
+                  value: RuntimeManager.linuxLikeBackendId,
+                  groupValue: _runtimeBackend,
+                  title: const Text('Linux-like（实验）'),
+                  subtitle: const Text('Debian 环境，支持更多包'),
+                  onChanged: (value) => Navigator.pop(ctx, value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+            ],
+          );
 
-    // Listen to real-time progress from Kotlin
-    _installProgressSub?.cancel();
-    _installProgressSub = _bridge.installProgressStream.listen((event) {
-      if (!mounted) return;
-      final status = event['status']?.toString() ?? '';
-      final message = event['message']?.toString() ?? '';
-      int percent = _installPercent;
-      final pctMatch = RegExp(r'(\d+)%').firstMatch(message);
-      if (pctMatch != null) {
-        percent = int.parse(pctMatch.group(1)!);
-      }
-      setState(() {
-        _installStage = status;
-        _installPercent = percent;
-        _installMessage = message;
-      });
-    });
+          return appDialogFrame(enableBlur: enableBlur, child: dialog);
+        },
+      ),
+    );
 
-    try {
-      final info = await _bridge.installLinuxLikeRuntime();
-      await RuntimeManager.savePreferredBackendId(
-        RuntimeManager.linuxLikeBackendId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _installingLinuxLike = false;
-        _runtimeBackend = RuntimeManager.linuxLikeBackendId;
-        _linuxLikeAvailable = info['available'] == 'true';
-        _installStage = '';
-        _installPercent = 100;
-        _installMessage = '';
-      });
-
-      final message = info['available'] == 'true'
-          ? 'Linux-like 开发版已安装'
-          : (info['message'] ?? 'Linux-like 安装完成，但暂不可用');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _installingLinuxLike = false;
-        _installStage = '';
-        _installPercent = 0;
-        _installMessage = '';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Linux-like 安装失败: $e'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } finally {
-      _installProgressSub?.cancel();
-      _installProgressSub = null;
+    if (selected != null && selected != _runtimeBackend) {
+      await _saveRuntimeBackend(selected);
     }
   }
 
@@ -256,48 +357,52 @@ extension _SettingsActions on _SettingsPageState {
   }
 
   Future<void> _pickExportDir() async {
-    final dir = await FilePicker.getDirectoryPath();
-    if (dir == null) return;
-    _exportDirController.text = dir;
-    await _saveExportDir();
-  }
+    final result = await AppFilePickerPage.pickFolder(
+      context,
+      title: '选择脚本导出目录',
+    );
 
-  Future<void> _saveExportDir() async {
-    final prefs = await SharedPreferences.getInstance();
-    final dir = _exportDirController.text.trim();
-    if (dir.isEmpty) {
-      await prefs.remove('export_dir');
-    } else {
-      await prefs.setString('export_dir', dir);
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('导出目录已保存'), duration: Duration(seconds: 1)),
-      );
+    if (result != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('export_dir', result.path);
+
+      setState(() {
+        _exportDir = result.path;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('导出目录已设置'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _pickWorkingDir() async {
-    final dir = await FilePicker.getDirectoryPath();
-    if (dir == null) return;
-    _workingDirController.text = dir;
-    await _saveWorkingDir();
-  }
+    final result = await AppFilePickerPage.pickFolder(
+      context,
+      title: '选择工作目录',
+    );
 
-  Future<void> _saveWorkingDir() async {
-    final prefs = await SharedPreferences.getInstance();
-    final dir = _workingDirController.text.trim();
-    if (dir.isEmpty) {
-      await prefs.remove('working_dir');
-    } else {
-      await prefs.setString('working_dir', dir);
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('工作目录已保存'), duration: Duration(seconds: 1)),
-      );
+    if (result != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('working_dir', result.path);
+
+      setState(() {
+        _workingDir = result.path;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('工作目录已设置'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -399,37 +504,6 @@ extension _SettingsActions on _SettingsPageState {
     }
   }
 
-  Future<void> _clearSystemLogs() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('清空系统日志'),
-        content: const Text('确定要清空所有系统日志和崩溃日志吗？此操作不可撤销。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('清空',
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await AppLogger.instance.clearAll();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('系统日志已清空'), duration: Duration(seconds: 1)),
-      );
-    }
-  }
-
   void _openAboutPage() {
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => const _AboutPage()));
@@ -456,87 +530,5 @@ extension _SettingsActions on _SettingsPageState {
       context,
       MaterialPageRoute(builder: (_) => UpdateLogPage()),
     );
-  }
-
-  Future<void> _showThemeModePicker() async {
-    final selected = await showDialog<ThemeMode>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('选择主题模式'),
-        content: RadioGroup<ThemeMode>(
-          groupValue: widget.currentThemeMode,
-          onChanged: (value) => Navigator.pop(ctx, value),
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<ThemeMode>(
-                value: ThemeMode.light,
-                title: Text('浅色'),
-                secondary: Icon(Icons.light_mode),
-              ),
-              RadioListTile<ThemeMode>(
-                value: ThemeMode.system,
-                title: Text('跟随系统'),
-                secondary: Icon(Icons.auto_mode),
-              ),
-              RadioListTile<ThemeMode>(
-                value: ThemeMode.dark,
-                title: Text('深色'),
-                secondary: Icon(Icons.dark_mode),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected != null) {
-      widget.onThemeChanged(selected);
-    }
-  }
-
-  Future<void> _showThemePalettePicker() async {
-    if (widget.currentMaterialYouEnabled) return;
-    final selected = await showDialog<AppThemePalette>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('选择配色方案'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: RadioGroup<AppThemePalette>(
-            groupValue: widget.currentThemePalette,
-            onChanged: (value) => Navigator.pop(ctx, value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: AppThemePalette.values.map((palette) {
-                final subtitle = palette.darkOnly
-                    ? '${palette.description}（仅深色）'
-                    : palette.description;
-                return RadioListTile<AppThemePalette>(
-                  value: palette,
-                  title: Text(palette.label),
-                  subtitle: Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  secondary: CircleAvatar(
-                    radius: 10,
-                    backgroundColor: palette.previewColor,
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (selected != null) {
-      widget.onThemePaletteChanged(selected);
-    }
   }
 }

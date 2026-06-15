@@ -2,7 +2,7 @@ name: python_runner
 description: "Python运行器 - Android端Python脚本运行环境"
 publish_to: 'none'
 
-version: 1.5.4+28
+version: 1.5.5+29
 
 environment:
   sdk: ^3.5.0
@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.9
+  # HTTP 库（用于下载）
+  dio: ^5.7.0
   # 代码编辑器（虚拟化渲染，高性能）
   re_editor:
     path: third_party/re_editor
@@ -29,12 +31,17 @@ dependencies:
   path: ^1.9.0
   # 状态管理
   provider: ^6.1.2
+  flutter_riverpod: ^2.6.1
   # 时间格式化
   intl: ^0.20.2
   # 权限管理
   permission_handler: ^12.0.3
   dynamic_color: ^1.8.1
   flutter_reorderable_grid_view: ^5.7.0
+  # Markdown 渲染
+  flutter_markdown: ^0.7.4+1
+  # URL 启动器
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -46,3 +53,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/python_hooks/
+
+  fonts:
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSansVF.ttf
+

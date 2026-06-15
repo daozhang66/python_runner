@@ -83,16 +83,38 @@ class _ScriptFolderCard extends StatelessWidget {
             : Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
-                      color: AppThemeColors.isDark(context)
-                          ? colors.surfaceContainerHigh
-                          : colors.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: AppThemeColors.isDark(context)
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                colors.primaryContainer.withValues(alpha: 0.2),
+                                colors.primaryContainer.withValues(alpha: 0.1),
+                              ],
+                            )
+                          : LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                colors.primaryContainer,
+                                colors.primaryContainer.withValues(alpha: 0.7),
+                              ],
+                            ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.primary.withValues(alpha: 0.08),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Icon(
                       icon,
+                      size: 26,
                       color: AppThemeColors.isDark(context)
                           ? AppThemeColors.softIconColor(context, colors)
                           : colors.onPrimaryContainer,
@@ -208,7 +230,8 @@ class _ScriptGridCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _ScriptIcon(colors: colors, size: 36, fontSize: 13),
+                      _ScriptIcon(
+                          colors: colors, size: 36, fontSize: 13, pinned: pinned),
                       const Spacer(),
                       if (pinned && selected == null)
                         _PinnedBadge(colors: colors),
@@ -349,6 +372,14 @@ class _ScriptCardSurface extends StatelessWidget {
           ),
           width: AppThemeColors.isDark(context) ? 0.8 : 1,
         ),
+        boxShadow: [
+          if (!AppThemeColors.isDark(context))
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Material(
@@ -363,22 +394,65 @@ class _ScriptIcon extends StatelessWidget {
   final ColorScheme colors;
   final double size;
   final double fontSize;
+  final bool pinned;
 
   const _ScriptIcon({
     required this.colors,
     required this.size,
     this.fontSize = 15,
+    this.pinned = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = AppThemeColors.isDark(context);
+
+    // 置顶状态使用更高对比度的颜色
+    final gradient = pinned
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+                    colors.primary.withValues(alpha: 0.25),
+                    colors.primary.withValues(alpha: 0.15),
+                  ]
+                : [
+                    colors.primary.withValues(alpha: 0.18),
+                    colors.primary.withValues(alpha: 0.12),
+                  ],
+          )
+        : (isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  colors.surfaceContainerHigh,
+                  colors.surfaceContainer,
+                ],
+              )
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  colors.primaryContainer,
+                  colors.primaryContainer.withValues(alpha: 0.8),
+                ],
+              ));
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: isDark ? colors.surfaceContainerHigh : colors.primaryContainer,
+        gradient: gradient,
         borderRadius: BorderRadius.circular(size * 0.28),
+        boxShadow: [
+          BoxShadow(
+            color: colors.primary.withValues(alpha: isDark ? 0.05 : 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       alignment: Alignment.center,
       child: Text(
@@ -386,9 +460,11 @@ class _ScriptIcon extends StatelessWidget {
         style: TextStyle(
           fontSize: fontSize,
           fontWeight: FontWeight.w700,
-          color: isDark
-              ? colors.primary.withValues(alpha: 0.88)
-              : colors.onPrimaryContainer,
+          color: pinned
+              ? colors.primary.withValues(alpha: 0.95)
+              : (isDark
+                  ? colors.primary.withValues(alpha: 0.88)
+                  : colors.onPrimaryContainer),
         ),
       ),
     );

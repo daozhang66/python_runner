@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as legacy_provider;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -12,12 +13,14 @@ import 'services/native_bridge.dart';
 import 'services/database_service.dart';
 import 'services/app_logger.dart';
 import 'services/app_update_manager.dart';
+import 'services/download_service.dart';
 import 'services/http_inspector_store.dart';
 import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
 import 'providers/script_provider.dart';
 import 'providers/execution_provider.dart';
 import 'providers/package_provider.dart' show PackageProvider;
+import 'providers/theme_provider.dart';
 import 'pages/script_list_page.dart';
 import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
@@ -38,6 +41,10 @@ void main() async {
   await logger.init();
   logger.info('App starting', source: 'main');
 
+  // Initialize download service
+  DownloadService.instance.initialize();
+  logger.info('DownloadService initialized', source: 'main');
+
   // Load network debug config
   await NetworkDebugConfig.instance.load();
 
@@ -47,6 +54,9 @@ void main() async {
   // Restore persisted HTTP inspector records before the UI starts.
   final httpInspectorStore = HttpInspectorStore.instance;
   await httpInspectorStore.ensureLoaded();
+
+  // Load SharedPreferences for Riverpod
+  final prefs = await SharedPreferences.getInstance();
 
   // Global Flutter framework error handler
   FlutterError.onError = (details) {
@@ -77,14 +87,23 @@ void main() async {
   runZonedGuarded(
     () {
       runApp(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) => ScriptProvider(bridge, db)),
-            ChangeNotifierProvider(create: (_) => ExecutionProvider(bridge)),
-            ChangeNotifierProvider(create: (_) => PackageProvider(bridge)),
-            ChangeNotifierProvider.value(value: httpInspectorStore),
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
           ],
-          child: const PythonRunnerApp(),
+          child: legacy_provider.MultiProvider(
+            providers: [
+              legacy_provider.ChangeNotifierProvider(
+                  create: (_) => ScriptProvider(bridge, db)),
+              legacy_provider.ChangeNotifierProvider(
+                  create: (_) => ExecutionProvider(bridge)),
+              legacy_provider.ChangeNotifierProvider(
+                  create: (_) => PackageProvider(bridge)),
+              legacy_provider.ChangeNotifierProvider.value(
+                  value: httpInspectorStore),
+            ],
+            child: const PythonRunnerApp(),
+          ),
         ),
       );
     },
@@ -99,14 +118,14 @@ void main() async {
   );
 }
 
-class PythonRunnerApp extends StatefulWidget {
+class PythonRunnerApp extends ConsumerStatefulWidget {
   const PythonRunnerApp({super.key});
 
   @override
-  State<PythonRunnerApp> createState() => _PythonRunnerAppState();
+  ConsumerState<PythonRunnerApp> createState() => _PythonRunnerAppState();
 }
 
-class _PythonRunnerAppState extends State<PythonRunnerApp>
+class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
     with WidgetsBindingObserver {
   static const _lightSystemUiOverlayStyle = SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -125,9 +144,6 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     systemNavigationBarContrastEnforced: false,
   );
 
-  ThemeMode _themeMode = ThemeMode.system;
-  bool _materialYouEnabled = true;
-  AppThemePalette _themePalette = AppThemePalette.ocean;
   ThemeData? _cachedLightTheme;
   ThemeData? _cachedDarkTheme;
   ColorScheme? _cachedLightScheme;
@@ -137,7 +153,6 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadTheme();
   }
 
   void _flushHttpInspectorRecords() {
@@ -147,7 +162,9 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(context.read<ExecutionProvider>().syncFloatingBallVisibility());
+      unawaited(
+          legacy_provider.Provider.of<ExecutionProvider>(context, listen: false)
+              .syncFloatingBallVisibility());
     }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
@@ -157,49 +174,17 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     }
   }
 
-  Future<void> _loadTheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    final mode = prefs.getString('theme_mode') ?? 'system';
-    setState(() {
-      _themeMode = ThemeMode.values
-          .firstWhere((e) => e.name == mode, orElse: () => ThemeMode.system);
-      _materialYouEnabled = prefs.getBool('material_you_enabled') ?? false;
-      _themePalette = AppThemePalette.fromKey(prefs.getString('theme_palette'));
-    });
-  }
-
-  Future<void> _setTheme(ThemeMode mode) async {
-    if (_themePalette.darkOnly && mode != ThemeMode.dark) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_mode', mode.name);
-    setState(() => _themeMode = mode);
-  }
-
-  Future<void> _setMaterialYouEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('material_you_enabled', enabled);
-    setState(() => _materialYouEnabled = enabled);
-  }
-
-  Future<void> _setThemePalette(AppThemePalette palette) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_palette', palette.key);
-    setState(() {
-      _themePalette = palette;
-      _cachedLightTheme = null;
-      _cachedDarkTheme = null;
-      _cachedLightScheme = null;
-      _cachedDarkScheme = null;
-    });
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  ThemeData _buildTheme(ColorScheme colorScheme) {
+  ThemeData _buildTheme(
+    ColorScheme colorScheme,
+    AppThemePalette? selectedPreset,
+    String? fontFamily,
+  ) {
     final isDark = colorScheme.brightness == Brightness.dark;
     final cachedTheme = isDark ? _cachedDarkTheme : _cachedLightTheme;
     final cachedScheme = isDark ? _cachedDarkScheme : _cachedLightScheme;
@@ -208,7 +193,8 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       return cachedTheme;
     }
 
-    final isHandCraftedDark = isDark && !_themePalette.isSeedBased;
+    final isHandCraftedDark =
+        isDark && selectedPreset != null && !selectedPreset.isSeedBased;
     final bgColor = isHandCraftedDark
         ? colorScheme.surface
         : (isDark
@@ -233,12 +219,16 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
     final theme = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      fontFamily: fontFamily,
       scaffoldBackgroundColor: bgColor,
       canvasColor: isDark ? bgColor : null,
       cardTheme: CardThemeData(
         elevation: 0,
         color: cardColor,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.cardHorizontal,
+          vertical: AppSpacing.cardVertical,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xl),
           side: BorderSide(color: borderColor),
@@ -251,6 +241,12 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
         backgroundColor: isDark ? bgColor : colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
+        shape: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
+        ),
       ),
       tabBarTheme: TabBarThemeData(
         dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.32),
@@ -266,11 +262,14 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
       ),
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
-        height: 60,
+        height: 68,
         backgroundColor:
             isDark ? bgColor : AppThemeColors.cardSurface(colorScheme),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         indicatorColor: navIndicator,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
@@ -432,29 +431,64 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
 
   @override
   Widget build(BuildContext context) {
+    final themeState = ref.watch(themeProvider);
+    final themeNotifier = ref.read(themeProvider.notifier);
+
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        final lightScheme = _materialYouEnabled &&
-                lightDynamic != null &&
-                _themePalette.isSeedBased
-            ? lightDynamic
-            : (_themePalette.handCraftedScheme(Brightness.light) ??
-                ColorScheme.fromSeed(
-                    seedColor: _themePalette.lightSeed!,
-                    brightness: Brightness.light));
-        final darkScheme = _materialYouEnabled &&
-                darkDynamic != null &&
-                _themePalette.isSeedBased
-            ? darkDynamic
-            : (_themePalette.handCraftedScheme(Brightness.dark) ??
-                ColorScheme.fromSeed(
-                    seedColor: _themePalette.darkSeed!,
-                    brightness: Brightness.dark));
+        // 更新动态颜色到 provider
+        if (themeState.useDynamicColor && lightDynamic != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            themeNotifier.setDynamicPrimary(lightDynamic.primary);
+          });
+        }
+
+        // 决定 ColorScheme
+        final ColorScheme lightScheme;
+        final ColorScheme darkScheme;
+
+        if (themeState.useDynamicColor &&
+            lightDynamic != null &&
+            darkDynamic != null) {
+          // Material You 模式
+          lightScheme = ColorScheme.fromSeed(
+            seedColor: lightDynamic.primary,
+            brightness: Brightness.light,
+            dynamicSchemeVariant: themeState.schemeVariant,
+          );
+          darkScheme = ColorScheme.fromSeed(
+            seedColor: darkDynamic.primary,
+            brightness: Brightness.dark,
+            dynamicSchemeVariant: themeState.schemeVariant,
+          );
+        } else if (themeState.selectedPreset != null &&
+            !themeState.selectedPreset!.isSeedBased) {
+          // 手工主题（VS Code、GitHub Dark 等）
+          lightScheme =
+              themeState.selectedPreset!.handCraftedScheme(Brightness.light)!;
+          darkScheme =
+              themeState.selectedPreset!.handCraftedScheme(Brightness.dark)!;
+        } else {
+          // Seed-based 主题
+          lightScheme = ColorScheme.fromSeed(
+            seedColor: themeState.seedColor,
+            brightness: Brightness.light,
+            dynamicSchemeVariant: themeState.schemeVariant,
+          );
+          darkScheme = ColorScheme.fromSeed(
+            seedColor: themeState.seedColor,
+            brightness: Brightness.dark,
+            dynamicSchemeVariant: themeState.schemeVariant,
+          );
+        }
+
+        final isDarkOnly = themeState.selectedPreset?.darkOnly ?? false;
+
         return MaterialApp(
           navigatorKey: appNavigatorKey,
           title: 'Python运行器',
           debugShowCheckedModeBanner: false,
-          themeMode: _themePalette.darkOnly ? ThemeMode.dark : _themeMode,
+          themeMode: isDarkOnly ? ThemeMode.dark : themeState.mode,
           builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -474,17 +508,19 @@ class _PythonRunnerAppState extends State<PythonRunnerApp>
             Locale('en', 'US'),
           ],
           locale: const Locale('zh', 'CN'),
-          theme: _buildTheme(lightScheme),
-          darkTheme: _buildTheme(darkScheme),
+          theme: _buildTheme(
+            lightScheme,
+            themeState.selectedPreset,
+            themeState.fontFamilyName,
+          ),
+          darkTheme: _buildTheme(
+            darkScheme,
+            themeState.selectedPreset,
+            themeState.fontFamilyName,
+          ),
           home: SplashGate(
             child: HomePage(
-              onThemeChanged: _setTheme,
-              currentThemeMode:
-                  _themePalette.darkOnly ? ThemeMode.dark : _themeMode,
-              onThemePaletteChanged: _setThemePalette,
-              currentThemePalette: _themePalette,
-              onMaterialYouChanged: _setMaterialYouEnabled,
-              currentMaterialYouEnabled: _materialYouEnabled,
+              currentThemeMode: isDarkOnly ? ThemeMode.dark : themeState.mode,
             ),
           ),
         );
@@ -744,21 +780,11 @@ class _SplashGateState extends State<SplashGate>
 }
 
 class HomePage extends StatefulWidget {
-  final ValueChanged<ThemeMode> onThemeChanged;
   final ThemeMode currentThemeMode;
-  final ValueChanged<AppThemePalette> onThemePaletteChanged;
-  final AppThemePalette currentThemePalette;
-  final ValueChanged<bool> onMaterialYouChanged;
-  final bool currentMaterialYouEnabled;
 
   const HomePage({
     super.key,
-    required this.onThemeChanged,
     required this.currentThemeMode,
-    required this.onThemePaletteChanged,
-    required this.currentThemePalette,
-    required this.onMaterialYouChanged,
-    required this.currentMaterialYouEnabled,
   });
 
   @override
@@ -774,7 +800,12 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(context.read<ExecutionProvider>().syncFloatingBallVisibility());
+      unawaited(
+        legacy_provider.Provider.of<ExecutionProvider>(
+          context,
+          listen: false,
+        ).syncFloatingBallVisibility(),
+      );
       _checkForUpdatesOnLaunch();
       // When floating ball triggers a script, switch to script tab and open console page
       ExecutionProvider.setNavigateToConsoleHandler((scriptName) {
@@ -800,9 +831,67 @@ class _HomePageState extends State<HomePage> {
 
   void _selectTab(int index) {
     if (index == 2) {
-      unawaited(context.read<PackageProvider>().ensurePackagesLoaded());
+      unawaited(
+        legacy_provider.Provider.of<PackageProvider>(
+          context,
+          listen: false,
+        ).ensurePackagesLoaded(),
+      );
     }
     setState(() => _currentIndex = index);
+  }
+
+  Widget _buildBottomNavigation(ColorScheme colors) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark
+        ? colors.surfaceContainerHigh
+        : Color.alphaBlend(
+            colors.surfaceContainerHighest.withValues(alpha: 0.34),
+            colors.surface,
+          );
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border(
+          top: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: isDark ? 0.55 : 0.5),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: NavigationBar(
+        backgroundColor: Colors.transparent,
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _selectTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.code_outlined),
+            selectedIcon: Icon(Icons.code),
+            label: '脚本',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.http_outlined),
+            selectedIcon: Icon(Icons.http),
+            label: '网络',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: '库管理',
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkForUpdatesOnLaunch() async {
@@ -838,12 +927,7 @@ class _HomePageState extends State<HomePage> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => SettingsPage(
-                    onThemeChanged: widget.onThemeChanged,
                     currentThemeMode: widget.currentThemeMode,
-                    onThemePaletteChanged: widget.onThemePaletteChanged,
-                    currentThemePalette: widget.currentThemePalette,
-                    onMaterialYouChanged: widget.onMaterialYouChanged,
-                    currentMaterialYouEnabled: widget.currentMaterialYouEnabled,
                   ),
                   fullscreenDialog: true,
                 ),
@@ -853,15 +937,8 @@ class _HomePageState extends State<HomePage> {
             const PackageManagerPage(),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: _selectTab,
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.code), label: '脚本'),
-            NavigationDestination(icon: Icon(Icons.http), label: '网络'),
-            NavigationDestination(
-                icon: Icon(Icons.inventory_2_outlined), label: '库管理'),
-          ],
+        bottomNavigationBar: _buildBottomNavigation(
+          Theme.of(context).colorScheme,
         ),
       ),
     );

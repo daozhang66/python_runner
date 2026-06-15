@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,6 +18,14 @@ class _FakeUpdateService extends UpdateService {
 }
 
 void main() {
+  test('expanded release notes stay full width and left aligned', () {
+    final source = File('lib/pages/update_log_page.dart').readAsStringSync();
+
+    expect(source, contains('alignment: Alignment.centerLeft'));
+    expect(source, contains('width: double.infinity'));
+    expect(source, contains('MarkdownBody('));
+  });
+
   testWidgets('update log page lists filters and expands release notes',
       (tester) async {
     final openedUrls = <String>[];

@@ -48,8 +48,8 @@ void main() {
     final source = File('lib/main.dart').readAsStringSync();
 
     expect(source, contains('void _selectTab(int index)'));
-    expect(source,
-        contains('context.read<PackageProvider>().ensurePackagesLoaded()'));
+    expect(source, contains('Provider.of<PackageProvider>'));
+    expect(source, contains('ensurePackagesLoaded()'));
     expect(source, contains('onDestinationSelected: _selectTab'));
   });
 }

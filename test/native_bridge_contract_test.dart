@@ -61,6 +61,15 @@ void main() {
     );
   });
 
+  test('Dart contract allows idle floating ball without script name', () {
+    expect(
+      () => NativeBridgeContract.validate('showFloatingBall', {
+        'scriptName': '',
+      }),
+      returnsNormally,
+    );
+  });
+
   test('NativeBridge converts contract errors to stable exception code',
       () async {
     final bridge = NativeBridge();
@@ -89,6 +98,7 @@ void main() {
       }
     }
     expect(source, contains('ERROR_CODE = "1000"'));
+    expect(source, contains('"showFloatingBall.scriptName"'));
     expect(source, contains('requires non-empty string argument'));
     expect(source, contains('valid SHA-256 checksum'));
   });

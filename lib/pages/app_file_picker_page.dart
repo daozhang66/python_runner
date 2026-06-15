@@ -4,11 +4,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_file_entry.dart';
 import '../services/native_bridge.dart';
 
+enum PickerMode {
+  file,   // 选择文件
+  folder, // 选择文件夹
+}
+
 class AppFilePickerPage extends StatefulWidget {
   final String title;
   final List<String> allowedExtensions;
   final String? exactFileName;
   final bool allowSystemPicker;
+  final PickerMode mode;
 
   const AppFilePickerPage({
     super.key,
@@ -16,6 +22,7 @@ class AppFilePickerPage extends StatefulWidget {
     this.allowedExtensions = const [],
     this.exactFileName,
     this.allowSystemPicker = true,
+    this.mode = PickerMode.file,
   });
 
   static Future<AppFilePickResult?> pickFile(
@@ -33,6 +40,23 @@ class AppFilePickerPage extends StatefulWidget {
           allowedExtensions: allowedExtensions,
           exactFileName: exactFileName,
           allowSystemPicker: allowSystemPicker,
+          mode: PickerMode.file,
+        ),
+      ),
+    );
+  }
+
+  static Future<AppFilePickResult?> pickFolder(
+    BuildContext context, {
+    required String title,
+  }) {
+    return Navigator.push<AppFilePickResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AppFilePickerPage(
+          title: title,
+          mode: PickerMode.folder,
+          allowSystemPicker: false,
         ),
       ),
     );
@@ -233,6 +257,20 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
           ),
           title: Text(widget.title),
           actions: [
+            if (widget.mode == PickerMode.folder && _currentPath != null)
+              TextButton.icon(
+                icon: const Icon(Icons.check, size: 20),
+                label: const Text('选择'),
+                onPressed: () {
+                  Navigator.pop(
+                    context,
+                    AppFilePickResult(
+                      path: _currentPath!,
+                      name: _currentPath!.split('/').last,
+                    ),
+                  );
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.home_outlined),
               tooltip: '内部存储',
@@ -366,17 +404,21 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
                               : null,
                           onTap: () async {
                             if (entry.isDirectory) {
+                              // 文件夹模式和文件模式：点击文件夹都是进入
                               _openDirectory(entry);
                             } else {
-                              await _rememberDirectoryFor(entry);
-                              if (!context.mounted) return;
-                              Navigator.pop(
-                                context,
-                                AppFilePickResult(
-                                  path: entry.path,
-                                  name: entry.name,
-                                ),
-                              );
+                              // 文件模式才能选择文件
+                              if (widget.mode == PickerMode.file) {
+                                await _rememberDirectoryFor(entry);
+                                if (!context.mounted) return;
+                                Navigator.pop(
+                                  context,
+                                  AppFilePickResult(
+                                    path: entry.path,
+                                    name: entry.name,
+                                  ),
+                                );
+                              }
                             }
                           },
                         );

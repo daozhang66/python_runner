@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/native_bridge.dart';
 import '../services/update_service.dart';
+import '../ui/app_design_tokens.dart';
 
 class UpdateLogPage extends StatefulWidget {
   final UpdateService updateService;
@@ -228,84 +231,229 @@ class _ReleaseLogCard extends StatelessWidget {
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
       ),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        shape: const Border(),
-        title: Row(
-          children: [
-            Text(
-              entry.tagName.isEmpty ? '未命名版本' : entry.tagName,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            if (entry.isPrerelease) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: colors.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(999),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              colors.surfaceContainerLow,
+              colors.surface,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          shape: const Border(),
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  colors.primaryContainer,
+                  colors.secondaryContainer,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.primary.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+            ),
+            child: Icon(
+              Icons.rocket_launch_rounded,
+              size: 24,
+              color: colors.onPrimaryContainer,
+            ),
+          ),
+          title: Row(
+            children: [
+              Flexible(
                 child: Text(
-                  '预发布',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: colors.onTertiaryContainer,
+                  entry.tagName.isEmpty ? '未命名版本' : entry.tagName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
                   ),
                 ),
               ),
-            ],
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.releaseName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _formatDate(entry.publishedAt),
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-              ),
+              if (entry.isPrerelease) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        colors.tertiaryContainer,
+                        colors.tertiaryContainer.withValues(alpha: 0.7),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(
+                      color: colors.tertiary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    '预发布',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: colors.onTertiaryContainer,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-        ),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectableText(
-              entry.hasReleaseNotes
-                  ? entry.releaseNotes.trim()
-                  : '当前发布没有填写更新说明。',
-              style: const TextStyle(fontSize: 13, height: 1.45),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (entry.releaseName.isNotEmpty)
+                  Text(
+                    entry.releaseName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.schedule,
+                        size: 12, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDate(entry.publishedAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Spacer(),
-              TextButton.icon(
-                onPressed: entry.htmlUrl.isEmpty ? null : onOpenRelease,
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('发布页'),
+          children: [
+            // Markdown 渲染区域
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: entry.hasReleaseNotes
+                      ? MarkdownBody(
+                          data: entry.releaseNotes.trim(),
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(fontSize: 13, height: 1.5),
+                            h1: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: colors.primary,
+                            ),
+                            h2: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: colors.primary,
+                            ),
+                            h3: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: colors.onSurface,
+                            ),
+                            listBullet: TextStyle(color: colors.primary),
+                            code: TextStyle(
+                              backgroundColor: colors.surfaceContainerHigh
+                                  .withValues(alpha: 0.8),
+                              color: colors.primary,
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            ),
+                            codeblockDecoration: BoxDecoration(
+                              color: colors.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            blockquote: TextStyle(
+                              color: colors.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            blockquoteDecoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: colors.primary,
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                          ),
+                          onTapLink: (text, href, title) {
+                            if (href != null) {
+                              launchUrl(Uri.parse(href),
+                                  mode: LaunchMode.externalApplication);
+                            }
+                          },
+                        )
+                      : Text(
+                          '当前发布没有填写更新说明。',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                ),
               ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Spacer(),
+                FilledButton.tonalIcon(
+                  onPressed: entry.htmlUrl.isEmpty ? null : onOpenRelease,
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('发布页'),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   String _formatDate(DateTime? dateTime) {
     if (dateTime == null) return '发布时间未知';
-    return DateFormat('yyyy-MM-dd HH:mm').format(dateTime.toLocal());
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+
+    if (diff.inDays == 0) {
+      return '今天 ${DateFormat('HH:mm').format(dateTime.toLocal())}';
+    } else if (diff.inDays == 1) {
+      return '昨天 ${DateFormat('HH:mm').format(dateTime.toLocal())}';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays} 天前';
+    } else {
+      return DateFormat('yyyy-MM-dd HH:mm').format(dateTime.toLocal());
+    }
   }
 }

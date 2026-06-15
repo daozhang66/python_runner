@@ -322,11 +322,10 @@ class ExecutionProvider extends ChangeNotifier {
       }
 
       // For project scripts or explicit Linux-like selection, fail-fast
-      if (isProject || preferredBackendId == RuntimeManager.linuxLikeBackendId) {
-        throw StateError(
-          'Linux-like 运行时未就绪: ${health.message}\n\n'
-          '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。'
-        );
+      if (isProject ||
+          preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+        throw StateError('Linux-like 运行时未就绪: ${health.message}\n\n'
+            '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
 
       _logger.warn(
@@ -336,11 +335,10 @@ class ExecutionProvider extends ChangeNotifier {
     } catch (e) {
       if (e is StateError) rethrow;
 
-      if (isProject || preferredBackendId == RuntimeManager.linuxLikeBackendId) {
-        throw StateError(
-          'Linux-like 运行时健康检查失败: $e\n\n'
-          '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。'
-        );
+      if (isProject ||
+          preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+        throw StateError('Linux-like 运行时健康检查失败: $e\n\n'
+            '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
 
       _logger.warn(
@@ -421,7 +419,8 @@ class ExecutionProvider extends ChangeNotifier {
         'TZ': tzValue,
       };
       if (preferredRuntimeBackendId != runtimeBackendId) {
-        final fallbackMsg = '⚠️ 运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId';
+        final fallbackMsg =
+            '⚠️ 运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId';
         _logger.warn(
           fallbackMsg,
           source: 'Execution',
@@ -707,14 +706,27 @@ class ExecutionProvider extends ChangeNotifier {
       if (hasPermission) {
         await _bridge.showFloatingBall(scriptName);
       }
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.error(
+        '悬浮球显示失败: $e',
+        source: 'FloatingBall',
+        detail: stackTrace.toString(),
+      );
+    }
   }
 
-  Future<void> syncFloatingBallVisibility() async {
+  Future<void> syncFloatingBallVisibility({bool throwOnError = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.error(
+        '读取悬浮球设置失败: $e',
+        source: 'FloatingBall',
+        detail: stackTrace.toString(),
+      );
+      if (throwOnError) rethrow;
+    }
     if (!_floatingBallEnabled) {
       await _hideFloatingBall();
       return;
@@ -726,7 +738,14 @@ class ExecutionProvider extends ChangeNotifier {
         await _bridge
             .showFloatingBall(isRunning ? (_currentScriptName ?? '') : '');
       }
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.error(
+        '同步悬浮球显示状态失败: $e',
+        source: 'FloatingBall',
+        detail: stackTrace.toString(),
+      );
+      if (throwOnError) rethrow;
+    }
   }
 
   bool _pollingPending = false;

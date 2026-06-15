@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../widgets/update_dialog.dart';
 import 'app_logger.dart';
+import 'download_service.dart';
 import 'http_inspector_store.dart';
 import 'native_bridge.dart';
 import 'network_debug_config.dart';
@@ -100,97 +103,35 @@ class AppUpdateManager {
   }) async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('发现新版本'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('当前版本：${updateInfo.currentVersion}'),
-                const SizedBox(height: 4),
-                Text('最新版本：${updateInfo.latestVersion}'),
-                if (updateInfo.publishedAt != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '发布时间：${DateFormat('yyyy-MM-dd HH:mm').format(updateInfo.publishedAt!.toLocal())}',
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const Text(
-                  '更新说明',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(dialogContext)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(
-                    updateInfo.releaseNotes.trim().isEmpty
-                        ? '当前发布没有填写更新说明。'
-                        : updateInfo.releaseNotes.trim(),
-                    style: const TextStyle(fontSize: 12, height: 1.45),
-                  ),
-                ),
-                if (updateInfo.apkAsset == null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    '这个发布没有上传 APK 资源，将打开 GitHub Release 页面。',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          Theme.of(dialogContext).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              if (rememberDismissal) {
+      barrierDismissible: false,
+      builder: (dialogContext) => UpdateDialog(
+        updateInfo: updateInfo,
+        onUpdate: () async {
+          if (dialogContext.mounted) {
+            Navigator.pop(dialogContext);
+          }
+          if (updateInfo.apkAsset == null) {
+            await _bridge.openUrl(updateInfo.htmlUrl);
+            return;
+          }
+          await _downloadAndInstallUpdate(context, updateInfo);
+        },
+        onCancel: () {
+          if (dialogContext.mounted) {
+            Navigator.pop(dialogContext);
+          }
+        },
+        onIgnore: rememberDismissal
+            ? () async {
                 await _rememberDismissedVersion(updateInfo.latestVersion);
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
               }
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-              }
-            },
-            child: const Text('稍后再说'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-              }
-              await _bridge.openUrl(updateInfo.htmlUrl);
-            },
-            child: const Text('发布页'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-              }
-              if (updateInfo.apkAsset == null) {
-                await _bridge.openUrl(updateInfo.htmlUrl);
-                return;
-              }
-              await _downloadAndInstallUpdate(context, updateInfo);
-            },
-            child: Text(updateInfo.apkAsset == null ? '打开页面' : '立即更新'),
-          ),
-        ],
+            : null,
+        onViewDetails: () async {
+          await _bridge.openUrl(updateInfo.htmlUrl);
+        },
       ),
     );
   }
@@ -277,12 +218,10 @@ class AppUpdateManager {
     final progressTextNotifier = ValueNotifier<String>('准备下载...');
     final statusTitleNotifier =
         ValueNotifier<String>('正在下载 v${updateInfo.latestVersion}');
-    final failedNotifier = ValueNotifier<bool>(false);
     final finished = Completer<void>();
-    StreamSubscription? progressSub;
-    String? taskId;
+    final startTime = DateTime.now();
+    CancelToken? cancelToken;
     var dialogOpen = false;
-    var installStarted = false;
 
     void completeOnce() {
       if (!finished.isCompleted) {
@@ -297,87 +236,10 @@ class AppUpdateManager {
       dialogOpen = false;
     }
 
-    Future<void> installCompletedTask(String completedTaskId) async {
-      if (installStarted) return;
-      installStarted = true;
-      statusTitleNotifier.value = '下载完成，正在打开安装器';
-      try {
-        await _bridge.installDownloadedApk(completedTaskId);
-        if (!context.mounted) return;
-        closeDialog();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('安装器已打开'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-        completeOnce();
-      } catch (error) {
-        installStarted = false;
-        failedNotifier.value = true;
-        statusTitleNotifier.value = '下载失败';
-        progressTextNotifier.value = '安装失败：${_formatError(error)}';
-      }
-    }
-
-    progressSub = _bridge.downloadProgressStream.listen((event) {
-      final currentTaskId = event['taskId']?.toString() ?? '';
-      if (taskId != null &&
-          currentTaskId.isNotEmpty &&
-          currentTaskId != taskId) {
-        return;
-      }
-
-      final status = event['status']?.toString() ?? '';
-      final progress = _eventInt(event, 'progress', -1);
-      final downloaded = _eventLong(event, 'downloadedBytes', 0);
-      final total = _eventLong(event, 'totalBytes', -1);
-      final speed = _eventLong(event, 'speedBytesPerSecond', 0);
-      final eta = _eventLong(event, 'etaSeconds', -1);
-
-      if (progress >= 0 && total > 0) {
-        progressNotifier.value = progress / 100.0;
-        progressTextNotifier.value =
-            '${_formatByteSize(downloaded)} / ${_formatByteSize(total)} ($progress%)'
-            ' · ${_formatByteSize(speed)}/s'
-            '${eta >= 0 ? ' · 剩余约 ${_formatEta(eta)}' : ''}';
-      } else {
-        progressNotifier.value = 0.0;
-        progressTextNotifier.value = '正在下载...';
-      }
-
-      switch (status) {
-        case 'checking':
-          statusTitleNotifier.value = '准备下载 v${updateInfo.latestVersion}';
-        case 'downloading':
-          failedNotifier.value = false;
-          statusTitleNotifier.value = '正在下载 v${updateInfo.latestVersion}';
-        case 'retrying':
-          statusTitleNotifier.value = '网络异常，正在重试';
-        case 'failed':
-          failedNotifier.value = true;
-          statusTitleNotifier.value = '下载失败';
-          progressTextNotifier.value =
-              event['errorMessage']?.toString().isNotEmpty == true
-                  ? event['errorMessage'].toString()
-                  : '下载失败，请重试';
-        case 'cancelled':
-          closeDialog();
-          completeOnce();
-        case 'completed':
-          final completedTaskId =
-              currentTaskId.isNotEmpty ? currentTaskId : taskId;
-          if (completedTaskId != null) {
-            unawaited(installCompletedTask(completedTaskId));
-          }
-        case 'install_permission_required':
-          closeDialog();
-          completeOnce();
-      }
-    });
-
     if (!context.mounted) return;
     dialogOpen = true;
+
+    // 显示下载对话框
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -409,27 +271,9 @@ class AppUpdateManager {
           ],
         ),
         actions: [
-          ValueListenableBuilder<bool>(
-            valueListenable: failedNotifier,
-            builder: (_, failed, __) => failed
-                ? TextButton(
-                    onPressed: () async {
-                      final id = taskId;
-                      if (id == null) return;
-                      failedNotifier.value = false;
-                      statusTitleNotifier.value = '正在重试';
-                      await _bridge.retryDownload(id);
-                    },
-                    child: const Text('重试'),
-                  )
-                : const SizedBox.shrink(),
-          ),
           TextButton(
-            onPressed: () async {
-              final id = taskId;
-              if (id != null) {
-                await _bridge.cancelDownload(id);
-              }
+            onPressed: () {
+              cancelToken?.cancel('用户取消');
               closeDialog();
               completeOnce();
             },
@@ -443,13 +287,93 @@ class AppUpdateManager {
     }));
 
     try {
-      taskId = await _bridge.startApkDownload(
-        downloadUrl,
-        fileName: asset.name,
-        version: updateInfo.latestVersion,
-        sha256: assetSha256,
+      // 使用 Dio 下载
+      cancelToken = CancelToken();
+      final tempDir = Directory.systemTemp;
+      final savePath = '${tempDir.path}/${asset.name}';
+
+      // 删除旧文件（如果存在）
+      final file = File(savePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      await DownloadService.instance.download(
+        url: downloadUrl,
+        savePath: savePath,
+        onProgress: (received, total) {
+          if (total > 0) {
+            final progress = (received / total * 100).toInt();
+            progressNotifier.value = received / total;
+
+            final speed = received > 0 && progressNotifier.value > 0
+                ? (received / (DateTime.now().millisecondsSinceEpoch - startTime.millisecondsSinceEpoch) * 1000).toInt()
+                : 0;
+
+            progressTextNotifier.value =
+                '${_formatByteSize(received)} / ${_formatByteSize(total)} ($progress%)';
+
+            if (speed > 0) {
+              progressTextNotifier.value += ' · ${_formatByteSize(speed)}/s';
+              final remaining = total - received;
+              final eta = (remaining / speed).toInt();
+              if (eta > 0) {
+                progressTextNotifier.value += ' · 剩余约 ${_formatEta(eta)}';
+              }
+            }
+
+            statusTitleNotifier.value = '正在下载 v${updateInfo.latestVersion}';
+          } else {
+            progressNotifier.value = 0.0;
+            progressTextNotifier.value = '正在下载...';
+          }
+        },
+        cancelToken: cancelToken,
       );
-      await finished.future;
+
+      // 下载完成，安装
+      if (!context.mounted) return;
+      statusTitleNotifier.value = '下载完成，正在打开安装器';
+
+      await _bridge.installApkFile(savePath);
+
+      if (!context.mounted) return;
+      closeDialog();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('安装器已打开'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      completeOnce();
+    } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel) {
+        // 用户取消
+        closeDialog();
+        completeOnce();
+        return;
+      }
+
+      if (!context.mounted) return;
+      closeDialog();
+
+      String errorMsg = '下载失败';
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        errorMsg = '下载超时，请检查网络连接';
+      } else if (error.type == DioExceptionType.badResponse) {
+        errorMsg = '服务器响应错误：${error.response?.statusCode}';
+      } else if (error.message != null) {
+        errorMsg = '下载失败：${error.message}';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Python Runner 更新失败：$errorMsg'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } catch (error) {
       if (!context.mounted) return;
       closeDialog();
@@ -460,26 +384,11 @@ class AppUpdateManager {
         ),
       );
     } finally {
-      await progressSub.cancel();
+      cancelToken?.cancel();
       progressNotifier.dispose();
       progressTextNotifier.dispose();
       statusTitleNotifier.dispose();
-      failedNotifier.dispose();
     }
-  }
-
-  int _eventInt(Map<dynamic, dynamic> event, String key, int fallback) {
-    final value = event[key];
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return fallback;
-  }
-
-  int _eventLong(Map<dynamic, dynamic> event, String key, int fallback) {
-    final value = event[key];
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return fallback;
   }
 
   String _formatByteSize(num bytes) {

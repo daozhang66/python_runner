@@ -437,4 +437,129 @@ class AppLogger {
 
   /// Get the log directory path.
   String? get logDirPath => _logDir?.path;
+
+  // ═══════════════════════════════════════════════════════════════
+  // 新增：日志筛选和导出功能
+  // ═══════════════════════════════════════════════════════════════
+
+  /// 获取所有日志来源列表
+  Set<String> getAllSources() {
+    return _memoryLogs
+        .where((log) => log.source != null)
+        .map((log) => log.source!)
+        .toSet();
+  }
+
+  /// 按条件筛选日志
+  List<AppLogEntry> filterLogs({
+    Set<AppLogLevel>? levels,
+    String? source,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? searchQuery,
+  }) {
+    return _memoryLogs.where((log) {
+      // 级别筛选
+      if (levels != null && levels.isNotEmpty && !levels.contains(log.level)) {
+        return false;
+      }
+
+      // 来源筛选
+      if (source != null && source.isNotEmpty && log.source != source) {
+        return false;
+      }
+
+      // 时间范围筛选
+      if (startDate != null && log.timestamp.isBefore(startDate)) {
+        return false;
+      }
+      if (endDate != null && log.timestamp.isAfter(endDate)) {
+        return false;
+      }
+
+      // 搜索关键字
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        final query = searchQuery.toLowerCase();
+        return log.message.toLowerCase().contains(query) ||
+            (log.detail?.toLowerCase().contains(query) ?? false) ||
+            (log.source?.toLowerCase().contains(query) ?? false);
+      }
+
+      return true;
+    }).toList();
+  }
+
+  /// 按日期分组日志
+  Map<String, List<AppLogEntry>> groupByDate() {
+    final Map<String, List<AppLogEntry>> grouped = {};
+    for (final log in _memoryLogs) {
+      final dateKey = DateFormat('yyyy-MM-dd').format(log.timestamp);
+      grouped.putIfAbsent(dateKey, () => []);
+      grouped[dateKey]!.add(log);
+    }
+    return grouped;
+  }
+
+  /// 导出筛选后的日志为文本
+  String exportFilteredLogs({
+    Set<AppLogLevel>? levels,
+    String? source,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    final filtered = filterLogs(
+      levels: levels,
+      source: source,
+      startDate: startDate,
+      endDate: endDate,
+    );
+
+    final buf = StringBuffer();
+    buf.writeln('====== 筛选日志导出 ======');
+    buf.writeln(
+        'Generated at: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}');
+    buf.writeln('Total entries: ${filtered.length}');
+    if (levels != null && levels.isNotEmpty) {
+      buf.writeln('Levels: ${levels.map((l) => l.name).join(', ')}');
+    }
+    if (source != null) {
+      buf.writeln('Source: $source');
+    }
+    if (startDate != null || endDate != null) {
+      buf.writeln(
+          'Date range: ${startDate != null ? DateFormat('yyyy-MM-dd').format(startDate) : 'any'} ~ ${endDate != null ? DateFormat('yyyy-MM-dd').format(endDate) : 'any'}');
+    }
+    buf.writeln('=' * 40);
+    buf.writeln();
+
+    for (final log in filtered) {
+      buf.writeln(log.formatted);
+    }
+
+    return buf.toString();
+  }
+
+  /// 获取日志统计信息
+  Map<String, dynamic> getStatistics() {
+    final stats = <String, dynamic>{};
+    stats['total'] = _memoryLogs.length;
+    stats['info'] =
+        _memoryLogs.where((log) => log.level == AppLogLevel.info).length;
+    stats['warn'] =
+        _memoryLogs.where((log) => log.level == AppLogLevel.warn).length;
+    stats['error'] =
+        _memoryLogs.where((log) => log.level == AppLogLevel.error).length;
+    stats['sources'] = getAllSources().length;
+
+    // 最近的错误
+    final recentErrors = _memoryLogs
+        .where((log) => log.level == AppLogLevel.error)
+        .toList()
+        .reversed
+        .take(5)
+        .toList();
+    stats['recentErrors'] = recentErrors;
+
+    return stats;
+  }
 }

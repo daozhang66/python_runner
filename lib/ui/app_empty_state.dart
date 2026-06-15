@@ -91,13 +91,13 @@ class _AppEmptyStateState extends State<AppEmptyState>
                       Transform.scale(
                         scale: _pulseAnimation.value,
                         child: Container(
-                          width: 100,
-                          height: 100,
+                          width: 110,
+                          height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                colors.primary.withValues(alpha: 0.08),
+                                colors.primary.withValues(alpha: 0.12),
                                 colors.primary.withValues(alpha: 0.00),
                               ],
                             ),
@@ -108,28 +108,38 @@ class _AppEmptyStateState extends State<AppEmptyState>
                       Transform.translate(
                         offset: Offset(0, _floatAnimation.value),
                         child: Container(
-                          width: 76,
-                          height: 76,
+                          width: 80,
+                          height: 80,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: colors.surfaceContainerHigh,
+                            gradient: RadialGradient(
+                              colors: [
+                                colors.surfaceContainerHigh,
+                                colors.surfaceContainer,
+                              ],
+                            ),
                             border: Border.all(
-                              color: colors.primary.withValues(alpha: 0.12),
-                              width: 1.5,
+                              color: colors.primary.withValues(alpha: 0.15),
+                              width: 2,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: colors.shadow.withValues(alpha: 0.04),
-                                blurRadius: 10,
+                                color: colors.shadow.withValues(alpha: 0.06),
+                                blurRadius: 12,
                                 offset: const Offset(0, 4),
+                              ),
+                              BoxShadow(
+                                color: colors.primary.withValues(alpha: 0.08),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
                           child: Center(
                             child: Icon(
                               widget.icon,
-                              size: 34,
-                              color: colors.primary.withValues(alpha: 0.8),
+                              size: 36,
+                              color: colors.primary.withValues(alpha: 0.82),
                             ),
                           ),
                         ),

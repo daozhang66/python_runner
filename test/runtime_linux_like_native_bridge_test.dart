@@ -64,7 +64,7 @@ void main() {
       () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(activity, contains('resolveLinuxLikeExplicitPackages'));
     expect(activity, contains('REQUESTED'));
@@ -140,7 +140,7 @@ void main() {
       () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
@@ -222,6 +222,8 @@ void main() {
     expect(manager, contains('target["TERM"] = "xterm-256color"'));
     expect(manager, contains('target["PIP_NO_INPUT"] = "1"'));
     expect(manager, contains('target["PYTHONDONTWRITEBYTECODE"] = "1"'));
+    expect(manager, contains('target["PYTHONPYCACHEPREFIX"]'));
+    expect(manager, contains('File(executionTempDir, "pycache")'));
     expect(
         manager,
         isNot(contains(
@@ -275,15 +277,20 @@ void main() {
     expect(manager, isNot(contains('runpy.run_path')));
   });
 
-  test('linux-like project execution removes pycache directories', () {
+  test('linux-like script execution prevents and cleans pycache directories',
+      () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('deleteProjectPycacheDirectories'));
+    expect(activity, contains('deletePythonCacheDirectories'));
+    expect(activity, contains('deletePythonCacheDirectory'));
+    expect(activity, contains('isBroadPythonCacheCleanupRoot'));
     expect(activity, contains('file.name == "__pycache__"'));
+    expect(activity, contains('pycacheCleanupRoots = listOf(projectRoot)'));
+    expect(activity, contains('File(resolvedScriptWorkingDir)'));
     expect(activity, contains('projectRoot = projectRoot'));
-    expect(activity, contains('executionTarget.projectRoot?.let'));
+    expect(activity, contains('executionTarget.pycacheCleanupRoots.forEach'));
   });
 
   test('linux-like launcher emits stdin request sentinel for interactive input',
