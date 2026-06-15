@@ -295,9 +295,6 @@ extension _ScriptListActions on _ScriptListPageState {
       case 'select':
         _enterMultiSelect();
         break;
-      case 'select_groups':
-        _enterGroupSelect();
-        break;
     }
   }
 

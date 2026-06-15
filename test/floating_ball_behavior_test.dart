@@ -111,10 +111,17 @@ void main() {
     expect(source, contains('private var isCollapsed = true'));
     expect(source, contains('private fun collapseToEdge()'));
     expect(source, contains('private fun expandFromEdge()'));
+    expect(source, contains('private fun revealBall('));
     expect(source, contains('private fun scheduleCollapse()'));
     expect(source, contains('if (isCollapsed) {'));
     expect(source, contains('expandFromEdge()'));
     expect(source, contains('scheduleCollapse()'));
+    expect(source, contains('revealBall(5000L)'));
+    expect(
+      source,
+      contains(
+          'private val collapsedVisiblePx by lazy { (24 * density).toInt() }'),
+    );
     expect(source, contains('collapsedVisiblePx'));
   });
 
@@ -182,6 +189,110 @@ void main() {
     expect(activitySource,
         contains('getSharedPreferences(FLOATING_BALL_PREFS_NAME'));
     expect(activitySource, contains('remove(KEY_PENDING_RUN_SCRIPT)'));
+  });
+
+  test('floating ball native bridge checks overlay permission before showing',
+      () {
+    final activitySource =
+        File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
+            .readAsStringSync();
+    final settingsSource = [
+      'lib/pages/settings_page.dart',
+      'lib/pages/settings_actions.dart',
+      'lib/pages/settings_sections.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
+    expect(activitySource, contains('private fun canShowFloatingBall()'));
+    expect(
+        activitySource, contains('android.provider.Settings.canDrawOverlays'));
+    expect(activitySource, contains('startFloatingBallService(intent)'));
+    expect(settingsSource, contains('_setFloatingBallEnabled'));
+    expect(settingsSource, contains('_syncFloatingBallAfterPermissionReturn'));
+    expect(settingsSource, contains('_syncFloatingBallNow'));
+    expect(settingsSource, contains('WidgetsBindingObserver'));
+    expect(settingsSource, contains('_setFloatingBallEnabled'));
+    expect(settingsSource, contains('_syncFloatingBallAfterPermissionReturn'));
+    expect(settingsSource, contains('syncFloatingBallVisibility()'));
+    expect(settingsSource, contains('with WidgetsBindingObserver'));
+    expect(settingsSource, isNot(contains("showFloatingBall('')")));
+  });
+
+  test('floating ball show waits for service addView result', () {
+    final activitySource =
+        File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
+            .readAsStringSync();
+    final serviceSource = File(
+            'android/app/src/main/kotlin/com/daozhang/py/FloatingBallService.kt')
+        .readAsStringSync();
+
+    expect(activitySource, contains('ResultReceiver(mainHandler)'));
+    expect(activitySource, contains('EXTRA_RESULT_RECEIVER'));
+    expect(activitySource, contains('RESULT_SHOW_OK'));
+    expect(activitySource, contains('postDelayed(timeoutRunnable!!, 2500L)'));
+    expect(serviceSource, contains('const val EXTRA_RESULT_RECEIVER'));
+    expect(serviceSource, contains('const val RESULT_SHOW_ERROR'));
+    expect(serviceSource, contains('private fun reportShowResult'));
+    expect(
+        serviceSource,
+        contains(
+            'receiver?.send(if (success) RESULT_SHOW_OK else RESULT_SHOW_ERROR'));
+    expect(serviceSource, contains('isAttachedToWindow'));
+    expect(serviceSource, contains('windowManager?.addView(view, params)'));
+    expect(serviceSource, contains('throw e'));
+  });
+
+  test('manual floating ball enable surfaces native failures', () {
+    final providerSource =
+        File('lib/providers/execution_provider.dart').readAsStringSync();
+    final settingsActionsSource =
+        File('lib/pages/settings_actions.dart').readAsStringSync();
+
+    expect(providerSource,
+        contains('syncFloatingBallVisibility({bool throwOnError = false})'));
+    expect(providerSource, contains("source: 'FloatingBall'"));
+    expect(settingsActionsSource,
+        contains('syncFloatingBallVisibility(throwOnError: true)'));
+    expect(settingsActionsSource,
+        contains("prefs.setBool('floating_ball_enabled', false)"));
+    expect(settingsActionsSource, contains('悬浮球显示失败：'));
+  });
+
+  test('home navigation uses ordinary tap switching only', () {
+    final source = File('lib/main.dart').readAsStringSync();
+
+    expect(source, contains('NavigationBar('));
+    expect(source, contains('onDestinationSelected: _selectTab'));
+    expect(source, contains('Color.alphaBlend'));
+    expect(
+      source,
+      isNot(contains('Timer(const Duration(milliseconds: 320)')),
+    );
+    expect(source, isNot(contains('_selectTabFromDrag')));
+    expect(source, isNot(contains('_navigationDragActive')));
+    expect(source, isNot(contains('AnimatedPositioned(')));
+  });
+  test('settings floating ball switch retries after overlay permission return',
+      () {
+    final settingsPageSource =
+        File('lib/pages/settings_page.dart').readAsStringSync();
+    final settingsActionsSource =
+        File('lib/pages/settings_actions.dart').readAsStringSync();
+    final settingsSectionsSource =
+        File('lib/pages/settings_sections.dart').readAsStringSync();
+
+    expect(settingsPageSource, contains('with WidgetsBindingObserver'));
+    expect(settingsPageSource, contains('didChangeAppLifecycleState'));
+    expect(settingsPageSource,
+        contains('_syncFloatingBallAfterPermissionReturn()'));
+    expect(settingsActionsSource, contains('_setFloatingBallEnabled'));
+    expect(
+        settingsActionsSource, contains('_waitingForFloatingBallPermission'));
+    expect(settingsActionsSource, contains('_syncFloatingBallNow'));
+    expect(settingsActionsSource,
+        contains("prefs.setBool('floating_ball_enabled', false)"));
+    expect(settingsActionsSource, contains('Duration(milliseconds: 350)'));
+    expect(
+        settingsSectionsSource, contains('onChanged: _setFloatingBallEnabled'));
   });
 
   test('app resume asks execution provider to restore the floating ball', () {

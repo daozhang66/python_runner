@@ -70,6 +70,7 @@ object NativeBridgeContract {
         "saveProjectFile.content",
         "sendStdin.input",
         "sendLinuxLikeStdin.input",
+        "showFloatingBall.scriptName",
         "pushFloatingBallOutput.output",
     )
 

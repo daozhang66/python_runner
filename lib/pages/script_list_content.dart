@@ -305,7 +305,7 @@ extension _ScriptListContent on _ScriptListPageState {
                       colors.onSurfaceVariant,
                     ),
                   ),
-                _ScriptIcon(colors: colors, size: 44),
+                _ScriptIcon(colors: colors, size: 44, pinned: script.isPinned),
               ],
               const SizedBox(width: 12),
               Expanded(
@@ -561,7 +561,8 @@ extension _ScriptListContent on _ScriptListPageState {
                         colors.onSurfaceVariant,
                       ),
                     ),
-                  _ScriptIcon(colors: colors, size: 44),
+                  _ScriptIcon(
+                      colors: colors, size: 44, pinned: script.isPinned),
                 ],
                 const SizedBox(width: 12),
                 Expanded(

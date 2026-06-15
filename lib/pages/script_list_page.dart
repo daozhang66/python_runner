@@ -205,14 +205,6 @@ class _ScriptListPageState extends State<ScriptListPage> {
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        const PopupMenuItem(
-          value: 'select_groups',
-          child: ListTile(
-            leading: Icon(Icons.library_add_check_outlined),
-            title: Text('分组多选'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
       ],
     );
   }
@@ -341,9 +333,25 @@ class _ScriptListPageState extends State<ScriptListPage> {
                         autofocus: true,
                         enableSuggestions: false,
                         autocorrect: false,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: '搜索脚本...',
                           border: InputBorder.none,
+                          prefixIcon: Icon(
+                            Icons.search,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withValues(alpha: 0.6),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHigh
+                              .withValues(alpha: 0.5),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                         onChanged: (v) => setState(() => _searchQuery = v),
                       ),

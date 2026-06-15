@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 
 /// 统一间距常量，基于 4px 网格。
 abstract final class AppSpacing {
+  static const xxs = 2.0;
   static const xs = 4.0;
   static const sm = 8.0;
   static const md = 12.0;
   static const lg = 16.0;
   static const xl = 24.0;
+  static const xxl = 32.0;
+  static const xxxl = 48.0;
+
+  // 卡片间距语义化常量
+  static const cardVertical = 8.0;
+  static const cardHorizontal = 16.0;
 }
 
 /// 统一圆角常量。

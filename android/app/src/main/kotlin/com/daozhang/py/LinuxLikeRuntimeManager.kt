@@ -481,6 +481,9 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             target[key] = value
         }
         target["PYTHONDONTWRITEBYTECODE"] = "1"
+        val pycacheDir = File(executionTempDir, "pycache")
+        if (!pycacheDir.exists()) pycacheDir.mkdirs()
+        target["PYTHONPYCACHEPREFIX"] = pycacheDir.absolutePath
         val existingPythonPath = target["PYTHONPATH"]?.takeIf { it.isNotBlank() }
         target["PYTHONPATH"] = listOf(
             userSitePackagesGuestPath,

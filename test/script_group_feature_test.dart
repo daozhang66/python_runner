@@ -106,8 +106,8 @@ void main() {
 
     expect(source, contains('bool _groupSelectMode'));
     expect(source, contains('final Set<int> _selectedGroupIds'));
-    expect(source, contains("value: 'select_groups'"));
-    expect(source, contains("title: Text('分组多选')"));
+    expect(source, isNot(contains("value: 'select_groups'")));
+    expect(source, isNot(contains("title: Text('分组多选')")));
     expect(source, contains('void _enterGroupSelect'));
     expect(source, contains('void _toggleGroupSelection'));
     expect(source, contains('Future<void> _deleteSelectedGroups'));
