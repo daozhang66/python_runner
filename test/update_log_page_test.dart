@@ -18,6 +18,17 @@ class _FakeUpdateService extends UpdateService {
 }
 
 void main() {
+  test('update dialog uses centered title and only shows latest version', () {
+    final source = File('lib/widgets/update_dialog.dart').readAsStringSync();
+
+    expect(source, contains("'更新'"));
+    expect(source, contains('textAlign: TextAlign.center'));
+    expect(source, contains('updateInfo.latestVersion'));
+    expect(source, isNot(contains("'发现新版本'")));
+    expect(source, isNot(contains('updateInfo.currentVersion')));
+    expect(source, isNot(contains('Icons.arrow_forward_rounded')));
+  });
+
   test('expanded release notes stay full width and left aligned', () {
     final source = File('lib/pages/update_log_page.dart').readAsStringSync();
 
@@ -69,9 +80,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('更新日志'), findsNWidgets(2));
+    expect(find.text('更新日志'), findsOneWidget);
     expect(find.text('v1.4.4'), findsOneWidget);
     expect(find.text('v1.4.3'), findsOneWidget);
+    expect(find.text('性能优化'), findsNothing);
 
     await tester.enterText(
       find.byKey(const Key('updateLogSearchField')),

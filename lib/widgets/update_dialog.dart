@@ -64,74 +64,21 @@ class UpdateDialog extends StatelessWidget {
                 // 标题栏
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              colorScheme.primaryContainer,
-                              colorScheme.primaryContainer
-                                  .withValues(alpha: 0.7),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  colorScheme.primary.withValues(alpha: 0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.auto_awesome_rounded,
-                          color: colorScheme.onPrimaryContainer,
-                          size: 24,
+                      Text(
+                        '更新',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '发现新版本',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 19,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                _buildVersionChip(
-                                  context,
-                                  updateInfo.currentVersion,
-                                  false,
-                                ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 8),
-                                  child: Icon(
-                                    Icons.arrow_forward_rounded,
-                                    size: 16,
-                                    color: colorScheme.outline,
-                                  ),
-                                ),
-                                _buildVersionChip(
-                                  context,
-                                  updateInfo.latestVersion,
-                                  true,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                      const SizedBox(height: 10),
+                      _buildVersionChip(
+                        context,
+                        updateInfo.latestVersion,
                       ),
                     ],
                   ),
@@ -305,8 +252,7 @@ class UpdateDialog extends StatelessWidget {
                                 foregroundColor: colorScheme.onSurfaceVariant
                                     .withValues(alpha: 0.7),
                                 minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: const Text(
                                 '不再提示',
@@ -325,8 +271,7 @@ class UpdateDialog extends StatelessWidget {
                                 ),
                                 foregroundColor: colorScheme.primary,
                                 minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               icon: Icon(Icons.open_in_new, size: 14),
                               label: const Text(
@@ -368,28 +313,24 @@ class UpdateDialog extends StatelessWidget {
   }
 
   /// 构建版本号标签
-  Widget _buildVersionChip(BuildContext context, String version, bool isNew) {
+  Widget _buildVersionChip(BuildContext context, String version) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isNew
-            ? colorScheme.primary.withValues(alpha: 0.15)
-            : colorScheme.surfaceContainerHighest,
+        color: colorScheme.primary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
-        border: isNew
-            ? Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.3),
-                width: 1,
-              )
-            : null,
+        border: Border.all(
+          color: colorScheme.primary.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Text(
         'v$version',
         style: TextStyle(
           fontSize: 12,
-          fontWeight: isNew ? FontWeight.w700 : FontWeight.w500,
-          color: isNew ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+          color: colorScheme.primary,
         ),
       ),
     );

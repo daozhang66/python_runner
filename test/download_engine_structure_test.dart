@@ -13,8 +13,9 @@ void main() {
     final mainActivity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
-    final filePaths =
-        File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
+    final installerSource = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ApkInstaller.kt',
+    ).readAsStringSync();
 
     final downloadTask = File(
       'android/app/src/main/kotlin/com/daozhang/py/DownloadTask.kt',
@@ -52,7 +53,9 @@ void main() {
     expect(updateManager, contains('installApkFile(savePath)'));
     expect(updateManager, contains('下载失败'));
     expect(updateManager, contains('取消'));
-    expect(filePaths, contains('<code-cache-path'));
+    expect(installerSource, contains('ensureShareableApk(apkFile)'));
+    expect(installerSource, contains('context.cacheDir, "apk_install"'));
+    expect(installerSource, contains('canonicalApk.copyTo'));
   });
 
   test(
