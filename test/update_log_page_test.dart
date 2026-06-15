@@ -20,6 +20,8 @@ class _FakeUpdateService extends UpdateService {
 void main() {
   test('update dialog uses centered title and only shows latest version', () {
     final source = File('lib/widgets/update_dialog.dart').readAsStringSync();
+    final managerSource =
+        File('lib/services/app_update_manager.dart').readAsStringSync();
 
     expect(source, contains("'更新'"));
     expect(source, contains('textAlign: TextAlign.center'));
@@ -27,6 +29,9 @@ void main() {
     expect(source, isNot(contains("'发现新版本'")));
     expect(source, isNot(contains('updateInfo.currentVersion')));
     expect(source, isNot(contains('Icons.arrow_forward_rounded')));
+    expect(managerSource, contains("title: const Center(child: Text('更新'))"));
+    expect(managerSource,
+        isNot(contains("title: const Text('Python Runner 更新')")));
   });
 
   test('expanded release notes stay full width and left aligned', () {
