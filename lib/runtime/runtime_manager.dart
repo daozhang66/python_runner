@@ -139,6 +139,12 @@ class RuntimeManager {
     return currentBackend.installPackage(request);
   }
 
+  Future<PackageInstallResult> repairPackage(
+    PackageInstallRequest request,
+  ) {
+    return currentBackend.repairPackage(request);
+  }
+
   Future<PackageInstallResult> installRequirements(
     RequirementsInstallRequest request,
   ) {

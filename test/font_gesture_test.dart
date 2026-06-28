@@ -331,7 +331,8 @@ Future<void> _pinchOut(WidgetTester tester, Finder finder) async {
 
 class _FakeNativeBridge extends NativeBridge {
   _FakeNativeBridge({Map<String, String>? scriptContents})
-      : _scriptContents = scriptContents ?? <String, String>{};
+      : _scriptContents = scriptContents ?? <String, String>{},
+        super.named();
 
   final Map<String, String> _scriptContents;
   final Stream<Map<dynamic, dynamic>> _emptyStream =

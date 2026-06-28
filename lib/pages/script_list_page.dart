@@ -221,8 +221,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ScriptProvider>();
-    final allScripts = provider.scripts;
+    final provider = context.read<ScriptProvider>();
+    final scriptSnapshot = context.select((ScriptProvider provider) => (
+          scripts: List.of(provider.scripts),
+          groups: List.of(provider.groups),
+          loading: provider.loading,
+        ));
+    final allScripts = scriptSnapshot.scripts;
     final homeScripts = provider.ungroupedScripts;
     final baseScripts = _activeGroupId == null
         ? homeScripts
@@ -237,13 +242,13 @@ class _ScriptListPageState extends State<ScriptListPage> {
     final allSelected = scripts.isNotEmpty &&
         scripts.every((s) => _selectedScripts.contains(s.name));
     final selectableGroups = _activeGroupId == null
-        ? provider.groups.where((group) => group.id != null).toList()
+        ? scriptSnapshot.groups.where((group) => group.id != null).toList()
         : <ScriptGroup>[];
     final allGroupsSelected = selectableGroups.isNotEmpty &&
         selectableGroups.every((group) => _selectedGroupIds.contains(group.id));
     final showFolderHome = _activeGroupId == null && _searchQuery.isEmpty;
     final hasBodyContent = showFolderHome
-        ? provider.groups.isNotEmpty || scripts.isNotEmpty
+        ? scriptSnapshot.groups.isNotEmpty || scripts.isNotEmpty
         : scripts.isNotEmpty;
 
     return Scaffold(
@@ -399,7 +404,7 @@ class _ScriptListPageState extends State<ScriptListPage> {
           if (!_multiSelectMode && _searchQuery.isNotEmpty)
             _buildSearchResultBar(searchSource.length, scripts.length),
           Expanded(
-            child: provider.loading && allScripts.isEmpty
+            child: scriptSnapshot.loading && allScripts.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : !hasBodyContent
                     ? Center(

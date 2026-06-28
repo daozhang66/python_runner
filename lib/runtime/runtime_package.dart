@@ -91,12 +91,48 @@ class RuntimePackage {
   final String name;
   final String version;
   final String source;
+  final String integrityStatus;
+  final String integrityMessage;
+  final List<String> missingImports;
 
   const RuntimePackage({
     required this.name,
     required this.version,
     this.source = '',
+    this.integrityStatus = 'unknown',
+    this.integrityMessage = '',
+    this.missingImports = const [],
   });
 
+  factory RuntimePackage.fromMap(Map<String, dynamic> map) {
+    return RuntimePackage(
+      name: map['name']?.toString() ?? '',
+      version: map['version']?.toString() ?? '',
+      source: map['source']?.toString() ?? '',
+      integrityStatus: map['integrityStatus']?.toString() ?? 'unknown',
+      integrityMessage: map['integrityMessage']?.toString() ?? '',
+      missingImports: _stringListFromDynamic(map['missingImports']),
+    );
+  }
+
   bool get isUserPackage => source == 'user';
+
+  bool get hasBrokenIntegrity => integrityStatus == 'broken';
+}
+
+List<String> _stringListFromDynamic(dynamic value) {
+  if (value is List) {
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+  if (value is String) {
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+  return const [];
 }

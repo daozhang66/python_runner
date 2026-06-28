@@ -84,6 +84,16 @@ class ChaquopyBackend implements RuntimeBackend {
   }
 
   @override
+  Future<PackageInstallResult> repairPackage(
+    PackageInstallRequest request,
+  ) async {
+    return const PackageInstallResult(
+      success: false,
+      message: '修复仅支持 Linux-like 用户包',
+    );
+  }
+
+  @override
   Future<PackageInstallResult> installRequirements(
     RequirementsInstallRequest request,
   ) async {
@@ -103,11 +113,7 @@ class ChaquopyBackend implements RuntimeBackend {
   Future<List<RuntimePackage>> listPackages() async {
     final packages = await _bridge.listInstalledPackages();
     return packages
-        .map((item) => RuntimePackage(
-              name: item['name'] ?? '',
-              version: item['version'] ?? '',
-              source: item['source'] ?? '',
-            ))
+        .map((item) => RuntimePackage.fromMap(item))
         .where((item) => item.name.isNotEmpty)
         .toList();
   }

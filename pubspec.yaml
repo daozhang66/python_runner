@@ -14,13 +14,10 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.9
-  # HTTP 库（用于下载）
-  dio: ^5.7.0
   # 代码编辑器（虚拟化渲染，高性能）
   re_editor:
     path: third_party/re_editor
   re_highlight: ^0.0.3
-  highlight: ^0.7.0
   # 文件选择器
   file_picker: ^11.0.2
   # 本地配置存储

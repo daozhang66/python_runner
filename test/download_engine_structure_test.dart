@@ -3,15 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('app update downloads with Dio and installs through FileProvider', () {
+  test('app update routes through the native resume engine and installs APK',
+      () {
     final nativeBridge =
         File('lib/services/native_bridge.dart').readAsStringSync();
     final updateManager =
         File('lib/services/app_update_manager.dart').readAsStringSync();
-    final downloadService =
-        File('lib/services/download_service.dart').readAsStringSync();
+    final progressModel =
+        File('lib/models/download_progress.dart').readAsStringSync();
     final mainActivity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    ).readAsStringSync();
+    final appUpdateController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/AppUpdateController.kt',
     ).readAsStringSync();
     final installerSource = File(
       'android/app/src/main/kotlin/com/daozhang/py/ApkInstaller.kt',
@@ -31,27 +35,39 @@ void main() {
     expect(downloadManager.existsSync(), isTrue);
     expect(apkInstaller.existsSync(), isTrue);
 
-    expect(downloadService, contains('class DownloadService'));
-    expect(downloadService, contains('Dio(BaseOptions('));
-    expect(downloadService,
-        contains('receiveTimeout: const Duration(minutes: 30)'));
-    expect(downloadService, contains('Future<void> download({'));
-    expect(downloadService, contains('Future<void> downloadWithResume({'));
+    // The dormant Dio DownloadService has been removed; the update flow now
+    // drives the native resume engine end to end.
+    expect(
+      File('lib/services/download_service.dart').existsSync(),
+      isFalse,
+    );
+
+    // Progress model mirrors the native DownloadManager.emit payload.
+    expect(progressModel, contains('class DownloadProgress'));
+    expect(progressModel, contains('enum DownloadStatus'));
+    expect(progressModel, contains('install_permission_required'));
 
     expect(nativeBridge, contains('Future<void> installApkFile'));
     expect(nativeBridge, contains("_invoke('installApkFile'"));
-    expect(mainActivity, contains('DownloadManager('));
-    expect(mainActivity, contains('ApkInstaller('));
+    expect(nativeBridge, contains('Future<String> startApkDownload'));
+    expect(nativeBridge, contains('downloadProgressStream'));
+    expect(appUpdateController, contains('DownloadManager('));
+    expect(appUpdateController, contains('ApkInstaller('));
+    expect(mainActivity, contains('AppUpdateController(this)'));
     expect(mainActivity, contains('"installApkFile"'));
+    expect(mainActivity, contains('"startApkDownload"'));
     expect(mainActivity,
         isNot(contains('private fun handleDownloadAndInstallApk(')));
     expect(mainActivity, isNot(contains('ByteArray(8192)')));
 
-    expect(updateManager, contains('DownloadService.instance.download'));
-    expect(updateManager, contains('Directory.systemTemp'));
-    expect(updateManager, contains('CancelToken'));
-    expect(updateManager, contains('installApkFile(savePath)'));
-    expect(updateManager, contains('下载失败'));
+    // Update manager consumes the native engine, not Dio.
+    expect(updateManager, contains('_bridge.startApkDownload'));
+    expect(updateManager, contains('downloadProgressStream'));
+    expect(updateManager, contains('_bridge.installDownloadedApk'));
+    expect(updateManager, contains('_bridge.cancelDownload'));
+    expect(updateManager, isNot(contains('DownloadService')));
+    expect(updateManager, isNot(contains('package:dio/dio.dart')));
+    expect(updateManager, contains('更新失败'));
     expect(updateManager, contains('取消'));
     expect(installerSource, contains('ensureShareableApk(apkFile)'));
     expect(installerSource, contains('context.cacheDir, "apk_install"'));

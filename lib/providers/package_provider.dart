@@ -94,11 +94,7 @@ class PackageProvider extends ChangeNotifier {
       if (decoded is! List) return;
       _packages = decoded
           .whereType<Map>()
-          .map((item) => PackageInfo(
-                name: item['name']?.toString() ?? '',
-                version: item['version']?.toString() ?? '',
-                isUserPackage: item['isUserPackage'] == true,
-              ))
+          .map(_packageInfoFromCache)
           .where((item) => item.name.isNotEmpty)
           .toList()
         ..sort((a, b) => a.name.compareTo(b.name));
@@ -118,6 +114,9 @@ class PackageProvider extends ChangeNotifier {
                 'name': item.name,
                 'version': item.version,
                 'isUserPackage': item.isUserPackage,
+                'integrityStatus': item.integrityStatus,
+                'integrityMessage': item.integrityMessage,
+                'missingImports': item.missingImports,
               })
           .toList());
       await prefs.setString(_cacheKey, encoded);
@@ -149,13 +148,7 @@ class PackageProvider extends ChangeNotifier {
       notifyListeners();
       final result = await _runtimeManager.listPackages();
       if (generation != _loadGeneration) return;
-      _packages = result
-          .map((item) => PackageInfo(
-                name: item.name,
-                version: item.version,
-                isUserPackage: item.isUserPackage,
-              ))
-          .toList();
+      _packages = result.map(_packageInfoFromRuntime).toList();
       _packages.sort((a, b) => a.name.compareTo(b.name));
       _hasLoadedOnce = true;
       await _savePackageCache();
@@ -225,6 +218,59 @@ class PackageProvider extends ChangeNotifier {
         indexUrl: indexUrl,
       ),
     );
+  }
+
+  Future<void> repairPackage(
+    String name, {
+    String? version,
+    String? indexUrl,
+  }) async {
+    await _syncRuntimeManagerFromSettings();
+    if (_installing) {
+      _installLog.add('已有安装任务进行中，请稍后再试');
+      notifyListeners();
+      return;
+    }
+    final fixedVersion = version?.trim();
+    _installing = true;
+    _installLog.clear();
+    _installLog.add(
+      'Repairing $name${fixedVersion == null || fixedVersion.isEmpty ? "" : "==$fixedVersion"}...',
+    );
+    notifyListeners();
+
+    try {
+      final result = await _runtimeManager.repairPackage(
+        PackageInstallRequest(
+          packageName: name,
+          version: fixedVersion == null ||
+                  fixedVersion.isEmpty ||
+                  fixedVersion.toLowerCase() == 'unknown'
+              ? null
+              : fixedVersion,
+          indexUrl: indexUrl,
+        ),
+      );
+      if (_installing) {
+        _installing = false;
+        _installLog.add(
+          result.message.isNotEmpty
+              ? result.message
+              : result.success
+                  ? '修复成功: $name'
+                  : '修复失败: $name',
+        );
+        if (result.success) {
+          await loadPackages(forceRefresh: true);
+        }
+        _scheduleInstallLogClear();
+        notifyListeners();
+      }
+    } catch (e) {
+      _installing = false;
+      _installLog.add('Error: $e');
+      notifyListeners();
+    }
   }
 
   Future<void> installRequirementsFromContent({
@@ -321,6 +367,45 @@ class PackageProvider extends ChangeNotifier {
     _installLogClearTimer = Timer(const Duration(seconds: 5), () {
       if (!_disposed) clearInstallLog();
     });
+  }
+
+  PackageInfo _packageInfoFromRuntime(RuntimePackage item) {
+    return PackageInfo(
+      name: item.name,
+      version: item.version,
+      isUserPackage: item.isUserPackage,
+      integrityStatus: item.integrityStatus,
+      integrityMessage: item.integrityMessage,
+      missingImports: item.missingImports,
+    );
+  }
+
+  PackageInfo _packageInfoFromCache(Map<dynamic, dynamic> item) {
+    return PackageInfo(
+      name: item['name']?.toString() ?? '',
+      version: item['version']?.toString() ?? '',
+      isUserPackage: item['isUserPackage'] == true,
+      integrityStatus: item['integrityStatus']?.toString() ?? 'unknown',
+      integrityMessage: item['integrityMessage']?.toString() ?? '',
+      missingImports: _stringListFromCache(item['missingImports']),
+    );
+  }
+
+  List<String> _stringListFromCache(dynamic value) {
+    if (value is List) {
+      return value
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    if (value is String) {
+      return value
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    return const [];
   }
 
   @override

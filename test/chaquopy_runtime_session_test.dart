@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/models/execution_state.dart';
 import 'package:python_runner/runtime/chaquopy_backend.dart';
+import 'package:python_runner/runtime/runtime_output.dart';
 import 'package:python_runner/runtime/runtime_request.dart';
 import 'package:python_runner/services/native_bridge.dart';
 
@@ -38,9 +39,23 @@ void main() {
 
     await expectLater(session.waitExit(), completion(0));
   });
+
+  test('RuntimeOutput carries execution id through map conversion', () {
+    final output = RuntimeOutput.fromMap({
+      'type': 'stdout',
+      'content': 'hello',
+      'timestamp': 1710000000000,
+      'executionId': 'run-123',
+    });
+
+    expect(output.executionId, 'run-123');
+    expect(output.toLogEntry().executionId, 'run-123');
+  });
 }
 
 class _ChaquopyBridgeFake extends NativeBridge {
+  _ChaquopyBridgeFake() : super.named();
+
   final StreamController<Map<dynamic, dynamic>> _statusController =
       StreamController<Map<dynamic, dynamic>>.broadcast();
   final Stream<Map<dynamic, dynamic>> _emptyStream =

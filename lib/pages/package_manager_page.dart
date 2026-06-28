@@ -137,8 +137,12 @@ class _PackageManagerPageState extends State<PackageManagerPage>
   _InstallResult? _getInstallResult(List<String> log) {
     if (log.isEmpty) return null;
     final last = log.last;
-    if (last.contains('安装成功')) return _InstallResult.success;
-    if (last.contains('安装失败') || last.contains('Error')) {
+    if (last.contains('安装成功') || last.contains('修复成功')) {
+      return _InstallResult.success;
+    }
+    if (last.contains('安装失败') ||
+        last.contains('修复失败') ||
+        last.contains('Error')) {
       return _InstallResult.error;
     }
     return null;
@@ -158,6 +162,25 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       return '$packageName 已卸载';
     }
     return '$packageName 已卸载，并清理 ${result.removedDependencies.join('、')}';
+  }
+
+  Future<void> _repairPackage(
+    PackageProvider provider,
+    PackageInfo pkg,
+  ) async {
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: '修复库',
+      content: '将重新安装 "${pkg.name}"，可能需要网络连接。',
+      confirmText: '修复',
+      confirmColor: Theme.of(context).colorScheme.primary,
+    );
+    if (!confirmed || !mounted) return;
+    await provider.repairPackage(
+      pkg.name,
+      version: pkg.version,
+      indexUrl: _indexUrl,
+    );
   }
 
   @override
@@ -439,17 +462,30 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     PackageProvider provider, {
     required bool canDelete,
   }) {
-    final versionLabel = _formatVersionLabel(pkg.version);
+    final subtitle = _formatPackageSubtitle(pkg);
 
     return AppSurface(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: ListTile(
         dense: true,
         title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(versionLabel, style: const TextStyle(fontSize: 12)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (pkg.hasBrokenIntegrity) ...[
+              Tooltip(
+                message: pkg.integrityMessage.isEmpty
+                    ? '包文件缺失'
+                    : pkg.integrityMessage,
+                child: const AppStatusBadge(
+                  label: '损坏',
+                  tone: AppBadgeTone.error,
+                  icon: Icons.warning_amber_rounded,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
             AppStatusBadge(
               label: pkg.isUserPackage ? '用户' : '内置',
               tone:
@@ -457,6 +493,17 @@ class _PackageManagerPageState extends State<PackageManagerPage>
             ),
             if (canDelete) ...[
               const SizedBox(width: 4),
+              if (pkg.hasBrokenIntegrity) ...[
+                IconButton(
+                  icon: const Icon(Icons.build_outlined, size: 20),
+                  onPressed: provider.installing
+                      ? null
+                      : () => _repairPackage(provider, pkg),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '重新安装修复',
+                ),
+                const SizedBox(width: 2),
+              ],
               IconButton(
                 icon: Icon(
                   Icons.delete_outline,
@@ -496,6 +543,14 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       return '版本未知';
     }
     return value;
+  }
+
+  String _formatPackageSubtitle(PackageInfo pkg) {
+    final versionLabel = _formatVersionLabel(pkg.version);
+    if (!pkg.hasBrokenIntegrity || pkg.integrityMessage.trim().isEmpty) {
+      return versionLabel;
+    }
+    return '$versionLabel · ${pkg.integrityMessage.trim()}';
   }
 
   @override

@@ -5,19 +5,19 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('chaquopy package install fails when pip or import verification fails',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final controller = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ChaquopyPackageController.kt',
     ).readAsStringSync();
     final runner = File(
       'android/app/src/main/python/script_runner.py',
     ).readAsStringSync();
 
-    expect(activity, contains('val pipResult'));
-    expect(activity, contains('if (pipResult != 0)'));
-    expect(activity, contains('result.error("1004"'));
-    expect(activity, contains('sendInstallProgress(packageName, "error"'));
+    expect(controller, contains('val pipResult'));
+    expect(controller, contains('if (pipResult != 0)'));
+    expect(controller, contains('result.error("1004"'));
+    expect(controller, contains('sendInstallProgress(packageName, "error"'));
     expect(
-      activity,
+      controller,
       isNot(contains(
         r'sendInstallProgress(packageName, "success", "$packageName 瀹夎瀹屾垚',
       )),
@@ -29,15 +29,15 @@ void main() {
   });
 
   test('chaquopy uninstall reports and cleans orphan dependencies', () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final controller = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ChaquopyPackageController.kt',
     ).readAsStringSync();
     final runner = File(
       'android/app/src/main/python/script_runner.py',
     ).readAsStringSync();
 
-    expect(activity, contains('removedDependencies'));
-    expect(activity,
+    expect(controller, contains('removedDependencies'));
+    expect(controller,
         contains('runner.callAttr("uninstall_package", packageName)'));
     expect(runner, contains('def uninstall_package(package_name):'));
     expect(runner, contains('removed_dependencies'));

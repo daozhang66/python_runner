@@ -193,19 +193,19 @@ void main() {
 
   test('floating ball native bridge checks overlay permission before showing',
       () {
-    final activitySource =
-        File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
-            .readAsStringSync();
+    final controllerSource = File(
+            'android/app/src/main/kotlin/com/daozhang/py/FloatingBallController.kt')
+        .readAsStringSync();
     final settingsSource = [
       'lib/pages/settings_page.dart',
       'lib/pages/settings_actions.dart',
       'lib/pages/settings_sections.dart',
     ].map((path) => File(path).readAsStringSync()).join('\n');
 
-    expect(activitySource, contains('private fun canShowFloatingBall()'));
-    expect(
-        activitySource, contains('android.provider.Settings.canDrawOverlays'));
-    expect(activitySource, contains('startFloatingBallService(intent)'));
+    expect(controllerSource, contains('fun canShowFloatingBall()'));
+    expect(controllerSource,
+        contains('android.provider.Settings.canDrawOverlays'));
+    expect(controllerSource, contains('startFloatingBallService(intent)'));
     expect(settingsSource, contains('_setFloatingBallEnabled'));
     expect(settingsSource, contains('_syncFloatingBallAfterPermissionReturn'));
     expect(settingsSource, contains('_syncFloatingBallNow'));
@@ -218,17 +218,17 @@ void main() {
   });
 
   test('floating ball show waits for service addView result', () {
-    final activitySource =
-        File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
-            .readAsStringSync();
+    final controllerSource = File(
+            'android/app/src/main/kotlin/com/daozhang/py/FloatingBallController.kt')
+        .readAsStringSync();
     final serviceSource = File(
             'android/app/src/main/kotlin/com/daozhang/py/FloatingBallService.kt')
         .readAsStringSync();
 
-    expect(activitySource, contains('ResultReceiver(mainHandler)'));
-    expect(activitySource, contains('EXTRA_RESULT_RECEIVER'));
-    expect(activitySource, contains('RESULT_SHOW_OK'));
-    expect(activitySource, contains('postDelayed(timeoutRunnable!!, 2500L)'));
+    expect(controllerSource, contains('ResultReceiver(mainHandler)'));
+    expect(controllerSource, contains('EXTRA_RESULT_RECEIVER'));
+    expect(controllerSource, contains('RESULT_SHOW_OK'));
+    expect(controllerSource, contains('postDelayed(timeoutRunnable!!, 2500L)'));
     expect(serviceSource, contains('const val EXTRA_RESULT_RECEIVER'));
     expect(serviceSource, contains('const val RESULT_SHOW_ERROR'));
     expect(serviceSource, contains('private fun reportShowResult'));
@@ -317,6 +317,8 @@ void main() {
 }
 
 class _FloatingBallBridgeFake extends NativeBridge {
+  _FloatingBallBridgeFake() : super.named();
+
   final StreamController<Map<dynamic, dynamic>> _logController =
       StreamController<Map<dynamic, dynamic>>.broadcast();
   final Stream<Map<dynamic, dynamic>> _emptyStream =

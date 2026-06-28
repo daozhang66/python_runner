@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/script_file.dart';
 import '../models/script_group.dart';
+import '../services/app_logger.dart';
 import '../services/native_bridge.dart';
 import '../services/database_service.dart';
 import '../services/project_path_validator.dart';
@@ -13,6 +14,7 @@ class ScriptProvider extends ChangeNotifier {
   List<ScriptFile> _scripts = [];
   List<ScriptGroup> _groups = [];
   bool _loading = false;
+  final _logger = AppLogger.instance;
 
   List<ScriptFile> get scripts => _scripts;
   List<ScriptGroup> get groups => _groups;
@@ -84,8 +86,12 @@ class ScriptProvider extends ChangeNotifier {
         }
       }
       _sortScripts();
-    } catch (e) {
-      debugPrint('loadScripts error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '加载脚本列表失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
     }
     _loading = false;
     notifyListeners();
@@ -111,8 +117,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortScripts();
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('createScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '创建脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -125,8 +135,12 @@ class ScriptProvider extends ChangeNotifier {
       _scripts.removeWhere((s) => s.name == safeName);
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('deleteScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '删除脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -145,8 +159,12 @@ class ScriptProvider extends ChangeNotifier {
       }
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('renameScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '重命名脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -155,8 +173,12 @@ class ScriptProvider extends ChangeNotifier {
     try {
       final safeName = ScriptNameValidator.normalize(name);
       return await _bridge.readScript(safeName);
-    } catch (e) {
-      debugPrint('readScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '读取脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return '';
     }
   }
@@ -180,8 +202,12 @@ class ScriptProvider extends ChangeNotifier {
         }
       }
       return true;
-    } catch (e) {
-      debugPrint('saveScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '保存脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -205,8 +231,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortScripts();
       notifyListeners();
       return path;
-    } catch (e) {
-      debugPrint('importScript error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '导入脚本失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return null;
     }
   }
@@ -297,8 +327,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortGroups();
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('createGroup error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '创建分组失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -339,8 +373,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortGroups();
       notifyListeners();
       return group;
-    } catch (e) {
-      debugPrint('createProjectGroup error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '创建项目分组失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return null;
     }
   }
@@ -365,8 +403,12 @@ class ScriptProvider extends ChangeNotifier {
       }
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('updateProjectMainFile error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '更新项目主程序失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -402,8 +444,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortGroups();
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('renameGroup error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '重命名分组失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }
@@ -426,8 +472,12 @@ class ScriptProvider extends ChangeNotifier {
       _sortScripts();
       notifyListeners();
       return true;
-    } catch (e) {
-      debugPrint('deleteGroup error: $e');
+    } catch (e, stackTrace) {
+      _logger.error(
+        '删除分组失败: $e',
+        source: 'ScriptProvider',
+        detail: stackTrace.toString(),
+      );
       return false;
     }
   }

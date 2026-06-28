@@ -7,7 +7,18 @@ import '../models/script_project_file.dart';
 import 'project_path_validator.dart';
 import 'script_name_validator.dart';
 
+/// Dart facade for the Android `MethodChannel` and native event streams.
+///
+/// The bridge is intentionally a singleton for application code so event
+/// streams are not recreated by each page. Tests can still subclass it through
+/// [NativeBridge.named] to provide fakes without replacing [instance].
 class NativeBridge {
+  static final NativeBridge instance = NativeBridge.named();
+
+  factory NativeBridge() => instance;
+
+  NativeBridge.named();
+
   static const _methodChannel = MethodChannel(NativeBridgeContract.channelName);
   static const _logStreamChannel = EventChannel('com.daozhang.py/log_stream');
   static const _installProgressChannel =
@@ -28,31 +39,31 @@ class NativeBridge {
   Stream<Map<dynamic, dynamic>> get logStream =>
       _logStream ??= _logStreamChannel
           .receiveBroadcastStream()
-          .map((e) => e as Map<dynamic, dynamic>)
+          .map(_eventMap)
           .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get installProgressStream =>
       _installProgressStream ??= _installProgressChannel
           .receiveBroadcastStream()
-          .map((e) => e as Map<dynamic, dynamic>)
+          .map(_eventMap)
           .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get downloadProgressStream =>
       _downloadProgressStream ??= _downloadProgressChannel
           .receiveBroadcastStream()
-          .map((e) => e as Map<dynamic, dynamic>)
+          .map(_eventMap)
           .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get executionStatusStream =>
       _executionStatusStream ??= _executionStatusChannel
           .receiveBroadcastStream()
-          .map((e) => e as Map<dynamic, dynamic>)
+          .map(_eventMap)
           .asBroadcastStream();
 
   Stream<Map<dynamic, dynamic>> get stdinRequestStream =>
       _stdinRequestStream ??= _stdinRequestChannel
           .receiveBroadcastStream()
-          .map((e) => e as Map<dynamic, dynamic>)
+          .map(_eventMap)
           .asBroadcastStream();
 
   Future<String> createScript(String name, {String content = ''}) async {
@@ -68,8 +79,7 @@ class NativeBridge {
   Future<bool> deleteScript(String name) async {
     final safeName = ScriptNameValidator.normalize(name);
     final result = await _invoke('deleteScript', {'name': safeName});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<bool> renameScript(String oldName, String newName) async {
@@ -77,13 +87,12 @@ class NativeBridge {
     final safeNewName = ScriptNameValidator.normalize(newName);
     final result = await _invoke(
         'renameScript', {'oldName': safeOldName, 'newName': safeNewName});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<List<String>> listScripts() async {
     final result = await _invoke('listScripts', {});
-    return (result as List)
+    return _asList(result)
         .map((e) {
           if (e is Map) return e['name']?.toString() ?? '';
           return e.toString();
@@ -102,8 +111,7 @@ class NativeBridge {
     final safeName = ScriptNameValidator.normalize(name);
     final result =
         await _invoke('saveScript', {'name': safeName, 'content': content});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<void> executeScript(String name, String executionId,
@@ -145,8 +153,8 @@ class NativeBridge {
 
   Future<List<Map<String, String>>> listInstalledPackages() async {
     final result = await _invoke('listInstalledPackages', {});
-    return (result as List).map((e) {
-      final map = e as Map;
+    return _asList(result).map((e) {
+      final map = _asMap(e);
       return map.map((k, v) => MapEntry(k.toString(), v.toString()));
     }).toList();
   }
@@ -177,27 +185,30 @@ class NativeBridge {
 
   Future<List<AppFileEntry>> getFilePickerRoots() async {
     final result = await _invoke('getFilePickerRoots', {});
-    return (result as List)
-        .map((item) => AppFileEntry.fromMap(item as Map))
+    return _asList(result)
+        .map((item) => AppFileEntry.fromMap(_asMap(item)))
         .toList();
   }
 
   Future<List<AppFileEntry>> listFilePickerDirectory(String path) async {
     final result = await _invoke('listFilePickerDirectory', {'path': path});
-    return (result as List)
-        .map((item) => AppFileEntry.fromMap(item as Map))
+    return _asList(result)
+        .map((item) => AppFileEntry.fromMap(_asMap(item)))
         .toList();
   }
 
   Future<AppFileEntry?> openFilePickerTree({String title = '选择目录'}) async {
     final result = await _invoke('openFilePickerTree', {'title': title});
     if (result == null) return null;
-    return AppFileEntry.fromMap(result as Map);
+    return AppFileEntry.fromMap(_asMap(result));
   }
 
   Future<List<int>> readFilePickerFile(String path) async {
     final result = await _invoke('readFilePickerFile', {'path': path});
-    return (result as List).map((item) => (item as num).toInt()).toList();
+    return _asList(result)
+        .whereType<num>()
+        .map((item) => item.toInt())
+        .toList();
   }
 
   Future<String> createScriptProject(String projectKey) async {
@@ -214,15 +225,14 @@ class NativeBridge {
     final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
     final result =
         await _invoke('deleteScriptProject', {'projectKey': safeKey});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<List<ScriptProjectFile>> listProjectFiles(String projectKey) async {
     final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
     final result = await _invoke('listProjectFiles', {'projectKey': safeKey});
-    return (result as List)
-        .map((item) => ScriptProjectFile.fromMap(item as Map))
+    return _asList(result)
+        .map((item) => ScriptProjectFile.fromMap(_asMap(item)))
         .toList();
   }
 
@@ -244,8 +254,7 @@ class NativeBridge {
       'saveProjectFile',
       {'projectKey': safeKey, 'path': safePath, 'content': content},
     );
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<bool> createProjectDirectory(String projectKey, String path) async {
@@ -255,8 +264,7 @@ class NativeBridge {
       'createProjectDirectory',
       {'projectKey': safeKey, 'path': safePath},
     );
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<bool> deleteProjectEntry(String projectKey, String path) async {
@@ -266,8 +274,7 @@ class NativeBridge {
       'deleteProjectEntry',
       {'projectKey': safeKey, 'path': safePath},
     );
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<bool> renameProjectEntry(
@@ -283,8 +290,7 @@ class NativeBridge {
         'newPath': safeNewPath,
       },
     );
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<List<ScriptProjectFile>> importScriptProjectZip(
@@ -294,8 +300,8 @@ class NativeBridge {
       'importScriptProjectZip',
       {'projectKey': safeKey, 'uri': uri},
     );
-    return (result as List)
-        .map((item) => ScriptProjectFile.fromMap(item as Map))
+    return _asList(result)
+        .map((item) => ScriptProjectFile.fromMap(_asMap(item)))
         .toList();
   }
 
@@ -380,6 +386,15 @@ class NativeBridge {
     });
   }
 
+  Future<void> repairLinuxLikePackage(String packageName,
+      {String? version, String? indexUrl}) async {
+    await _invoke('repairLinuxLikePackage', {
+      'packageName': packageName,
+      'version': version,
+      'indexUrl': indexUrl,
+    });
+  }
+
   Future<void> installLinuxLikeRequirements({
     String? projectKey,
     String requirementsPath = 'requirements.txt',
@@ -408,11 +423,11 @@ class NativeBridge {
     return _dynamicMap(result);
   }
 
-  Future<List<Map<String, String>>> listLinuxLikePackages() async {
+  Future<List<Map<String, dynamic>>> listLinuxLikePackages() async {
     final result = await _invoke('listLinuxLikePackages', {});
-    return (result as List).map((e) {
-      final map = e as Map;
-      return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    return _asList(result).map((e) {
+      final map = _asMap(e);
+      return map.map((k, v) => MapEntry(k.toString(), v));
     }).toList();
   }
 
@@ -422,8 +437,7 @@ class NativeBridge {
 
   Future<bool> checkOverlayPermission() async {
     final result = await _invoke('checkOverlayPermission', {});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<void> requestOverlayPermission() async {
@@ -483,14 +497,12 @@ class NativeBridge {
 
   Future<bool> cancelDownload(String taskId) async {
     final result = await _invoke('cancelDownload', {'taskId': taskId});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<bool> retryDownload(String taskId) async {
     final result = await _invoke('retryDownload', {'taskId': taskId});
-    if (result is bool) return result;
-    return result == true;
+    return _asBool(result);
   }
 
   Future<String> installDownloadedApk(String taskId) async {
@@ -504,13 +516,45 @@ class NativeBridge {
   }
 
   Map<String, String> _stringMap(dynamic result) {
-    final map = result as Map;
+    final map = _asMap(result);
     return map.map((k, v) => MapEntry(k.toString(), v.toString()));
   }
 
   Map<String, dynamic> _dynamicMap(dynamic result) {
-    final map = result as Map;
+    final map = _asMap(result);
     return map.map((k, v) => MapEntry(k.toString(), v));
+  }
+
+  static Map<dynamic, dynamic> _eventMap(dynamic event) {
+    if (event is Map) return event;
+    AppLogger.instance.warn(
+      'Native event ignored because payload is not a map',
+      source: 'NativeBridge',
+      detail: 'payload=$event',
+    );
+    return <dynamic, dynamic>{};
+  }
+
+  bool _asBool(dynamic result) => result is bool ? result : result == true;
+
+  List<dynamic> _asList(dynamic result) {
+    if (result is List) return result;
+    AppLogger.instance.warn(
+      'NativeBridge returned non-list payload',
+      source: 'NativeBridge',
+      detail: 'payload=$result',
+    );
+    return const <dynamic>[];
+  }
+
+  Map<dynamic, dynamic> _asMap(dynamic result) {
+    if (result is Map) return result;
+    AppLogger.instance.warn(
+      'NativeBridge returned non-map payload',
+      source: 'NativeBridge',
+      detail: 'payload=$result',
+    );
+    return const <dynamic, dynamic>{};
   }
 
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {

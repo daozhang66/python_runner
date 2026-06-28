@@ -62,115 +62,175 @@ void main() {
 
   test('linux-like package list only exposes explicit user packages to the UI',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
     ).readAsStringSync().replaceAll('\r\n', '\n');
 
-    expect(activity, contains('resolveLinuxLikeExplicitPackages'));
-    expect(activity, contains('REQUESTED'));
-    expect(activity, contains('hostDistributions'));
-    expect(activity, contains('queryLinuxLikeInstalledPackageVersions'));
-    expect(activity, contains('installedPackageVersions'));
-    expect(activity, contains('removeMissingLinuxLikeExplicitPackages'));
+    expect(packageController, contains('resolveLinuxLikeExplicitPackages'));
+    expect(packageController, contains('REQUESTED'));
+    expect(packageController, contains('hostDistributions'));
     expect(
-        activity, contains('explicitPackages.contains(normalizedPackageName)'));
-    expect(activity, contains('linux-like-package-list'));
+        packageController, contains('queryLinuxLikeInstalledPackageVersions'));
+    expect(packageController, contains('installedPackageVersions'));
     expect(
-        activity,
+        packageController, contains('removeMissingLinuxLikeExplicitPackages'));
+    expect(packageController,
+        contains('explicitPackages.contains(normalizedPackageName)'));
+    expect(packageController, contains('linux-like-package-list'));
+    expect(
+        packageController,
         contains(
             '"source" to if (isExplicitUserPackage) "user" else "runtime"'));
   });
 
   test('linux-like package list migrates existing installs without metadata',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('resolveLinuxLikeExplicitPackages'));
-    expect(activity, contains('readPythonPackageVersion'));
-    expect(activity, contains('metadataOwnedTopLevels'));
-    expect(activity, contains('requestedPackages'));
-    expect(activity, contains('PYTHON_RUNNER_REQUESTED'));
-    expect(activity, contains('markLinuxLikeExplicitDistributions'));
-    expect(activity, contains('pruneLinuxLikeImplicitExplicitPackages'));
+    expect(packageController, contains('resolveLinuxLikeExplicitPackages'));
+    expect(packageController, contains('readPythonPackageVersion'));
+    expect(packageController, contains('metadataOwnedTopLevels'));
+    expect(packageController, contains('requestedPackages'));
+    expect(packageController, contains('PYTHON_RUNNER_REQUESTED'));
+    expect(packageController, contains('markLinuxLikeExplicitDistributions'));
     expect(
-        activity,
+        packageController, contains('pruneLinuxLikeImplicitExplicitPackages'));
+    expect(
+        packageController,
         contains(
             'explicitPackages.isEmpty() && topLevelPackages.isNotEmpty()'));
-    expect(activity,
+    expect(packageController,
         isNot(contains('!linuxLikeImplicitDependencyPackages.contains(name)')));
-    expect(activity, contains('saveLinuxLikeExplicitPackages(mergedPackages)'));
-    expect(
-        activity, contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
+    expect(packageController,
+        contains('saveLinuxLikeExplicitPackages(mergedPackages)'));
+    expect(packageController,
+        contains('saveLinuxLikeExplicitPackages(resolvedPackages)'));
   });
 
   test('linux-like package install verifies pip actually installed package',
       () {
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
+    ).readAsStringSync();
+
+    expect(packageController, contains('verifyLinuxLikePackageInstalled'));
+    expect(packageController, contains('"show"'));
+    expect(packageController, contains('result.error("1019"'));
+  });
+
+  test('linux-like package list exposes structure integrity fields', () {
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
+    ).readAsStringSync();
+
+    expect(packageController, contains('resolveLinuxLikeIntegrity'));
+    expect(packageController, contains('inferLinuxLikeImportRoots'));
+    expect(packageController, contains('top_level.txt'));
+    expect(packageController, contains('RECORD'));
+    expect(packageController, contains('"integrityStatus"'));
+    expect(packageController, contains('"integrityMessage"'));
+    expect(packageController, contains('"missingImports"'));
+    expect(packageController, contains('"broken"'));
+    expect(packageController, contains('"unknown"'));
+    expect(packageController, contains(r'缺少 ${missingImports.joinToString'));
+    expect(packageController, contains('linuxLikeImportRootExists'));
+    expect(packageController, isNot(contains('importlib.import_module')));
+  });
+
+  test('linux-like package repair uses force reinstall into target overlay',
+      () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
+    final contract = File(
+      'android/app/src/main/kotlin/com/daozhang/py/NativeBridgeContract.kt',
+    ).readAsStringSync();
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
+    ).readAsStringSync();
 
-    expect(activity, contains('verifyLinuxLikePackageInstalled'));
-    expect(activity, contains('"show"'));
-    expect(activity, contains('result.error("1019"'));
+    expect(activity, contains('"repairLinuxLikePackage"'));
+    expect(activity,
+        contains('linuxLikePackageController.repairLinuxLikePackage'));
+    expect(contract,
+        contains('"repairLinuxLikePackage" to listOf("packageName")'));
+    expect(packageController, contains('fun repairLinuxLikePackage'));
+    expect(packageController, contains('"--target"'));
+    expect(packageController,
+        contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
+    expect(packageController, contains('"--upgrade"'));
+    expect(packageController, contains('"--force-reinstall"'));
+    expect(packageController, contains('linux-like-pip-repair'));
+    expect(
+        packageController, contains('refreshLinuxLikeExplicitPackageMetadata'));
   });
 
   test('linux-like requirements install uses pip target and project guard', () {
     final activity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
+    ).readAsStringSync();
 
     expect(activity, contains('"installLinuxLikeRequirements"'));
-    expect(activity, contains('handleInstallLinuxLikeRequirements'));
-    expect(activity, contains('resolveLinuxLikeRequirementsTarget'));
     expect(activity,
-        contains('safeProjectFile(projectKey, safeRequirementsPath)'));
-    expect(activity,
+        contains('linuxLikePackageController.installLinuxLikeRequirements'));
+    expect(packageController, contains('fun installLinuxLikeRequirements'));
+    expect(packageController, contains('resolveLinuxLikeRequirementsTarget'));
+    expect(
+        packageController,
+        contains(
+            'scriptProjectStore.safeProjectFile(projectKey, safeRequirementsPath)'));
+    expect(packageController,
         contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
-    expect(activity, contains('args.add("-r")'));
-    expect(activity, contains('refreshLinuxLikeExplicitPackageMetadata'));
-    expect(activity, contains('readLinuxLikeRequirementPackageNames'));
-    expect(activity,
+    expect(packageController, contains('args.add("-r")'));
+    expect(
+        packageController, contains('refreshLinuxLikeExplicitPackageMetadata'));
+    expect(packageController, contains('readLinuxLikeRequirementPackageNames'));
+    expect(packageController,
         contains('recordLinuxLikeExplicitPackages(requestedPackages)'));
-    expect(activity, contains('result.error("1031"'));
+    expect(packageController, contains('result.error("1031"'));
   });
 
   test('linux-like uninstall records explicit packages and removes orphans',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
     ).readAsStringSync().replaceAll('\r\n', '\n');
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('recordLinuxLikeExplicitPackage'));
-    expect(activity, contains('removeLinuxLikeExplicitPackage'));
-    expect(activity, contains('cleanupLinuxLikeOrphanDependencies'));
-    expect(activity, contains('removeLinuxLikePackagesFromOverlay'));
+    expect(packageController, contains('recordLinuxLikeExplicitPackage'));
+    expect(packageController, contains('removeLinuxLikeExplicitPackage'));
+    expect(packageController, contains('cleanupLinuxLikeOrphanDependencies'));
+    expect(packageController, contains('removeLinuxLikePackagesFromOverlay'));
     expect(
-        activity,
+        packageController,
         contains(
             'resolveLinuxLikeExplicitPackages(\n                distributions,\n                emptyMap()'));
     expect(
-        activity,
+        packageController,
         isNot(contains(
             'resolveLinuxLikeExplicitPackages(\n                distributions,\n                queryLinuxLikeTopLevelPackages()')));
-    expect(activity, contains('removedDependencies'));
+    expect(packageController, contains('removedDependencies'));
     expect(manager, contains('explicit_user_packages.json'));
   });
 
   test('linux-like command temp directories are cleaned after each run', () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
     ).readAsStringSync();
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('cleanupExecutionTempDir'));
-    expect(activity, contains('processBuilder.environment()["PROOT_TMP_DIR"]'));
+    expect(executionController, contains('cleanupExecutionTempDir'));
+    expect(executionController,
+        contains('processBuilder.environment()["PROOT_TMP_DIR"]'));
     expect(manager, contains('fun cleanupExecutionTempDir('));
     expect(manager, contains('dir.deleteRecursively()'));
   });
@@ -198,18 +258,57 @@ void main() {
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final packageController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikePackageController.kt',
     ).readAsStringSync();
 
     expect(manager, contains('userSitePackagesDir'));
     expect(manager, contains('userSitePackagesGuestPath'));
+    expect(manager, contains('userSitePackageGuestPaths'));
     expect(manager, contains('target["PYTHONPATH"]'));
     expect(manager,
         contains('"userSitePackagesDir" to userSitePackagesDir.absolutePath'));
-    expect(activity, contains('"--target"'));
-    expect(activity,
+    expect(manager, contains('"userSitePackageGuestPaths"'));
+    expect(packageController, contains('"--target"'));
+    expect(packageController,
         contains('linuxLikeRuntimeManager.userSitePackagesGuestPath'));
+  });
+
+  test('linux-like runtime migrates legacy user packages into overlay', () {
+    final manager = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
+    ).readAsStringSync();
+
+    expect(manager, contains('legacyUserSitePackagesDirs'));
+    expect(manager, contains('migrateLegacyUserSitePackages'));
+    expect(manager, contains('mergeLegacyUserSiteEntry'));
+    expect(manager, contains('rootfsFile(userSitePackagesGuestPath)'));
+    expect(
+      manager,
+      contains(
+          r'rootfsFile("${context.filesDir.absolutePath}/linux_like/user_site_packages")'),
+    );
+    expect(
+      manager,
+      contains(
+          r'rootfsFile("/data/data/${context.packageName}/files/linux_like/user_site_packages")'),
+    );
+    expect(manager, contains('source.copyTo(target, overwrite = false)'));
+  });
+
+  test('linux-like runtime keeps legacy python package paths importable', () {
+    final manager = File(
+      'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
+    ).readAsStringSync();
+
+    expect(manager, contains('legacyPythonPackageGuestPaths'));
+    expect(manager, contains('"/root/.local/lib"'));
+    expect(manager, contains('"/usr/local/lib"'));
+    expect(manager, contains('"/usr/lib"'));
+    expect(manager, contains('"site-packages"'));
+    expect(manager, contains('"dist-packages"'));
+    expect(manager,
+        contains(').plus(legacyPythonPackageGuestPaths()).distinct()'));
   });
 
   test('linux-like process environment is stable across Android versions', () {
@@ -240,36 +339,43 @@ void main() {
 
   test('linux-like script execution HOME follows resolved working directory',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('resolveScriptWorkingDir(workingDir)'));
-    expect(activity,
+    expect(
+        executionController, contains('resolveScriptWorkingDir(workingDir)'));
+    expect(executionController,
         contains('executionEnvironment["HOME"] = resolvedWorkingDir'));
-    expect(activity, contains('processBuilder.environment(),'));
-    expect(activity, contains('executionEnvironment'));
+    expect(executionController, contains('processBuilder.environment(),'));
+    expect(executionController, contains('executionEnvironment'));
   });
 
   test('linux-like script launcher exposes cwd script path to user code', () {
     final manager = File(
       'android/app/src/main/kotlin/com/daozhang/py/LinuxLikeRuntimeManager.kt',
     ).readAsStringSync();
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
     ).readAsStringSync();
 
     expect(manager, contains('toPythonStringLiteral'));
     expect(manager, contains('add("-B")'));
     expect(manager, contains('sys.dont_write_bytecode = True'));
+    expect(manager, contains('userSitePathListLiteral'));
+    expect(
+        manager,
+        contains(
+            r'for _python_runner_site in reversed($userSitePathListLiteral):'));
+    expect(manager, contains('sys.path.insert(0, _python_runner_site)'));
     expect(manager, contains('execution_file_path'));
     expect(manager, contains("'__file__': execution_file_path"));
     expect(manager,
         contains("sys.argv[0] = os.path.abspath(execution_file_path)"));
     expect(manager, contains("compile(_source, execution_file_path, 'exec')"));
-    expect(activity, contains('executionFilePath = File('));
+    expect(executionController, contains('executionFilePath = File('));
     expect(
-        activity,
+        executionController,
         contains(
             'linuxLikeRuntimeManager.resolveScriptWorkingDir(workingDir)'));
     expect(manager, isNot(contains('JSONObject.quote(scriptPath)')));
@@ -279,18 +385,23 @@ void main() {
 
   test('linux-like script execution prevents and cleans pycache directories',
       () {
-    final activity = File(
+    final mainActivity = File(
       'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
     ).readAsStringSync();
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
+    ).readAsStringSync();
 
-    expect(activity, contains('deletePythonCacheDirectories'));
-    expect(activity, contains('deletePythonCacheDirectory'));
-    expect(activity, contains('isBroadPythonCacheCleanupRoot'));
-    expect(activity, contains('file.name == "__pycache__"'));
-    expect(activity, contains('pycacheCleanupRoots = listOf(projectRoot)'));
-    expect(activity, contains('File(resolvedScriptWorkingDir)'));
-    expect(activity, contains('projectRoot = projectRoot'));
-    expect(activity, contains('executionTarget.pycacheCleanupRoots.forEach'));
+    expect(mainActivity, contains('deletePythonCacheDirectories'));
+    expect(mainActivity, contains('deletePythonCacheDirectory'));
+    expect(mainActivity, contains('isBroadPythonCacheCleanupRoot'));
+    expect(mainActivity, contains('file.name == "__pycache__"'));
+    expect(executionController,
+        contains('pycacheCleanupRoots = listOf(projectRoot)'));
+    expect(executionController, contains('File(resolvedScriptWorkingDir)'));
+    expect(executionController, contains('projectRoot = projectRoot'));
+    expect(executionController,
+        contains('executionTarget.pycacheCleanupRoots.forEach'));
   });
 
   test('linux-like launcher emits stdin request sentinel for interactive input',
@@ -311,18 +422,35 @@ void main() {
 
   test('android bridge converts linux-like stdin sentinel into prompt events',
       () {
-    final activity = File(
-      'android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt',
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('emitStdinRequest('));
-    expect(activity, contains('parseLinuxLikePrompt'));
+    expect(executionController, contains('emitStdinRequest('));
+    expect(executionController, contains('parseLinuxLikePrompt'));
     expect(
-      activity,
+      executionController,
       contains('line.startsWith(LinuxLikeRuntimeManager.stdinRequestSentinel)'),
     );
-    expect(activity, isNot(contains('type == "stderr" &&')));
-    expect(activity, contains('"prompt" to prompt'));
+    expect(executionController, isNot(contains('type == "stderr" &&')));
+    expect(executionController,
+        contains('emitStdinRequestEvent(executionId, prompt)'));
+  });
+
+  test('linux-like stop escalates quickly and terminates process tree', () {
+    final executionController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/ScriptExecutionController.kt',
+    ).readAsStringSync();
+
+    expect(executionController, contains('LINUX_LIKE_GRACEFUL_STOP_MS = 300L'));
+    expect(executionController, contains('private fun stopProcessTree('));
+    expect(executionController, contains('private fun processPid('));
+    expect(executionController, contains('private fun killProcessTree('));
+    expect(executionController, contains('private fun collectDescendantPids('));
+    expect(executionController, contains('android.os.Process.sendSignal'));
+    expect(executionController, contains('android.os.Process.killProcess'));
+    expect(executionController, contains(r'File("/proc/$pid/task")'));
+    expect(executionController, isNot(contains('Thread.sleep(1000)')));
   });
 
   test('android script file operations use canonical safe script file guard',
@@ -391,13 +519,20 @@ void main() {
   test('code editor dependency uses local Flutter-compatible re_editor patch',
       () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
+    final patchNotes =
+        File('third_party/re_editor/PATCHES.md').readAsStringSync();
     final patchedInput = File(
       'third_party/re_editor/lib/src/_code_input.dart',
     ).readAsStringSync();
 
     expect(pubspec, contains('path: third_party/re_editor'));
     expect(pubspec, isNot(contains('re_editor: ^0.8.0')));
+    expect(pubspec, contains('re_highlight: ^0.0.3'));
+    expect(pubspec, isNot(contains('\n  highlight:')));
     expect(patchedInput, contains('bool onFocusReceived() => false;'));
+    expect(patchNotes, contains('third_party/re_editor'));
+    expect(patchNotes, contains('re_highlight'));
+    expect(patchNotes, contains('should not depend directly on'));
   });
 
   test('code editor syntax highlighter ignores stale async results', () {

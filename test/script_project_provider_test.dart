@@ -7,6 +7,8 @@ import 'package:python_runner/services/native_bridge.dart';
 import 'package:python_runner/services/script_project_service.dart';
 
 class FakeProjectBridge extends NativeBridge {
+  FakeProjectBridge() : super.named();
+
   final files = <String, String>{};
   final createdProjects = <String>[];
   final deletedProjects = <String>[];

@@ -88,9 +88,11 @@ class TerminalViewState extends State<TerminalView> {
   static const String _fontSizePrefsKey = 'terminal_font_size';
   static const String _colorModePrefsKey = 'terminal_color_mode';
   static const int _maxAnsiCacheEntries = 6000;
+  static const int _maxAnsiCacheBytes = 1024 * 1024;
 
   final LinkedHashMap<String, List<TextSpan>> _ansiCache =
       LinkedHashMap<String, List<TextSpan>>();
+  int _ansiCacheBytes = 0;
   int _lastLogCount = 0;
 
   @override
@@ -195,7 +197,10 @@ class TerminalViewState extends State<TerminalView> {
   @override
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.logs.isEmpty && _ansiCache.isNotEmpty) _ansiCache.clear();
+    if (widget.logs.isEmpty && _ansiCache.isNotEmpty) {
+      _ansiCache.clear();
+      _ansiCacheBytes = 0;
+    }
     if (_autoScroll &&
         (widget.logs.length > _lastLogCount ||
             widget.logVersion != oldWidget.logVersion)) {
@@ -305,10 +310,30 @@ class TerminalViewState extends State<TerminalView> {
       palette: palette,
     );
     _ansiCache[key] = parsed;
-    if (_ansiCache.length > _maxAnsiCacheEntries) {
-      _ansiCache.remove(_ansiCache.keys.first);
-    }
+    _ansiCacheBytes += _ansiCacheEntryBytes(key, parsed);
+    _trimAnsiCache();
     return parsed;
+  }
+
+  int _ansiCacheEntryBytes(String key, List<TextSpan> spans) {
+    var textLength = key.length;
+    for (final span in spans) {
+      textLength += span.text?.length ?? 0;
+    }
+    return textLength * 2;
+  }
+
+  void _trimAnsiCache() {
+    while (_ansiCache.isNotEmpty &&
+        (_ansiCache.length > _maxAnsiCacheEntries ||
+            _ansiCacheBytes > _maxAnsiCacheBytes)) {
+      final oldestKey = _ansiCache.keys.first;
+      final oldestValue = _ansiCache.remove(oldestKey);
+      if (oldestValue != null) {
+        _ansiCacheBytes -= _ansiCacheEntryBytes(oldestKey, oldestValue);
+      }
+    }
+    if (_ansiCacheBytes < 0) _ansiCacheBytes = 0;
   }
 
   List<LogEntry> _filteredLogs() {
@@ -768,6 +793,7 @@ class TerminalViewState extends State<TerminalView> {
     _stdinFocusNode.dispose();
     _searchController.dispose();
     _ansiCache.clear();
+    _ansiCacheBytes = 0;
     super.dispose();
   }
 }

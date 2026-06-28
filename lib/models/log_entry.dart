@@ -4,11 +4,13 @@ class LogEntry {
   final LogType type;
   final String content;
   final DateTime timestamp;
+  final String? executionId;
 
   LogEntry({
     required this.type,
     required this.content,
     required this.timestamp,
+    this.executionId,
   });
 
   factory LogEntry.fromMap(Map<dynamic, dynamic> map) {
@@ -24,6 +26,7 @@ class LogEntry {
           ? DateTime.fromMillisecondsSinceEpoch(
               (map['timestamp'] as num).toInt())
           : DateTime.now(),
+      executionId: map['executionId'] as String?,
     );
   }
 }

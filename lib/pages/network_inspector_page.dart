@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:re_editor/re_editor.dart';
 import '../services/http_inspector_store.dart';
 import '../services/native_bridge.dart';
 import '../ui/app_badges.dart';
@@ -30,6 +32,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   void initState() {
     super.initState();
     _store.addListener(_onStoreChanged);
+    unawaited(_store.loadDisplayPreferences());
   }
 
   @override
@@ -41,6 +44,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     _store.removeListener(_onStoreChanged);
     _store = nextStore;
     _store.addListener(_onStoreChanged);
+    unawaited(_store.loadDisplayPreferences());
   }
 
   void _onStoreChanged() {
@@ -58,7 +62,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   Widget build(BuildContext context) {
     final records = _store.filteredRecords;
     final colors = Theme.of(context).colorScheme;
-    final stats = _store.stats;
+    final stats = _store.visibleStats;
 
     return Scaffold(
       appBar: AppBar(
@@ -75,6 +79,18 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               _store.setFilterDomain('');
             },
             trailingActions: [
+              IconButton(
+                icon: const Icon(Icons.visibility_outlined, size: 20),
+                selectedIcon:
+                    const Icon(Icons.visibility_off_outlined, size: 20),
+                isSelected: _store.hideNoiseMethods,
+                onPressed: () =>
+                    _store.setHideNoiseMethods(!_store.hideNoiseMethods),
+                tooltip: _store.hideNoiseMethods
+                    ? '显示 DNS/connect/进程记录'
+                    : '隐藏 DNS/connect/进程记录',
+                visualDensity: VisualDensity.compact,
+              ),
               IconButton(
                 icon: const Icon(Icons.filter_list, size: 20),
                 onPressed: () => _showFilterSheet(context),
@@ -182,7 +198,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                     title: _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
                     subtitle: _store.count == 0
                         ? '运行包含网络请求的脚本后，请求将自动显示在这里'
-                        : '尝试清空筛选条件',
+                        : _emptyRequestSubtitle(),
                   )
                 : ListView.builder(
                     itemCount: records.length,
@@ -198,6 +214,13 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         ],
       ),
     );
+  }
+
+  String _emptyRequestSubtitle() {
+    if (_store.hideNoiseMethods && _store.hiddenNoiseCount > 0) {
+      return '已隐藏 DNS/connect/进程记录，可点击上方按钮显示全部';
+    }
+    return '尝试清空筛选条件';
   }
 
   void _showFilterSheet(BuildContext context) {
@@ -321,6 +344,10 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
 
   Widget _buildRequestDashboard(Map<String, dynamic> stats) {
     final colors = Theme.of(context).colorScheme;
+    final visibleTotal = stats['total'] as int? ?? 0;
+    final countLabel = visibleTotal == _store.count
+        ? '全部 ${_store.count}'
+        : '显示 $visibleTotal / 全部 ${_store.count}';
     return AppSurface(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: Padding(
@@ -349,7 +376,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                   icon: Icons.speed,
                   color: colors.onSurfaceVariant),
             const Spacer(),
-            Text('全部 ${_store.count}',
+            Text(countLabel,
                 style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
           ],
         ),

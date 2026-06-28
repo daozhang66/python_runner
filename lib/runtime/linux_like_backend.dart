@@ -114,6 +114,28 @@ class LinuxLikeBackend implements RuntimeBackend {
   }
 
   @override
+  Future<PackageInstallResult> repairPackage(
+    PackageInstallRequest request,
+  ) async {
+    final bridge = _bridge;
+    if (bridge == null) {
+      return const PackageInstallResult(
+        success: false,
+        message: unavailableMessage,
+      );
+    }
+    await bridge.repairLinuxLikePackage(
+      request.packageName,
+      version: request.version,
+      indexUrl: request.indexUrl,
+    );
+    return PackageInstallResult(
+      success: true,
+      message: '修复成功: ${request.packageName}',
+    );
+  }
+
+  @override
   Future<PackageInstallResult> installRequirements(
     RequirementsInstallRequest request,
   ) async {
@@ -190,11 +212,10 @@ class LinuxLikeBackend implements RuntimeBackend {
     if (bridge == null) return const [];
     final packages = await bridge.listLinuxLikePackages();
     return packages
-        .map((item) => RuntimePackage(
-              name: item['name'] ?? '',
-              version: item['version'] ?? '',
-              source: item['source'] ?? 'user',
-            ))
+        .map((item) => RuntimePackage.fromMap({
+              ...item,
+              'source': item['source'] ?? 'user',
+            }))
         .where((item) => item.name.isNotEmpty)
         .toList();
   }

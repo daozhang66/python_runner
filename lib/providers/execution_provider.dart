@@ -19,6 +19,7 @@ import 'package:intl/intl.dart';
 
 /// Stores logs for a single script execution run
 class ScriptLogRecord {
+  final String executionId;
   final String scriptName;
   final DateTime startTime;
   final List<LogEntry> logs;
@@ -26,6 +27,7 @@ class ScriptLogRecord {
   int? exitCode;
 
   ScriptLogRecord({
+    required this.executionId,
     required this.scriptName,
     required this.startTime,
     List<LogEntry>? logs,
@@ -36,6 +38,20 @@ class ScriptLogRecord {
   String get logsAsText {
     return logs.map((e) => e.content).join('\n');
   }
+}
+
+class _ExecutionPreferences {
+  final bool floatingBallEnabled;
+  final String? workingDir;
+  final int? timeoutSeconds;
+  final String preferredRuntimeBackendId;
+
+  const _ExecutionPreferences({
+    required this.floatingBallEnabled,
+    required this.workingDir,
+    required this.timeoutSeconds,
+    required this.preferredRuntimeBackendId,
+  });
 }
 
 class ExecutionProvider extends ChangeNotifier {
@@ -52,6 +68,7 @@ class ExecutionProvider extends ChangeNotifier {
   final List<LogEntry> _logs = [];
   late final UnmodifiableListView<LogEntry> _logsView =
       UnmodifiableListView(_logs);
+  final Map<String, ScriptLogRecord> _historyByExecutionId = {};
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
   StreamSubscription? _stdinSub;
@@ -99,6 +116,48 @@ class ExecutionProvider extends ChangeNotifier {
   String get currentInputPrompt => _currentInputPrompt;
   List<ScriptLogRecord> get logHistory => _logHistoryView;
 
+  /// Returns the newest recorded run for [scriptName], or null if the script
+  /// has never been executed.
+  ScriptLogRecord? latestHistoryRecordForScript(String scriptName) {
+    for (var i = _logHistory.length - 1; i >= 0; i--) {
+      final record = _logHistory[i];
+      if (record.scriptName == scriptName) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  ScriptLogRecord? _historyRecordForExecutionId(String? executionId) {
+    if (executionId == null || executionId.isEmpty) return null;
+    return _historyByExecutionId[executionId];
+  }
+
+  ScriptLogRecord? _activeHistoryRecord() {
+    final executionId = _state.executionId;
+    if (executionId == null) return null;
+    if (_state.status != ExecutionStatus.running &&
+        _state.status != ExecutionStatus.stopping) {
+      return null;
+    }
+    return _historyRecordForExecutionId(executionId);
+  }
+
+  ScriptLogRecord? historyRecordForScriptExecution(String scriptName) {
+    final activeExecutionId = _state.executionId;
+    final activeRecord = _historyRecordForExecutionId(activeExecutionId);
+    if (activeRecord != null && activeRecord.scriptName == scriptName) {
+      return activeRecord;
+    }
+    for (var i = _logHistory.length - 1; i >= 0; i--) {
+      final record = _logHistory[i];
+      if (record.scriptName == scriptName) {
+        return record;
+      }
+    }
+    return null;
+  }
+
   ExecutionProvider(this._bridge, {RuntimeManager? runtimeManager})
       : _runtimeManager = runtimeManager ??
             RuntimeManager.fromPreferredBackend(
@@ -118,7 +177,13 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.warn(
+        '读取悬浮球设置失败: $e',
+        source: 'Execution',
+        detail: stackTrace.toString(),
+      );
+    }
   }
 
   void _listenStreams() {
@@ -149,7 +214,10 @@ class ExecutionProvider extends ChangeNotifier {
           return;
         }
 
-        _appendLiveLog(entry);
+        final routedRecord =
+            _historyRecordForExecutionId(entry.executionId) ??
+                _activeHistoryRecord();
+        _appendLiveLog(entry, routedRecord: routedRecord);
         // High-frequency log streams — throttle notifications
         _scheduleNotify();
       }, onError: (e) {
@@ -167,9 +235,13 @@ class ExecutionProvider extends ChangeNotifier {
         _state = state;
         final isTerminal = _state.status != ExecutionStatus.running &&
             _state.status != ExecutionStatus.stopping;
-        if (_logHistory.isNotEmpty && isTerminal) {
-          _logHistory.last.status = _state.status;
-          _logHistory.last.exitCode = _state.exitCode;
+        if (isTerminal) {
+          final record = _historyRecordForExecutionId(_state.executionId) ??
+              (_logHistory.isNotEmpty ? _logHistory.last : null);
+          if (record != null) {
+            record.status = _state.status;
+            record.exitCode = _state.exitCode;
+          }
         }
         if (isTerminal) {
           _waitingForInput = false;
@@ -269,15 +341,31 @@ class ExecutionProvider extends ChangeNotifier {
     items.removeRange(0, items.length - maxItems);
   }
 
-  void _appendLiveLog(LogEntry entry) {
-    _logs.add(entry);
-    _trimListToMax(_logs, maxCurrentLogs);
-    if (_logHistory.isNotEmpty) {
-      final historyLogs = _logHistory.last.logs;
-      historyLogs.add(entry);
-      _trimListToMax(historyLogs, maxLogsPerHistoryRecord);
+  void _appendLiveLog(LogEntry entry, {ScriptLogRecord? routedRecord}) {
+    final record = routedRecord ?? _activeHistoryRecord();
+    final activeExecutionId = _state.executionId;
+    final shouldAppendLive = record != null &&
+        activeExecutionId != null &&
+        record.executionId == activeExecutionId &&
+        (_state.status == ExecutionStatus.running ||
+            _state.status == ExecutionStatus.stopping);
+    final shouldAppendAnonymousLive =
+        record == null &&
+            (_state.status != ExecutionStatus.running &&
+                _state.status != ExecutionStatus.stopping);
+    if (shouldAppendLive || shouldAppendAnonymousLive) {
+      _logs.add(entry);
+      _trimListToMax(_logs, maxCurrentLogs);
     }
+    _appendHistoryLog(entry, routedRecord: record);
     _bumpLogVersion();
+  }
+
+  void _appendHistoryLog(LogEntry entry, {ScriptLogRecord? routedRecord}) {
+    final record = routedRecord ?? _activeHistoryRecord();
+    if (record == null) return;
+    record.logs.add(entry);
+    _trimListToMax(record.logs, maxLogsPerHistoryRecord);
   }
 
   void _replaceLastLiveLog(LogEntry entry) {
@@ -286,8 +374,9 @@ class ExecutionProvider extends ChangeNotifier {
       return;
     }
     _logs[_logs.length - 1] = entry;
-    if (_logHistory.isNotEmpty && _logHistory.last.logs.isNotEmpty) {
-      _logHistory.last.logs[_logHistory.last.logs.length - 1] = entry;
+    final record = _activeHistoryRecord();
+    if (record != null && record.logs.isNotEmpty) {
+      record.logs[record.logs.length - 1] = entry;
     }
     _bumpLogVersion();
   }
@@ -303,6 +392,74 @@ class ExecutionProvider extends ChangeNotifier {
     final micros = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     final seq = _executionSequence.toRadixString(16).padLeft(4, '0');
     return '$micros-$seq';
+  }
+
+  void _trimHistoryRecords() {
+    while (_logHistory.length > maxHistoryRecords) {
+      final removed = _logHistory.removeAt(0);
+      _historyByExecutionId.remove(removed.executionId);
+    }
+  }
+
+  Future<_ExecutionPreferences> _loadExecutionPreferences({
+    bool includeWorkingDir = true,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    return _ExecutionPreferences(
+      floatingBallEnabled: prefs.getBool('floating_ball_enabled') ?? false,
+      workingDir: includeWorkingDir ? prefs.getString('working_dir') : null,
+      timeoutSeconds: prefs.getInt('execution_timeout'),
+      preferredRuntimeBackendId: RuntimeManager.normalizePreferredBackendId(
+        prefs.getString(RuntimeManager.prefsKey),
+      ),
+    );
+  }
+
+  Map<String, String> _buildTimezoneEnvironment() {
+    final offset = DateTime.now().timeZoneOffset;
+    final totalMinutes = offset.inMinutes;
+    final absMinutes = totalMinutes.abs();
+    final h = absMinutes ~/ 60;
+    final m = absMinutes % 60;
+    final tzSign = totalMinutes >= 0 ? '-' : '+';
+    final tzValue =
+        m > 0 ? 'UTC$tzSign$h:${m.toString().padLeft(2, '0')}' : 'UTC$tzSign$h';
+    return {'TZ': tzValue};
+  }
+
+  Map<String, String> _buildNetworkHookEnvironment() {
+    final overrideConfig = RequestOverrideConfig.instance;
+    final netDebugConfig = NetworkDebugConfig.instance;
+    if (!overrideConfig.recordRequests && !overrideConfig.overrideEnabled) {
+      return const {};
+    }
+    return {
+      'PYRUNNER_HTTP_HOOK_CONFIG': overrideConfig.toJsonString(),
+      'PYRUNNER_PROXY_HOST': netDebugConfig.proxyHost,
+      'PYRUNNER_PROXY_PORT': netDebugConfig.proxyPort > 0
+          ? netDebugConfig.proxyPort.toString()
+          : '',
+      'PYRUNNER_SSL_VERIFY': netDebugConfig.allowInsecureCerts ? '0' : '1',
+    };
+  }
+
+  Map<String, String> _buildRuntimeEnvironment({
+    required String runtimeBackendId,
+    required String preferredRuntimeBackendId,
+  }) {
+    return {
+      'PYRUNNER_RUNTIME_BACKEND': runtimeBackendId,
+      'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
+      'TERM': 'xterm-256color',
+      ..._buildTimezoneEnvironment(),
+      ..._buildNetworkHookEnvironment(),
+    };
+  }
+
+  Duration? _timeoutFromSeconds(int? timeoutSeconds) {
+    return timeoutSeconds != null && timeoutSeconds > 0
+        ? Duration(seconds: timeoutSeconds)
+        : null;
   }
 
   Future<String> _resolveExecutableBackendId(
@@ -321,9 +478,7 @@ class ExecutionProvider extends ChangeNotifier {
         return resolvedBackendId;
       }
 
-      // For project scripts or explicit Linux-like selection, fail-fast
-      if (isProject ||
-          preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+      if (isProject) {
         throw StateError('Linux-like 运行时未就绪: ${health.message}\n\n'
             '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
@@ -335,8 +490,7 @@ class ExecutionProvider extends ChangeNotifier {
     } catch (e) {
       if (e is StateError) rethrow;
 
-      if (isProject ||
-          preferredBackendId == RuntimeManager.linuxLikeBackendId) {
+      if (isProject) {
         throw StateError('Linux-like 运行时健康检查失败: $e\n\n'
             '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
@@ -353,12 +507,19 @@ class ExecutionProvider extends ChangeNotifier {
     final safeName = ScriptNameValidator.normalize(name);
     // If a previous execution is still marked as running, clean it up
     if (_state.status == ExecutionStatus.running) {
+      final previousRecord = _activeHistoryRecord();
       try {
         await _runtimeManager.stopExecution();
-      } catch (_) {}
-      if (_logHistory.isNotEmpty) {
-        _logHistory.last.status = ExecutionStatus.error;
-        _logHistory.last.exitCode = 1;
+      } catch (e, stackTrace) {
+        _logger.warn(
+          '停止上一轮执行失败: $e',
+          source: 'Execution',
+          detail: stackTrace.toString(),
+        );
+      }
+      if (previousRecord != null) {
+        previousRecord.status = ExecutionStatus.stopped;
+        previousRecord.exitCode = 0;
       }
     }
 
@@ -378,46 +539,39 @@ class ExecutionProvider extends ChangeNotifier {
     String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
     String runtimeBackendId = RuntimeManager.chaquopyBackendId;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-      workingDir = prefs.getString('working_dir');
-      timeoutSeconds = prefs.getInt('execution_timeout');
-      preferredRuntimeBackendId = RuntimeManager.normalizePreferredBackendId(
-        prefs.getString(RuntimeManager.prefsKey),
-      );
+      final prefs = await _loadExecutionPreferences();
+      _floatingBallEnabled = prefs.floatingBallEnabled;
+      workingDir = prefs.workingDir;
+      timeoutSeconds = prefs.timeoutSeconds;
+      preferredRuntimeBackendId = prefs.preferredRuntimeBackendId;
       runtimeBackendId =
           await _resolveExecutableBackendId(preferredRuntimeBackendId);
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.warn(
+        '读取执行偏好失败，使用默认配置: $e',
+        source: 'Execution',
+        detail: stackTrace.toString(),
+      );
+    }
     _selectRuntimeManager(runtimeBackendId);
 
     // Create a new log history record
-    _logHistory.add(ScriptLogRecord(
+    final record = ScriptLogRecord(
+      executionId: executionId,
       scriptName: safeName,
       startTime: DateTime.now(),
-    ));
-    _trimListToMax(_logHistory, maxHistoryRecords);
+    );
+    _logHistory.add(record);
+    _historyByExecutionId[executionId] = record;
+    _trimHistoryRecords();
 
     notifyListeners();
 
     try {
-      final offset = DateTime.now().timeZoneOffset;
-      final totalMinutes = offset.inMinutes;
-      final absMinutes = totalMinutes.abs();
-      final h = absMinutes ~/ 60;
-      final m = absMinutes % 60;
-      // POSIX TZ: negative sign = east of UTC (e.g. UTC-8 means UTC+8)
-      final tzSign = totalMinutes >= 0 ? '-' : '+';
-      final tzValue = m > 0
-          ? 'UTC$tzSign$h:${m.toString().padLeft(2, '0')}'
-          : 'UTC$tzSign$h';
-
-      final environment = <String, String>{
-        'PYRUNNER_RUNTIME_BACKEND': runtimeBackendId,
-        'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
-        'TERM': 'xterm-256color',
-        // Pass device timezone to Linux-like so Python sees the correct local time
-        'TZ': tzValue,
-      };
+      final environment = _buildRuntimeEnvironment(
+        runtimeBackendId: runtimeBackendId,
+        preferredRuntimeBackendId: preferredRuntimeBackendId,
+      );
       if (preferredRuntimeBackendId != runtimeBackendId) {
         final fallbackMsg =
             '⚠️ 运行引擎 $preferredRuntimeBackendId 尚未就绪，回退到 $runtimeBackendId';
@@ -430,21 +584,8 @@ class ExecutionProvider extends ChangeNotifier {
           type: LogType.info,
           content: '\x1b[33m$fallbackMsg\x1b[0m\n',
           timestamp: DateTime.now(),
+          executionId: executionId,
         ));
-      }
-
-      // Build HTTP hook environment config
-      final overrideConfig = RequestOverrideConfig.instance;
-      final netDebugConfig = NetworkDebugConfig.instance;
-      if (overrideConfig.recordRequests || overrideConfig.overrideEnabled) {
-        environment.addAll({
-          'PYRUNNER_HTTP_HOOK_CONFIG': overrideConfig.toJsonString(),
-          'PYRUNNER_PROXY_HOST': netDebugConfig.proxyHost,
-          'PYRUNNER_PROXY_PORT': netDebugConfig.proxyPort > 0
-              ? netDebugConfig.proxyPort.toString()
-              : '',
-          'PYRUNNER_SSL_VERIFY': netDebugConfig.allowInsecureCerts ? '0' : '1',
-        });
       }
 
       await _runtimeManager.startScript(RuntimeRequest(
@@ -452,9 +593,7 @@ class ExecutionProvider extends ChangeNotifier {
         executionId: executionId,
         workingDirectory: workingDir,
         environment: environment,
-        timeout: timeoutSeconds != null && timeoutSeconds > 0
-            ? Duration(seconds: timeoutSeconds)
-            : null,
+        timeout: _timeoutFromSeconds(timeoutSeconds),
       ));
       _logger.info(
         '脚本开始执行: $safeName (id: $executionId, runtime: $runtimeBackendId)',
@@ -469,15 +608,17 @@ class ExecutionProvider extends ChangeNotifier {
         type: LogType.error,
         content: 'Failed to start: $e',
         timestamp: DateTime.now(),
+        executionId: executionId,
       ));
       _state = ExecutionState(
         executionId: executionId,
         status: ExecutionStatus.error,
         exitCode: -1,
       );
-      if (_logHistory.isNotEmpty) {
-        _logHistory.last.status = ExecutionStatus.error;
-        _logHistory.last.exitCode = -1;
+      final record = _historyRecordForExecutionId(executionId);
+      if (record != null) {
+        record.status = ExecutionStatus.error;
+        record.exitCode = -1;
       }
       notifyListeners();
     }
@@ -495,12 +636,19 @@ class ExecutionProvider extends ChangeNotifier {
     final displayName = group.name.trim().isEmpty ? projectKey : group.name;
 
     if (_state.status == ExecutionStatus.running) {
+      final previousRecord = _activeHistoryRecord();
       try {
         await _runtimeManager.stopExecution();
-      } catch (_) {}
-      if (_logHistory.isNotEmpty) {
-        _logHistory.last.status = ExecutionStatus.error;
-        _logHistory.last.exitCode = 1;
+      } catch (e, stackTrace) {
+        _logger.warn(
+          '停止上一轮项目执行失败: $e',
+          source: 'Execution',
+          detail: stackTrace.toString(),
+        );
+      }
+      if (previousRecord != null) {
+        previousRecord.status = ExecutionStatus.stopped;
+        previousRecord.exitCode = 0;
       }
     }
 
@@ -517,19 +665,26 @@ class ExecutionProvider extends ChangeNotifier {
     int? timeoutSeconds;
     String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-      timeoutSeconds = prefs.getInt('execution_timeout');
-      preferredRuntimeBackendId = RuntimeManager.normalizePreferredBackendId(
-        prefs.getString(RuntimeManager.prefsKey),
+      final prefs = await _loadExecutionPreferences(includeWorkingDir: false);
+      _floatingBallEnabled = prefs.floatingBallEnabled;
+      timeoutSeconds = prefs.timeoutSeconds;
+      preferredRuntimeBackendId = prefs.preferredRuntimeBackendId;
+    } catch (e, stackTrace) {
+      _logger.warn(
+        '读取项目执行偏好失败，使用默认配置: $e',
+        source: 'Execution',
+        detail: stackTrace.toString(),
       );
-    } catch (_) {}
+    }
 
-    _logHistory.add(ScriptLogRecord(
+    final record = ScriptLogRecord(
+      executionId: executionId,
       scriptName: displayName,
       startTime: DateTime.now(),
-    ));
-    _trimListToMax(_logHistory, maxHistoryRecords);
+    );
+    _logHistory.add(record);
+    _historyByExecutionId[executionId] = record;
+    _trimHistoryRecords();
     notifyListeners();
 
     try {
@@ -548,43 +703,16 @@ class ExecutionProvider extends ChangeNotifier {
       }
       _selectRuntimeManager(RuntimeManager.linuxLikeBackendId);
 
-      final offset = DateTime.now().timeZoneOffset;
-      final totalMinutes = offset.inMinutes;
-      final absMinutes = totalMinutes.abs();
-      final h = absMinutes ~/ 60;
-      final m = absMinutes % 60;
-      final tzSign = totalMinutes >= 0 ? '-' : '+';
-      final tzValue = m > 0
-          ? 'UTC$tzSign$h:${m.toString().padLeft(2, '0')}'
-          : 'UTC$tzSign$h';
-
-      final environment = <String, String>{
-        'PYRUNNER_RUNTIME_BACKEND': RuntimeManager.linuxLikeBackendId,
-        'PYRUNNER_PREFERRED_RUNTIME_BACKEND': preferredRuntimeBackendId,
-        'TERM': 'xterm-256color',
-        'TZ': tzValue,
-      };
-
-      final overrideConfig = RequestOverrideConfig.instance;
-      final netDebugConfig = NetworkDebugConfig.instance;
-      if (overrideConfig.recordRequests || overrideConfig.overrideEnabled) {
-        environment.addAll({
-          'PYRUNNER_HTTP_HOOK_CONFIG': overrideConfig.toJsonString(),
-          'PYRUNNER_PROXY_HOST': netDebugConfig.proxyHost,
-          'PYRUNNER_PROXY_PORT': netDebugConfig.proxyPort > 0
-              ? netDebugConfig.proxyPort.toString()
-              : '',
-          'PYRUNNER_SSL_VERIFY': netDebugConfig.allowInsecureCerts ? '0' : '1',
-        });
-      }
+      final environment = _buildRuntimeEnvironment(
+        runtimeBackendId: RuntimeManager.linuxLikeBackendId,
+        preferredRuntimeBackendId: preferredRuntimeBackendId,
+      );
 
       await _runtimeManager.startScript(RuntimeRequest(
         scriptName: displayName,
         executionId: executionId,
         environment: environment,
-        timeout: timeoutSeconds != null && timeoutSeconds > 0
-            ? Duration(seconds: timeoutSeconds)
-            : null,
+        timeout: _timeoutFromSeconds(timeoutSeconds),
         projectKey: projectKey,
         projectMainFilePath: mainFilePath,
       ));
@@ -599,15 +727,17 @@ class ExecutionProvider extends ChangeNotifier {
         type: LogType.error,
         content: 'Failed to start project: $e',
         timestamp: DateTime.now(),
+        executionId: executionId,
       ));
       _state = ExecutionState(
         executionId: executionId,
         status: ExecutionStatus.error,
         exitCode: -1,
       );
-      if (_logHistory.isNotEmpty) {
-        _logHistory.last.status = ExecutionStatus.error;
-        _logHistory.last.exitCode = -1;
+      final record = _historyRecordForExecutionId(executionId);
+      if (record != null) {
+        record.status = ExecutionStatus.error;
+        record.exitCode = -1;
       }
       notifyListeners();
     }
@@ -624,6 +754,7 @@ class ExecutionProvider extends ChangeNotifier {
         type: mergedPromptLine ? LogType.stdout : LogType.info,
         content: echoedInput,
         timestamp: DateTime.now(),
+        executionId: _state.executionId,
       );
       if (mergedPromptLine) {
         _replaceLastLiveLog(entry);
@@ -642,6 +773,10 @@ class ExecutionProvider extends ChangeNotifier {
     try {
       if (_state.status == ExecutionStatus.running) {
         _state = _state.copyWith(status: ExecutionStatus.stopping);
+        final record = _historyRecordForExecutionId(_state.executionId);
+        if (record != null) {
+          record.status = ExecutionStatus.stopping;
+        }
         notifyListeners();
       }
       await _runtimeManager.stopExecution();
@@ -658,12 +793,14 @@ class ExecutionProvider extends ChangeNotifier {
 
   void clearHistory() {
     _logHistory.clear();
+    _historyByExecutionId.clear();
     notifyListeners();
   }
 
   void removeHistoryRecord(int index) {
     if (index >= 0 && index < _logHistory.length) {
-      _logHistory.removeAt(index);
+      final removed = _logHistory.removeAt(index);
+      _historyByExecutionId.remove(removed.executionId);
       notifyListeners();
     }
   }
@@ -772,7 +909,12 @@ class ExecutionProvider extends ChangeNotifier {
             _pendingNavigateScriptName = safeName;
           }
         }
-      } catch (_) {
+      } catch (e, stackTrace) {
+        _logger.warn(
+          '轮询悬浮球待运行脚本失败: $e',
+          source: 'FloatingBall',
+          detail: stackTrace.toString(),
+        );
       } finally {
         _pollingPending = false;
       }
@@ -782,14 +924,26 @@ class ExecutionProvider extends ChangeNotifier {
   Future<void> _hideFloatingBall() async {
     try {
       await _bridge.hideFloatingBall();
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.warn(
+        '隐藏悬浮球失败: $e',
+        source: 'FloatingBall',
+        detail: stackTrace.toString(),
+      );
+    }
   }
 
   Future<void> _updateFloatingBallStatus(String status) async {
     if (!_floatingBallEnabled) return;
     try {
       await _bridge.updateFloatingBallStatus(status);
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      _logger.warn(
+        '更新悬浮球状态失败: $e',
+        source: 'FloatingBall',
+        detail: stackTrace.toString(),
+      );
+    }
   }
 
   Future<void> _updateFloatingBallOnTerminal(ExecutionStatus status) async {

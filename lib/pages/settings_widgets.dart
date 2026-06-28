@@ -292,6 +292,8 @@ class _UserManualPage extends StatelessWidget {
               _ManualItem(Icons.search, '搜索 URL', '顶部搜索栏实时搜索 URL / 域名关键字'),
               _ManualItem(Icons.bar_chart, '统计摘要', '显示总数、成功数、错误数、平均耗时'),
               _ManualItem(Icons.filter_list, '高级筛选', '按域名、请求方法和状态码范围筛选'),
+              _ManualItem(Icons.visibility_off_outlined, '隐藏噪声',
+                  '默认隐藏 DNS/connect/进程记录，可在网络页顶部按钮切换'),
               _ManualItem(Icons.list_alt, '请求详情', '点击单条请求查看完整请求头/响应头/响应体'),
               _ManualItem(
                   Icons.account_tree, 'JSON 树查看', '响应体支持 JSON 树状结构查看和搜索'),

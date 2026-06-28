@@ -13,7 +13,6 @@ import 'services/native_bridge.dart';
 import 'services/database_service.dart';
 import 'services/app_logger.dart';
 import 'services/app_update_manager.dart';
-import 'services/download_service.dart';
 import 'services/http_inspector_store.dart';
 import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
@@ -41,10 +40,6 @@ void main() async {
   await logger.init();
   logger.info('App starting', source: 'main');
 
-  // Initialize download service
-  DownloadService.instance.initialize();
-  logger.info('DownloadService initialized', source: 'main');
-
   // Load network debug config
   await NetworkDebugConfig.instance.load();
 
@@ -53,6 +48,7 @@ void main() async {
 
   // Restore persisted HTTP inspector records before the UI starts.
   final httpInspectorStore = HttpInspectorStore.instance;
+  await httpInspectorStore.loadDisplayPreferences();
   await httpInspectorStore.ensureLoaded();
 
   // Load SharedPreferences for Riverpod

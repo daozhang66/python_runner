@@ -40,9 +40,10 @@ class _RunConsolePageState extends State<RunConsolePage>
 
   void _captureStartTime() {
     final exec = context.read<ExecutionProvider>();
-    if (exec.isRunning && exec.logHistory.isNotEmpty) {
-      _runStartTime = exec.logHistory.last.startTime;
-    }
+    final activeRecord =
+        exec.historyRecordForScriptExecution(widget.scriptName) ??
+            exec.latestHistoryRecordForScript(widget.scriptName);
+    _runStartTime = activeRecord?.startTime;
   }
 
   @override
@@ -136,20 +137,33 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
     final waiting = context.select<ExecutionProvider, bool>(
       (p) => p.waitingForInput,
     );
-    final status = context.select<ExecutionProvider, ExecutionStatus>(
+    final providerStatus = context.select<ExecutionProvider, ExecutionStatus>(
       (p) => p.state.status,
     );
+    final executionProvider = context.read<ExecutionProvider>();
+    final selectedRecord = executionProvider.historyRecordForScriptExecution(
+          scriptName,
+        ) ??
+        executionProvider.latestHistoryRecordForScript(scriptName);
     final isRunning = providerIsRunning && currentScriptName == scriptName;
+    final status = isRunning
+        ? providerStatus
+        : (selectedRecord?.status ?? ExecutionStatus.idle);
+    final selectedWaiting = isRunning ? waiting : false;
 
     final statusText = isRunning
-        ? (waiting ? '等待输入' : '运行中')
+        ? (selectedWaiting ? '等待输入' : '运行中')
         : (status == ExecutionStatus.error
             ? '错误'
             : status == ExecutionStatus.timeout
                 ? '超时'
-                : '已结束');
+                : status == ExecutionStatus.stopped
+                    ? '已停止'
+                    : status == ExecutionStatus.completed
+                    ? '已结束'
+                    : '暂无运行');
     final appBarBg = isDark ? const Color(0xFF161B22) : colors.surface;
-    final statusColor = _statusColor(context, isRunning, waiting, status);
+    final statusColor = _statusColor(context, isRunning, selectedWaiting, status);
 
     return AppBar(
       backgroundColor: appBarBg,
@@ -193,7 +207,7 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
           _buildRunStatusBadge(
             context,
             isRunning: isRunning,
-            waiting: waiting,
+            waiting: selectedWaiting,
             status: status,
             statusText: statusText,
           ),
@@ -250,6 +264,7 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
         : switch (status) {
             ExecutionStatus.error => AppBadgeTone.error,
             ExecutionStatus.timeout => AppBadgeTone.warning,
+            ExecutionStatus.stopped => AppBadgeTone.neutral,
             _ => AppBadgeTone.neutral,
           };
 
@@ -275,12 +290,7 @@ class _RunConsoleTerminalPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logVersion = context.select<ExecutionProvider, int>(
-      (p) => p.logVersion,
-    );
-    final logs = context.select<ExecutionProvider, List<LogEntry>>(
-      (p) => p.logs,
-    );
+    final execution = context.watch<ExecutionProvider>();
     final currentScriptName = context.select<ExecutionProvider, String?>(
       (p) => p.currentScriptName,
     );
@@ -291,6 +301,15 @@ class _RunConsoleTerminalPane extends StatelessWidget {
       (p) => p.waitingForInput,
     );
     final isRunning = providerIsRunning && currentScriptName == scriptName;
+    final selectedRecord = isRunning
+        ? execution.historyRecordForScriptExecution(scriptName) ??
+            execution.latestHistoryRecordForScript(scriptName)
+        : execution.latestHistoryRecordForScript(scriptName);
+    final logs = isRunning
+        ? execution.logs
+        : (selectedRecord?.logs ?? const <LogEntry>[]);
+    final logVersion =
+        isRunning ? execution.logVersion : (selectedRecord?.logs.length ?? 0);
 
     return TerminalView(
       key: terminalKey,
@@ -298,9 +317,9 @@ class _RunConsoleTerminalPane extends StatelessWidget {
       isRunning: isRunning,
       waitingForInput: waiting,
       onStdin: (input) => context.read<ExecutionProvider>().sendStdin(input),
-      onClear: logs.isEmpty
-          ? null
-          : () => context.read<ExecutionProvider>().clearLogs(),
+      onClear: isRunning
+          ? () => context.read<ExecutionProvider>().clearLogs()
+          : null,
       emptyMessage: isRunning ? '等待输出...' : '暂无输出',
       showLineNumberToggle: false,
       logVersion: logVersion,

@@ -4,6 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+@visibleForTesting
+typedef HttpInspectorStorageWriter = Future<void> Function(
+  File file,
+  String payload,
+);
 
 /// A single captured HTTP request/response record.
 class HttpRecord {
@@ -267,47 +274,68 @@ class HttpInspectorStore extends ChangeNotifier {
   HttpInspectorStore._({
     Future<Directory> Function()? supportDirectoryProvider,
     Duration persistDebounce = _defaultPersistDebounce,
+    Duration persistMaxDelay = _defaultPersistMaxDelay,
     bool throwOnStorageError = false,
+    HttpInspectorStorageWriter? storageWriter,
   })  : _supportDirectoryProvider =
             supportDirectoryProvider ?? getApplicationSupportDirectory,
         _persistDebounce = persistDebounce,
-        _throwOnStorageError = throwOnStorageError;
+        _persistMaxDelay = persistMaxDelay,
+        _throwOnStorageError = throwOnStorageError,
+        _storageWriter = storageWriter ?? _defaultStorageWriter;
 
   static final HttpInspectorStore instance = HttpInspectorStore._();
 
   static const int maxRecords = 5000;
   static const int maxCapturedBodyBytes = 24 * 1024 * 1024;
   static const Duration _defaultPersistDebounce = Duration(milliseconds: 250);
+  static const Duration _defaultPersistMaxDelay = Duration(seconds: 2);
   static const String _storageFileName = 'http_inspector_records.json';
+  static const String _hideNoiseMethodsPrefsKey =
+      'http_inspector_hide_noise_methods';
+  static const Set<String> noiseMethods = {'DNS', 'CONNECT', 'PROCESS'};
 
   @visibleForTesting
   factory HttpInspectorStore.test({
     required Future<Directory> Function() supportDirectoryProvider,
     Duration persistDebounce = _defaultPersistDebounce,
+    Duration persistMaxDelay = _defaultPersistMaxDelay,
     bool throwOnStorageError = true,
+    HttpInspectorStorageWriter? storageWriter,
   }) {
     return HttpInspectorStore._(
       supportDirectoryProvider: supportDirectoryProvider,
       persistDebounce: persistDebounce,
+      persistMaxDelay: persistMaxDelay,
       throwOnStorageError: throwOnStorageError,
+      storageWriter: storageWriter,
     );
   }
 
   final List<HttpRecord> _records = [];
   final Future<Directory> Function() _supportDirectoryProvider;
   final Duration _persistDebounce;
+  final Duration _persistMaxDelay;
   final bool _throwOnStorageError;
+  final HttpInspectorStorageWriter _storageWriter;
   String _filterDomain = '';
   String _filterMethod = '';
   int? _filterStatus; // null = all, 0 = errors, 200 = 2xx, etc.
+  bool _hideNoiseMethods = true;
   int _totalCount = 0;
   int _successCount = 0;
   int _errorCount = 0;
   int _totalDurationMs = 0;
   int _durationCount = 0;
-  Timer? _persistTimer;
+  Timer? _persistDebounceTimer;
+  Timer? _persistMaxDelayTimer;
   Future<void>? _loadFuture;
-  Future<void> _persistChain = Future<void>.value();
+  Future<void>? _displayPreferencesLoadFuture;
+  Future<void>? _persistFuture;
+  int _dirtyRevision = 0;
+  int _persistedRevision = 0;
+  bool _persistInFlight = false;
+  bool _needsFollowUpPersist = false;
   bool _loaded = false;
   Object? _lastStorageError;
 
@@ -317,6 +345,7 @@ class HttpInspectorStore extends ChangeNotifier {
   String get filterDomain => _filterDomain;
   String get filterMethod => _filterMethod;
   int? get filterStatus => _filterStatus;
+  bool get hideNoiseMethods => _hideNoiseMethods;
   bool get isLoaded => _loaded;
   Object? get lastStorageError => _lastStorageError;
   Map<String, dynamic> get stats => {
@@ -327,10 +356,13 @@ class HttpInspectorStore extends ChangeNotifier {
             ? (_totalDurationMs / _durationCount).round()
             : null,
       };
+  Map<String, dynamic> get visibleStats => _statsFor(filteredRecords);
+  int get hiddenNoiseCount =>
+      _hideNoiseMethods ? _records.where(_isNoiseRecord).length : 0;
 
   /// Get filtered records (newest first).
   List<HttpRecord> get filteredRecords {
-    var list = _records.reversed.toList();
+    var list = _recordsForCurrentNoisePreference(newestFirst: true);
     if (_filterDomain.isNotEmpty) {
       final d = _filterDomain.toLowerCase();
       list = list.where((r) => r.url.toLowerCase().contains(d)).toList();
@@ -361,8 +393,19 @@ class HttpInspectorStore extends ChangeNotifier {
   }
 
   void setFilterMethod(String v) {
-    _filterMethod = v;
+    _filterMethod = v.trim().toUpperCase();
+    if (_hideNoiseMethods && isNoiseMethod(_filterMethod)) {
+      _hideNoiseMethods = false;
+      unawaited(_saveHideNoiseMethodsPreference(false));
+    }
     notifyListeners();
+  }
+
+  void setHideNoiseMethods(bool value) {
+    if (_hideNoiseMethods == value) return;
+    _hideNoiseMethods = value;
+    notifyListeners();
+    unawaited(_saveHideNoiseMethodsPreference(value));
   }
 
   void setFilterStatus(int? v) {
@@ -380,7 +423,7 @@ class HttpInspectorStore extends ChangeNotifier {
   /// Get domain statistics: list of (domain, count) sorted by count desc.
   List<MapEntry<String, int>> get domainStats {
     final counts = <String, int>{};
-    for (final r in _records) {
+    for (final r in _recordsForCurrentNoisePreference()) {
       final d = r.domain;
       if (d.isNotEmpty) {
         counts[d] = (counts[d] ?? 0) + 1;
@@ -389,6 +432,69 @@ class HttpInspectorStore extends ChangeNotifier {
     final entries = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return entries;
+  }
+
+  Future<void> loadDisplayPreferences() {
+    return _displayPreferencesLoadFuture ??= _loadDisplayPreferences();
+  }
+
+  static bool isNoiseMethod(String method) {
+    return noiseMethods.contains(method.trim().toUpperCase());
+  }
+
+  List<HttpRecord> _recordsForCurrentNoisePreference({
+    bool newestFirst = false,
+  }) {
+    final source = newestFirst ? _records.reversed : _records;
+    if (!_hideNoiseMethods) {
+      return source.toList();
+    }
+    return source.where((record) => !_isNoiseRecord(record)).toList();
+  }
+
+  bool _isNoiseRecord(HttpRecord record) => isNoiseMethod(record.method);
+
+  Map<String, dynamic> _statsFor(Iterable<HttpRecord> records) {
+    var total = 0;
+    var success = 0;
+    var error = 0;
+    var totalDurationMs = 0;
+    var durationCount = 0;
+    for (final record in records) {
+      total++;
+      if (record.isSuccess) success++;
+      if (record.isError) error++;
+      if (record.durationMs != null) {
+        totalDurationMs += record.durationMs!;
+        durationCount++;
+      }
+    }
+    return {
+      'total': total,
+      'success': success,
+      'error': error,
+      'avgMs':
+          durationCount > 0 ? (totalDurationMs / durationCount).round() : null,
+    };
+  }
+
+  Future<void> _loadDisplayPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hideNoiseMethods = prefs.getBool(_hideNoiseMethodsPrefsKey) ?? true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('HttpInspectorStore.loadDisplayPreferences error: $e');
+    }
+  }
+
+  Future<void> _saveHideNoiseMethodsPreference(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_hideNoiseMethodsPrefsKey, value);
+    } catch (e) {
+      debugPrint('HttpInspectorStore.saveDisplayPreferences error: $e');
+    }
   }
 
   /// Add a new record from Python hook JSON.
@@ -401,7 +507,7 @@ class HttpInspectorStore extends ChangeNotifier {
       _addToStats(record);
       _applyLimits();
       notifyListeners();
-      _schedulePersist();
+      _markDirtyAndSchedulePersist();
     } catch (e) {
       debugPrint('HttpInspectorStore.addFromJson error: $e');
     }
@@ -412,7 +518,7 @@ class HttpInspectorStore extends ChangeNotifier {
     _records.clear();
     _resetStats();
     notifyListeners();
-    _schedulePersist();
+    _markDirtyAndSchedulePersist();
   }
 
   Future<void> ensureLoaded() {
@@ -420,9 +526,8 @@ class HttpInspectorStore extends ChangeNotifier {
   }
 
   Future<void> flush() async {
-    _persistTimer?.cancel();
-    _persistTimer = null;
-    await _persistNow();
+    _cancelPersistTimers();
+    await _requestPersist();
   }
 
   /// Export all records as text.
@@ -650,12 +755,32 @@ class HttpInspectorStore extends ChangeNotifier {
     }
   }
 
+  void _markDirtyAndSchedulePersist() {
+    _dirtyRevision++;
+    _schedulePersist();
+  }
+
   void _schedulePersist() {
-    if (_persistTimer != null) return;
-    _persistTimer = Timer(_persistDebounce, () {
-      _persistTimer = null;
-      unawaited(_persistNow());
+    _persistDebounceTimer?.cancel();
+    _persistDebounceTimer = Timer(_persistDebounce, () {
+      _persistDebounceTimer = null;
+      _persistMaxDelayTimer?.cancel();
+      _persistMaxDelayTimer = null;
+      unawaited(_requestPersist());
     });
+    _persistMaxDelayTimer ??= Timer(_persistMaxDelay, () {
+      _persistMaxDelayTimer = null;
+      _persistDebounceTimer?.cancel();
+      _persistDebounceTimer = null;
+      unawaited(_requestPersist());
+    });
+  }
+
+  void _cancelPersistTimers() {
+    _persistDebounceTimer?.cancel();
+    _persistDebounceTimer = null;
+    _persistMaxDelayTimer?.cancel();
+    _persistMaxDelayTimer = null;
   }
 
   Future<void> _loadFromDisk() async {
@@ -687,39 +812,62 @@ class HttpInspectorStore extends ChangeNotifier {
     }
   }
 
-  Future<void> _persistNow() async {
+  Future<void> _requestPersist() {
+    if (_persistInFlight) {
+      _needsFollowUpPersist = true;
+    }
+    return _persistFuture ??= _drainPersistQueue().whenComplete(() {
+      _persistFuture = null;
+    });
+  }
+
+  Future<void> _drainPersistQueue() async {
+    do {
+      _needsFollowUpPersist = false;
+      if (_persistedRevision >= _dirtyRevision) {
+        continue;
+      }
+      final persisted = await _persistSnapshot();
+      if (!persisted) {
+        break;
+      }
+      if (_dirtyRevision > _persistedRevision) {
+        _needsFollowUpPersist = true;
+      }
+    } while (_needsFollowUpPersist);
+  }
+
+  Future<bool> _persistSnapshot() async {
+    final snapshotRevision = _dirtyRevision;
     final snapshot =
         _records.map((record) => record.toJson()).toList(growable: false);
-    _persistChain = _persistChain.then((_) async {
-      try {
-        final file = await _storageFile();
-        await file.parent.create(recursive: true);
-        final payload = jsonEncode(snapshot);
-        await file.writeAsString(payload, flush: true);
-        _lastStorageError = null;
-      } catch (e) {
-        _lastStorageError = e;
-        debugPrint('HttpInspectorStore.persist error: $e');
-        if (_throwOnStorageError) rethrow;
-      }
-    }, onError: (_) async {
-      try {
-        final file = await _storageFile();
-        await file.parent.create(recursive: true);
-        final payload = jsonEncode(snapshot);
-        await file.writeAsString(payload, flush: true);
-        _lastStorageError = null;
-      } catch (e) {
-        _lastStorageError = e;
-        debugPrint('HttpInspectorStore.persist error: $e');
-        if (_throwOnStorageError) rethrow;
-      }
-    });
-    await _persistChain;
+    _persistInFlight = true;
+    try {
+      final file = await _storageFile();
+      await file.parent.create(recursive: true);
+      await _storageWriter(file, jsonEncode(snapshot));
+      _persistedRevision = snapshotRevision;
+      _lastStorageError = null;
+      return true;
+    } catch (e) {
+      _lastStorageError = e;
+      debugPrint('HttpInspectorStore.persist error: $e');
+      if (_throwOnStorageError) rethrow;
+      return false;
+    } finally {
+      _persistInFlight = false;
+    }
   }
 
   Future<File> _storageFile() async {
     final dir = await _supportDirectoryProvider();
     return File('${dir.path}${Platform.pathSeparator}$_storageFileName');
+  }
+
+  static Future<void> _defaultStorageWriter(
+    File file,
+    String payload,
+  ) async {
+    await file.writeAsString(payload, flush: true);
   }
 }

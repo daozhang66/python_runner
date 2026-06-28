@@ -133,7 +133,7 @@ ScriptFile _script(
 class _MemoryNativeBridge extends NativeBridge {
   final List<String> names;
 
-  _MemoryNativeBridge(this.names);
+  _MemoryNativeBridge(this.names) : super.named();
 
   @override
   Future<List<String>> listScripts() async => names;

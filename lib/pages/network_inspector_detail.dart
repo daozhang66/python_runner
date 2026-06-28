@@ -380,6 +380,10 @@ class _BodyFullViewPage extends StatefulWidget {
 }
 
 class _BodyFullViewPageState extends State<_BodyFullViewPage> {
+  late final CodeLineEditingController _bodyController;
+  late final CodeFindController _findController;
+  late final CodeScrollController _codeScrollController;
+  late final SelectionToolbarController _toolbarController;
   dynamic _parsedJson;
   String _formatted = '';
   List<String> _formattedLines = const [];
@@ -388,38 +392,46 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   double? _scaleStartFontSize;
   final Map<int, Offset> _scalePointers = {};
   double? _pointerScaleStartDistance;
-  final _scrollController = ScrollController();
   bool _showFab = false;
-  bool _searchVisible = false;
-  final _searchCtrl = TextEditingController();
-  int _searchCurrent = -1;
-  List<int> _searchMatches = [];
-  String _lineNumberedText = '';
 
   @override
   void initState() {
     super.initState();
+    _bodyController = CodeLineEditingController();
+    _findController = CodeFindController(_bodyController);
+    _codeScrollController = CodeScrollController();
+    _toolbarController = _buildSelectionToolbarController();
+    _codeScrollController.verticalScroller.addListener(_onCodeScrollChanged);
     _parseBody();
-    _scrollController.addListener(() {
-      final show = _scrollController.offset > 300;
-      if (show != _showFab) setState(() => _showFab = show);
-    });
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    _searchCtrl.dispose();
+    _codeScrollController.verticalScroller.removeListener(_onCodeScrollChanged);
+    _findController.dispose();
+    _bodyController.dispose();
+    _codeScrollController.verticalScroller.dispose();
+    _codeScrollController.horizontalScroller.dispose();
+    _codeScrollController.dispose();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant _BodyFullViewPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.body != widget.body) _parseBody();
+    if (oldWidget.body != widget.body) {
+      _findController.close();
+      _parseBody();
+    }
   }
 
   bool _isTruncated = false;
+
+  void _onCodeScrollChanged() {
+    if (!_codeScrollController.verticalScroller.hasClients) return;
+    final show = _codeScrollController.verticalScroller.offset > 300;
+    if (show != _showFab && mounted) setState(() => _showFab = show);
+  }
 
   void _parseBody() {
     _isTruncated = widget.wasTruncated;
@@ -439,25 +451,38 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           _isTruncated = true;
         } catch (_) {
           _parsedJson = null;
-          _formatted = _looksLikeJson(widget.body)
-              ? _basicFormatJson(widget.body)
-              : widget.body;
+          _formatted = _formatTextBody(widget.body);
         }
       } else {
         _parsedJson = null;
-        _formatted = _looksLikeJson(widget.body)
-            ? _basicFormatJson(widget.body)
-            : widget.body;
+        _formatted = _formatTextBody(widget.body);
       }
     }
     _formattedLines = _formatted.split('\n');
     _lineCount = _formattedLines.length;
-    _buildLineNumberedText();
+    _bodyController.text = _formatted;
   }
 
   bool _looksLikeJson(String s) {
     final t = s.trimLeft();
     return t.startsWith('{') || t.startsWith('[');
+  }
+
+  String _formatTextBody(String input) {
+    if (_looksLikeJson(input)) return _basicFormatJson(input);
+    if (_looksLikeHtml(input)) return _basicFormatHtml(input);
+    return input;
+  }
+
+  bool _looksLikeHtml(String s) {
+    final t = s.trimLeft();
+    if (t.isEmpty || !t.startsWith('<')) return false;
+    final lower = t.toLowerCase();
+    if (lower.startsWith('<!doctype html') || lower.startsWith('<html')) {
+      return true;
+    }
+    final sample = t.length > 512 ? t.substring(0, 512) : t;
+    return RegExp(r'</?[a-zA-Z][^>]*>').hasMatch(sample);
   }
 
   /// Try to repair a truncated JSON string by cutting back to last valid boundary
@@ -570,15 +595,65 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     return buf.toString();
   }
 
-  void _buildLineNumberedText() {
-    final totalWidth = _lineCount.toString().length;
+  String _basicFormatHtml(String input) {
+    final normalized = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final expanded = normalized.replaceAllMapped(
+      RegExp(r'>\s*<'),
+      (_) => '>\n<',
+    );
+    final lines = expanded.split('\n');
     final buf = StringBuffer();
-    for (int i = 0; i < _formattedLines.length; i++) {
-      final num = (i + 1).toString().padLeft(totalWidth);
-      buf.writeln('$num  ${_formattedLines[i]}');
+    int indent = 0;
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (_isHtmlClosingTag(line) && indent > 0) indent--;
+      buf.writeln('${'  ' * indent}$line');
+      if (_isHtmlOpeningTag(line)) indent++;
     }
-    _lineNumberedText = buf.toString();
+
+    return buf.toString().trimRight();
   }
+
+  bool _isHtmlClosingTag(String line) {
+    return line.startsWith('</');
+  }
+
+  bool _isHtmlOpeningTag(String line) {
+    if (!line.startsWith('<') ||
+        line.startsWith('</') ||
+        line.startsWith('<!') ||
+        line.startsWith('<?') ||
+        line.endsWith('/>')) {
+      return false;
+    }
+
+    final tagName = RegExp(r'^<\s*([a-zA-Z][a-zA-Z0-9:-]*)')
+        .firstMatch(line)
+        ?.group(1)
+        ?.toLowerCase();
+    if (tagName == null || _htmlVoidTags.contains(tagName)) return false;
+    return !RegExp('</$tagName\\s*>', caseSensitive: false).hasMatch(line);
+  }
+
+  static const Set<String> _htmlVoidTags = {
+    'area',
+    'base',
+    'br',
+    'col',
+    'embed',
+    'hr',
+    'img',
+    'input',
+    'link',
+    'meta',
+    'param',
+    'source',
+    'track',
+    'wbr',
+  };
 
   void _showFontSizeSlider() {
     double tempSize = _fontSize;
@@ -700,50 +775,62 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     }
   }
 
-  void _doSearch(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _searchMatches = [];
-        _searchCurrent = -1;
-      });
-      return;
-    }
-    final matches = <int>[];
-    final q = query.toLowerCase();
-    for (int i = 0; i < _formattedLines.length; i++) {
-      if (_formattedLines[i].toLowerCase().contains(q)) matches.add(i);
-    }
-    setState(() {
-      _searchMatches = matches;
-      _searchCurrent = matches.isNotEmpty ? 0 : -1;
-    });
-    if (matches.isNotEmpty) _scrollToLine(matches[0]);
+  SelectionToolbarController _buildSelectionToolbarController() {
+    return MobileSelectionToolbarController(
+      builder: ({
+        required TextSelectionToolbarAnchors anchors,
+        required BuildContext context,
+        required CodeLineEditingController controller,
+        required VoidCallback onDismiss,
+        required VoidCallback onRefresh,
+      }) {
+        final buttonItems = <ContextMenuButtonItem>[];
+
+        if (!controller.isEmpty) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.copy,
+              onPressed: () async {
+                await controller.copy();
+                onDismiss();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已复制'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+            ),
+          );
+        }
+
+        if (!controller.isEmpty && !controller.isAllSelected) {
+          buttonItems.add(
+            ContextMenuButtonItem(
+              type: ContextMenuButtonType.selectAll,
+              onPressed: () {
+                controller.selectAll();
+                onRefresh();
+              },
+            ),
+          );
+        }
+
+        if (buttonItems.isEmpty) return const SizedBox.shrink();
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: anchors,
+          buttonItems: buttonItems,
+        );
+      },
+    );
   }
 
-  void _nextSearchMatch() {
-    if (_searchMatches.isEmpty) return;
-    setState(() {
-      _searchCurrent = (_searchCurrent + 1) % _searchMatches.length;
-    });
-    _scrollToLine(_searchMatches[_searchCurrent]);
-  }
-
-  void _prevSearchMatch() {
-    if (_searchMatches.isEmpty) return;
-    setState(() {
-      _searchCurrent =
-          (_searchCurrent - 1 + _searchMatches.length) % _searchMatches.length;
-    });
-    _scrollToLine(_searchMatches[_searchCurrent]);
-  }
-
-  void _scrollToLine(int lineIndex) {
-    // Approximate: each line is roughly fontSize * 1.5 height
-    final approxOffset = lineIndex * _fontSize * 1.5;
-    _scrollController.animateTo(
-      approxOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+  void _copyFormattedBody() {
+    Clipboard.setData(ClipboardData(text: _formatted));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
     );
   }
 
@@ -775,7 +862,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search, size: 20),
-            onPressed: () => setState(() => _searchVisible = !_searchVisible),
+            onPressed: _findController.findMode,
             tooltip: '搜索',
           ),
           if (isJson)
@@ -833,11 +920,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 case 'font':
                   _showFontSizeSlider();
                 case 'copy':
-                  Clipboard.setData(ClipboardData(text: _formatted));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('已复制'), duration: Duration(seconds: 1)),
-                  );
+                  _copyFormattedBody();
                 case 'export':
                   _exportJson();
               }
@@ -847,58 +930,6 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       ),
       body: Column(
         children: [
-          // --- Search bar ---
-          if (_searchVisible)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              color: AppThemeColors.softSurface(colors),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchCtrl,
-                      autofocus: true,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        hintText: '搜索内容...',
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                      onSubmitted: _doSearch,
-                      onChanged: (v) {
-                        if (v.isEmpty) _doSearch('');
-                      },
-                    ),
-                  ),
-                  if (_searchMatches.isNotEmpty)
-                    Text('${_searchCurrent + 1}/${_searchMatches.length}',
-                        style: TextStyle(
-                            fontSize: 11, color: colors.onSurfaceVariant)),
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_up, size: 18),
-                    onPressed: _prevSearchMatch,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-                    onPressed: _nextSearchMatch,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: () {
-                      _searchCtrl.clear();
-                      setState(() {
-                        _searchVisible = false;
-                        _searchMatches = [];
-                        _searchCurrent = -1;
-                      });
-                    },
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-            ),
           // --- Info bar ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -932,7 +963,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
               ],
             ),
           ),
-          // --- Content: single SelectableText for performance ---
+          // --- Content: read-only editor with built-in search navigation ---
           Expanded(
             child: Stack(
               children: [
@@ -943,25 +974,47 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   onPointerMove: _handlePointerMove,
                   onPointerUp: _handlePointerEnd,
                   onPointerCancel: _handlePointerEnd,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
+                  child: CodeEditor(
+                    key: const ValueKey('network_full_body_code_editor'),
+                    controller: _bodyController,
+                    scrollController: _codeScrollController,
+                    findController: _findController,
+                    toolbarController: _toolbarController,
+                    readOnly: true,
+                    showCursorWhenReadOnly: false,
+                    autofocus: false,
+                    wordWrap: true,
+                    chunkAnalyzer: const NonCodeChunkAnalyzer(),
                     padding: const EdgeInsets.all(12),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppThemeColors.codeSurface(colors),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: SelectableText(
-                        key: const ValueKey('network_full_body_text'),
-                        _lineNumberedText,
-                        style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: _fontSize,
-                            height: 1.5),
-                      ),
+                    margin: const EdgeInsets.all(12),
+                    borderRadius: BorderRadius.circular(8),
+                    style: CodeEditorStyle(
+                      fontFamily: 'monospace',
+                      fontSize: _fontSize,
+                      fontHeight: 1.45,
+                      textColor: colors.onSurface,
+                      backgroundColor: AppThemeColors.codeSurface(colors),
+                      selectionColor: colors.primary.withValues(alpha: 0.24),
+                      highlightColor:
+                          colors.primaryContainer.withValues(alpha: 0.82),
+                      cursorColor: colors.primary,
                     ),
+                    indicatorBuilder: (context, editingController,
+                        chunkController, notifier) {
+                      return Row(
+                        children: [
+                          DefaultCodeLineNumber(
+                            controller: editingController,
+                            notifier: notifier,
+                          ),
+                        ],
+                      );
+                    },
+                    findBuilder: (context, controller, readOnly) {
+                      return _BodyCodeFindPanel(
+                        controller: controller,
+                      );
+                    },
                   ),
                 ),
                 if (_showFab)
@@ -975,12 +1028,15 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                           width: 36,
                           height: 36,
                           child: FloatingActionButton.small(
-                            heroTag: 'top',
-                            onPressed: () => _scrollController.hasClients
-                                ? _scrollController.animateTo(0,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut)
-                                : null,
+                            heroTag: 'body_top',
+                            onPressed: () {
+                              final scroller =
+                                  _codeScrollController.verticalScroller;
+                              if (!scroller.hasClients) return;
+                              scroller.animateTo(0,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut);
+                            },
                             child:
                                 const Icon(Icons.keyboard_arrow_up, size: 20),
                           ),
@@ -990,13 +1046,16 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                           width: 36,
                           height: 36,
                           child: FloatingActionButton.small(
-                            heroTag: 'bottom',
-                            onPressed: () => _scrollController.hasClients
-                                ? _scrollController.animateTo(
-                                    _scrollController.position.maxScrollExtent,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut)
-                                : null,
+                            heroTag: 'body_bottom',
+                            onPressed: () {
+                              final scroller =
+                                  _codeScrollController.verticalScroller;
+                              if (!scroller.hasClients) return;
+                              scroller.animateTo(
+                                  scroller.position.maxScrollExtent,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut);
+                            },
                             child:
                                 const Icon(Icons.keyboard_arrow_down, size: 20),
                           ),
@@ -1006,6 +1065,84 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BodyCodeFindPanel extends StatelessWidget
+    implements PreferredSizeWidget {
+  final CodeFindController controller;
+
+  const _BodyCodeFindPanel({required this.controller});
+
+  @override
+  Size get preferredSize =>
+      Size(double.infinity, controller.value == null ? 0 : 44);
+
+  @override
+  Widget build(BuildContext context) {
+    final value = controller.value;
+    if (value == null) return const SizedBox.shrink();
+
+    final colors = Theme.of(context).colorScheme;
+    final result = value.result;
+    final hasResult =
+        result != null && !result.dirty && result.matches.isNotEmpty;
+    final resultText = value.searching
+        ? '搜索中'
+        : hasResult
+            ? '${result.index + 1}/${result.matches.length}'
+            : '0/0';
+
+    return Container(
+      height: preferredSize.height,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      color: AppThemeColors.softSurface(colors),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller.findInputController,
+              focusNode: controller.findInputFocusNode,
+              autofocus: true,
+              maxLines: 1,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                hintText: '搜索内容...',
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 52,
+            child: Text(
+              resultText,
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+            onPressed: hasResult ? controller.previousMatch : null,
+            tooltip: '上一个',
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+            onPressed: hasResult ? controller.nextMatch : null,
+            tooltip: '下一个',
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: controller.close,
+            tooltip: '关闭',
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),

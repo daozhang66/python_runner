@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -102,6 +103,94 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   });
 
+  testWidgets('execution provider keeps per-script history lookup available',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('alpha.py');
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'alpha output',
+      timestamp: DateTime(2026, 1, 1, 0, 0, 1),
+    );
+    bridge.emitStatus(
+      executionId: provider.state.executionId!,
+      status: ExecutionStatus.completed,
+      exitCode: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+
+    await provider.executeScript('beta.py');
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'beta output',
+      timestamp: DateTime(2026, 1, 1, 0, 0, 2),
+    );
+    bridge.emitStatus(
+      executionId: provider.state.executionId!,
+      status: ExecutionStatus.completed,
+      exitCode: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final alphaRecord = provider.latestHistoryRecordForScript('alpha.py');
+    final betaRecord = provider.latestHistoryRecordForScript('beta.py');
+
+    expect(alphaRecord, isNotNull);
+    expect(alphaRecord!.logs.single.content, 'alpha output');
+    expect(alphaRecord.status, ExecutionStatus.completed);
+    expect(betaRecord, isNotNull);
+    expect(betaRecord!.logs.single.content, 'beta output');
+    expect(betaRecord.status, ExecutionStatus.completed);
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('execution provider keeps run output separated by execution id',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('alpha.py');
+    final alphaId = provider.state.executionId!;
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'alpha current',
+      timestamp: DateTime(2026, 1, 1, 0, 0, 1),
+      executionId: alphaId,
+    );
+
+    await provider.executeScript('beta.py');
+    final betaId = provider.state.executionId!;
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'alpha late',
+      timestamp: DateTime(2026, 1, 1, 0, 0, 2),
+      executionId: alphaId,
+    );
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'beta current',
+      timestamp: DateTime(2026, 1, 1, 0, 0, 3),
+      executionId: betaId,
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final alphaRecord = provider.latestHistoryRecordForScript('alpha.py')!;
+    final betaRecord = provider.latestHistoryRecordForScript('beta.py')!;
+
+    expect(alphaRecord.logs.length, 2);
+    expect(alphaRecord.logs.first.content, 'alpha current');
+    expect(alphaRecord.logs.last.content, 'alpha late');
+    expect(provider.logs.single.content, 'beta current');
+    expect(betaRecord.logs.single.content, 'beta current');
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
   testWidgets('linux-like preference falls back to Chaquopy when unavailable',
       (tester) async {
     SharedPreferences.setMockInitialValues(const {
@@ -124,10 +213,24 @@ void main() {
     provider.dispose();
     await tester.pump(const Duration(milliseconds: 600));
   });
+
+  test('run console binds historical output per script instead of global live buffer',
+      () {
+    final consoleSource =
+        File('lib/pages/run_console_page.dart').readAsStringSync();
+
+    expect(consoleSource, contains('latestHistoryRecordForScript(scriptName)'));
+    expect(consoleSource, contains('final selectedRecord = isRunning'));
+    expect(consoleSource, contains('final logs = isRunning'));
+    expect(consoleSource, contains('onClear: isRunning'));
+    expect(consoleSource, contains('logVersion: logVersion'));
+    expect(consoleSource, contains('ExecutionStatus.completed'));
+    expect(consoleSource, isNot(contains('(p) => p.logs')));
+  });
 }
 
 class _ExecutionBridgeFake extends NativeBridge {
-  _ExecutionBridgeFake({this.linuxLikeAvailable = true});
+  _ExecutionBridgeFake({this.linuxLikeAvailable = true}) : super.named();
 
   final bool linuxLikeAvailable;
   int chaquopyExecuteScriptCalls = 0;
@@ -155,11 +258,13 @@ class _ExecutionBridgeFake extends NativeBridge {
     required String type,
     required String content,
     required DateTime timestamp,
+    String? executionId,
   }) {
     _logController.add({
       'type': type,
       'content': content,
       'timestamp': timestamp.millisecondsSinceEpoch,
+      if (executionId != null) 'executionId': executionId,
     });
   }
 

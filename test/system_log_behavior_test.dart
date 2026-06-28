@@ -31,6 +31,9 @@ void main() {
     final activitySource =
         File('android/app/src/main/kotlin/com/daozhang/py/MainActivity.kt')
             .readAsStringSync();
+    final fileOperationsSource = File(
+            'android/app/src/main/kotlin/com/daozhang/py/NativeFileOperations.kt')
+        .readAsStringSync();
 
     expect(settingsSource, contains("prefs.getString('working_dir')"));
     expect(settingsSource, contains('destDir: logExportDir'));
@@ -38,8 +41,8 @@ void main() {
     expect(bridgeSource, contains("'destDir': destDir"));
     expect(activitySource,
         contains('val destDir = call.argument<String>("destDir")'));
-    expect(activitySource, contains('if (!destDir.isNullOrBlank())'));
-    expect(activitySource, contains('Environment.DIRECTORY_DOWNLOADS'));
+    expect(fileOperationsSource, contains('if (!destDir.isNullOrBlank())'));
+    expect(fileOperationsSource, contains('Environment.DIRECTORY_DOWNLOADS'));
   });
 
   test(

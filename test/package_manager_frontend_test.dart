@@ -16,6 +16,7 @@ void main() {
     expect(source, contains('Widget _buildCompactInstallFields('));
     expect(source, contains('Widget _buildCompactInstallLog('));
     expect(source, contains('Widget _buildSearchAndRefreshRow('));
+    expect(source, contains('Future<void> _repairPackage('));
     expect(source, contains('AppThemeColors.cardSurface(colors)'));
     expect(source, contains("hintText: '包名'"));
     expect(source, contains("hintText: '版本'"));
@@ -27,6 +28,11 @@ void main() {
     expect(source, contains("'requirements.txt'"));
     expect(source, contains('requirements.txt 仅支持 Linux-like'));
     expect(source, contains('Icons.description_outlined'));
+    expect(source, contains('Icons.build_outlined'));
+    expect(source, contains("label: '损坏'"));
+    expect(source, contains("tooltip: '重新安装修复'"));
+    expect(source, contains('pkg.hasBrokenIntegrity'));
+    expect(source, contains('provider.repairPackage('));
     expect(source, contains('width: 72'));
     expect(source, contains('height: 38'));
     expect(source, contains('_buildInstallPanel(provider),'));

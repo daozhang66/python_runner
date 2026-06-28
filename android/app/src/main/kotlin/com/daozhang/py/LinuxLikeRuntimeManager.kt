@@ -48,6 +48,19 @@ class LinuxLikeRuntimeManager(private val context: Context) {
     private val dynamicLoaderGuestPath = "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
     private val dynamicLibraryGuestPath = "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:/usr/lib:/lib"
 
+    val userSitePackageGuestPaths: List<String>
+        get() = listOf(
+            userSitePackagesGuestPath,
+            "${context.filesDir.absolutePath}/linux_like/user_site_packages"
+        ).plus(legacyPythonPackageGuestPaths()).distinct()
+
+    private val legacyUserSitePackagesDirs: List<File>
+        get() = listOf(
+            rootfsFile(userSitePackagesGuestPath),
+            rootfsFile("${context.filesDir.absolutePath}/linux_like/user_site_packages"),
+            rootfsFile("/data/data/${context.packageName}/files/linux_like/user_site_packages")
+        ).distinctBy { it.absolutePath }
+
     val nativeLibraryDir: String
         get() = context.applicationInfo.nativeLibraryDir ?: ""
 
@@ -110,6 +123,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         }
 
     fun getInfo(): Map<String, String> {
+        migrateLegacyUserSitePackages()
         repairCriticalExecutablePermissions()
         ensureGuestLoaderAliases()
         configureDnsResolver()
@@ -191,6 +205,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             "downloadDir" to downloadDir.absolutePath,
             "userSitePackagesDir" to userSitePackagesDir.absolutePath,
             "userSitePackagesGuestPath" to userSitePackagesGuestPath,
+            "userSitePackageGuestPaths" to userSitePackageGuestPaths.joinToString(":"),
             "rootfsDir" to rootfsDir.absolutePath,
             "prootRuntimeDir" to prootRuntimeDir.absolutePath,
             "legacyTermuxDir" to legacyTermuxDir.absolutePath,
@@ -374,6 +389,8 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         val executionFilePathLiteral =
             toPythonStringLiteral(executionFilePath?.takeIf { it.isNotBlank() } ?: scriptPath)
         val stdinRequestSentinelLiteral = toPythonStringLiteral(stdinRequestSentinel)
+        val userSitePathListLiteral = userSitePackageGuestPaths
+            .joinToString(prefix = "[", postfix = "]") { toPythonStringLiteral(it) }
         val code = buildString {
             appendLine("import builtins, json, os, sys")
             appendLine("sys.dont_write_bytecode = True")
@@ -381,6 +398,9 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             appendLine("script_path = $scriptPathLiteral")
             appendLine("execution_file_path = $executionFilePathLiteral")
             appendLine("stdin_request_sentinel = $stdinRequestSentinelLiteral")
+            appendLine("for _python_runner_site in reversed($userSitePathListLiteral):")
+            appendLine("    if _python_runner_site and _python_runner_site not in sys.path:")
+            appendLine("        sys.path.insert(0, _python_runner_site)")
             appendLine("_original_stdin = sys.stdin")
             appendLine("_stdin_request_from_input = False")
             appendLine("def _emit_stdin_request(prompt=''):")
@@ -485,10 +505,9 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         if (!pycacheDir.exists()) pycacheDir.mkdirs()
         target["PYTHONPYCACHEPREFIX"] = pycacheDir.absolutePath
         val existingPythonPath = target["PYTHONPATH"]?.takeIf { it.isNotBlank() }
-        target["PYTHONPATH"] = listOf(
-            userSitePackagesGuestPath,
-            existingPythonPath
-        ).filterNotNull().distinct().joinToString(":")
+        target["PYTHONPATH"] = (userSitePackageGuestPaths + listOfNotNull(existingPythonPath))
+            .distinct()
+            .joinToString(":")
         target["PROOT_TMP_DIR"] = executionTempDir.absolutePath
         target["TMPDIR"] = executionTempDir.absolutePath
     }
@@ -608,6 +627,72 @@ class LinuxLikeRuntimeManager(private val context: Context) {
         val userSitePackagesMountPoint = rootfsFile(userSitePackagesGuestPath)
         if (!userSitePackagesMountPoint.exists()) userSitePackagesMountPoint.mkdirs()
         if (!prootTempDir.exists()) prootTempDir.mkdirs()
+        migrateLegacyUserSitePackages()
+    }
+
+    private fun migrateLegacyUserSitePackages() {
+        legacyUserSitePackagesDirs.forEach { legacyDir ->
+            try {
+                if (!legacyDir.isDirectory) return@forEach
+                val legacyPath = legacyDir.canonicalFile.toPath()
+                val targetPath = userSitePackagesDir.canonicalFile.toPath()
+                if (legacyPath == targetPath || legacyPath.startsWith(targetPath)) {
+                    return@forEach
+                }
+                userSitePackagesDir.mkdirs()
+                legacyDir.listFiles()?.forEach { source ->
+                    mergeLegacyUserSiteEntry(source, File(userSitePackagesDir, source.name))
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun mergeLegacyUserSiteEntry(source: File, target: File) {
+        try {
+            if (source.isDirectory) {
+                if (!target.exists()) target.mkdirs()
+                source.listFiles()?.forEach { child ->
+                    mergeLegacyUserSiteEntry(child, File(target, child.name))
+                }
+                return
+            }
+            if (!source.isFile || target.exists()) return
+            target.parentFile?.mkdirs()
+            source.copyTo(target, overwrite = false)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun legacyPythonPackageGuestPaths(): List<String> {
+        val discovered = mutableListOf<String>()
+        listOf(
+            "/root/.local/lib",
+            "/usr/local/lib",
+            "/usr/lib"
+        ).forEach { guestLibRoot ->
+            val hostLibRoot = rootfsFile(guestLibRoot)
+            hostLibRoot.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("python3") }
+                ?.forEach { pythonDir ->
+                    listOf("site-packages", "dist-packages").forEach { packageDirName ->
+                        val candidateGuestPath = "$guestLibRoot/${pythonDir.name}/$packageDirName"
+                        if (rootfsFile(candidateGuestPath).isDirectory) {
+                            discovered.add(candidateGuestPath)
+                        }
+                    }
+                }
+        }
+        listOf(
+            "/usr/lib/python3/dist-packages",
+            "/usr/local/lib/python3/dist-packages",
+            "/usr/local/lib/python3/site-packages"
+        ).forEach { guestPath ->
+            if (rootfsFile(guestPath).isDirectory) {
+                discovered.add(guestPath)
+            }
+        }
+        return discovered
     }
 
     private fun createProotTempDir(): File {

@@ -6,11 +6,13 @@ class RuntimeOutput {
   final RuntimeOutputType type;
   final String content;
   final DateTime timestamp;
+  final String? executionId;
 
   const RuntimeOutput({
     required this.type,
     required this.content,
     required this.timestamp,
+    this.executionId,
   });
 
   factory RuntimeOutput.fromMap(Map<dynamic, dynamic> map) {
@@ -25,6 +27,7 @@ class RuntimeOutput {
       ),
       content: entry.content,
       timestamp: entry.timestamp,
+      executionId: entry.executionId,
     );
   }
 
@@ -36,6 +39,7 @@ class RuntimeOutput {
       ),
       content: content,
       timestamp: timestamp,
+      executionId: executionId,
     );
   }
 }

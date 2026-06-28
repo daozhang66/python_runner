@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/download_progress.dart';
 import '../widgets/update_dialog.dart';
 import 'app_logger.dart';
-import 'download_service.dart';
 import 'http_inspector_store.dart';
 import 'native_bridge.dart';
 import 'network_debug_config.dart';
@@ -219,8 +217,8 @@ class AppUpdateManager {
     final statusTitleNotifier =
         ValueNotifier<String>('正在下载 v${updateInfo.latestVersion}');
     final finished = Completer<void>();
-    final startTime = DateTime.now();
-    CancelToken? cancelToken;
+    String? taskId;
+    StreamSubscription<Map<dynamic, dynamic>>? progressSub;
     var dialogOpen = false;
 
     void completeOnce() {
@@ -273,7 +271,10 @@ class AppUpdateManager {
         actions: [
           TextButton(
             onPressed: () {
-              cancelToken?.cancel('用户取消');
+              final id = taskId;
+              if (id != null && id.isNotEmpty) {
+                unawaited(_bridge.cancelDownload(id));
+              }
               closeDialog();
               completeOnce();
             },
@@ -287,112 +288,169 @@ class AppUpdateManager {
     }));
 
     try {
-      // 使用 Dio 下载
-      cancelToken = CancelToken();
-      final tempDir = Directory.systemTemp;
-      final savePath = '${tempDir.path}/${asset.name}';
+      progressSub = _bridge.downloadProgressStream.listen((event) {
+        final progress = DownloadProgress.fromMap(event);
+        if (progress.type != 'apk_update') return;
+        final id = taskId;
+        if (id != null && id.isNotEmpty && progress.taskId != id) return;
+        // Dialog teardown drives completeOnce() when the context is gone.
+        if (!context.mounted) return;
+        _handleProgressEvent(
+          context,
+          updateInfo,
+          progress,
+          progressNotifier: progressNotifier,
+          progressTextNotifier: progressTextNotifier,
+          statusTitleNotifier: statusTitleNotifier,
+          closeDialog: closeDialog,
+          completeOnce: completeOnce,
+        );
+      });
 
-      // 删除旧文件（如果存在）
-      final file = File(savePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
-
-      await DownloadService.instance.download(
-        url: downloadUrl,
-        savePath: savePath,
-        onProgress: (received, total) {
-          if (total > 0) {
-            final progress = (received / total * 100).toInt();
-            progressNotifier.value = received / total;
-
-            final speed = received > 0 && progressNotifier.value > 0
-                ? (received /
-                        (DateTime.now().millisecondsSinceEpoch -
-                            startTime.millisecondsSinceEpoch) *
-                        1000)
-                    .toInt()
-                : 0;
-
-            progressTextNotifier.value =
-                '${_formatByteSize(received)} / ${_formatByteSize(total)} ($progress%)';
-
-            if (speed > 0) {
-              progressTextNotifier.value += ' · ${_formatByteSize(speed)}/s';
-              final remaining = total - received;
-              final eta = (remaining / speed).toInt();
-              if (eta > 0) {
-                progressTextNotifier.value += ' · 剩余约 ${_formatEta(eta)}';
-              }
-            }
-
-            statusTitleNotifier.value = '正在下载 v${updateInfo.latestVersion}';
-          } else {
-            progressNotifier.value = 0.0;
-            progressTextNotifier.value = '正在下载...';
-          }
-        },
-        cancelToken: cancelToken,
+      taskId = await _bridge.startApkDownload(
+        downloadUrl,
+        fileName: asset.name,
+        version: updateInfo.latestVersion,
+        sha256: assetSha256,
       );
 
-      // 下载完成，安装
-      if (!context.mounted) return;
-      statusTitleNotifier.value = '下载完成，正在打开安装器';
-
-      await _bridge.installApkFile(savePath);
-
-      if (!context.mounted) return;
-      closeDialog();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('安装器已打开'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-
-      completeOnce();
-    } on DioException catch (error) {
-      if (error.type == DioExceptionType.cancel) {
-        // 用户取消
-        closeDialog();
-        completeOnce();
-        return;
-      }
-
-      if (!context.mounted) return;
-      closeDialog();
-
-      String errorMsg = '下载失败';
-      if (error.type == DioExceptionType.connectionTimeout ||
-          error.type == DioExceptionType.receiveTimeout) {
-        errorMsg = '下载超时，请检查网络连接';
-      } else if (error.type == DioExceptionType.badResponse) {
-        errorMsg = '服务器响应错误：${error.response?.statusCode}';
-      } else if (error.message != null) {
-        errorMsg = '下载失败：${error.message}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Python Runner 更新失败：$errorMsg'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      // The progress stream drives install/error/cancel handling; this future
+      // completes once a terminal event (or the cancel button) fires.
+      await finished.future;
     } catch (error) {
-      if (!context.mounted) return;
-      closeDialog();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Python Runner 更新失败：${_formatError(error)}'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      if (context.mounted) {
+        closeDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Python Runner 更新失败：${_formatError(error)}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      completeOnce();
     } finally {
-      cancelToken?.cancel();
+      await progressSub?.cancel();
       progressNotifier.dispose();
       progressTextNotifier.dispose();
       statusTitleNotifier.dispose();
     }
+  }
+
+  /// Handles a single native download-progress event: updates the dialog,
+  /// and on terminal states triggers install / surfaces errors / closes.
+  void _handleProgressEvent(
+    BuildContext context,
+    AppUpdateInfo updateInfo,
+    DownloadProgress progress, {
+    required ValueNotifier<double> progressNotifier,
+    required ValueNotifier<String> progressTextNotifier,
+    required ValueNotifier<String> statusTitleNotifier,
+    required void Function() closeDialog,
+    required void Function() completeOnce,
+  }) {
+    switch (progress.status) {
+      case DownloadStatus.checking:
+        statusTitleNotifier.value = '正在校验 v${updateInfo.latestVersion}';
+        progressTextNotifier.value = '检查断点续传...';
+        break;
+      case DownloadStatus.pending:
+      case DownloadStatus.downloading:
+        statusTitleNotifier.value = '正在下载 v${updateInfo.latestVersion}';
+        if (progress.totalBytes > 0) {
+          progressNotifier.value = progress.progress >= 0
+              ? progress.progress / 100
+              : progress.downloadedBytes / progress.totalBytes;
+          progressTextNotifier.value = _formatDownloadLine(progress);
+        } else {
+          progressNotifier.value = 0.0;
+          progressTextNotifier.value = '正在下载...';
+        }
+        break;
+      case DownloadStatus.retrying:
+        statusTitleNotifier.value = '网络中断，正在重试 (${progress.retryCount})';
+        progressTextNotifier.value =
+            progress.errorMessage.isNotEmpty ? progress.errorMessage : '准备重试...';
+        break;
+      case DownloadStatus.completed:
+        statusTitleNotifier.value = '下载完成，正在打开安装器';
+        progressNotifier.value = 1.0;
+        unawaited(_installCompleted(
+          context,
+          taskId: progress.taskId,
+          closeDialog: closeDialog,
+          completeOnce: completeOnce,
+        ));
+        break;
+      case DownloadStatus.failed:
+        closeDialog();
+        if (context.mounted) {
+          final detail =
+              progress.errorMessage.isNotEmpty ? progress.errorMessage : '请稍后重试';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Python Runner 更新失败：$detail'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        completeOnce();
+        break;
+      case DownloadStatus.cancelled:
+        closeDialog();
+        completeOnce();
+        break;
+      case DownloadStatus.installPermissionRequired:
+        // startApkDownload also throws (code 1011); the catch path reports it.
+        break;
+      case DownloadStatus.unknown:
+        break;
+    }
+  }
+
+  Future<void> _installCompleted(
+    BuildContext context, {
+    required String taskId,
+    required void Function() closeDialog,
+    required void Function() completeOnce,
+  }) async {
+    try {
+      await _bridge.installDownloadedApk(taskId);
+      if (context.mounted) {
+        closeDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('安装器已打开'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        closeDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Python Runner 安装失败：${_formatError(error)}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      completeOnce();
+    }
+  }
+
+  String _formatDownloadLine(DownloadProgress progress) {
+    final received = _formatByteSize(progress.downloadedBytes);
+    final total = _formatByteSize(progress.totalBytes);
+    final pct = progress.progress >= 0 ? ' (${progress.progress}%)' : '';
+    var line = '$received / $total$pct';
+    if (progress.speedBytesPerSecond > 0) {
+      line += ' · ${_formatByteSize(progress.speedBytesPerSecond)}/s';
+    }
+    if (progress.etaSeconds > 0) {
+      line += ' · 剩余约 ${_formatEta(progress.etaSeconds)}';
+    }
+    return line;
   }
 
   String _formatByteSize(num bytes) {
