@@ -55,6 +55,14 @@ class RuntimeInfoController(
         }
     }
 
+    fun getLinuxLikeRuntimeInfoForPigeon(): LinuxLikeRuntimeInfo {
+        return try {
+            linuxLikeRuntimeManager.getInfo().toPigeonLinuxLikeRuntimeInfo()
+        } catch (e: Exception) {
+            throw FlutterError("1014", "获取Linux-like运行环境信息失败: ${e.message}", null)
+        }
+    }
+
     fun prepareLinuxLikeRuntime(result: MethodChannel.Result) {
         Thread {
             try {
@@ -98,4 +106,15 @@ class RuntimeInfoController(
             }
         }.also { it.name = "linux-like-install"; it.start() }
     }
+}
+
+private fun Map<String, String>.toPigeonLinuxLikeRuntimeInfo(): LinuxLikeRuntimeInfo {
+    return LinuxLikeRuntimeInfo(
+        available = this["available"] == "true",
+        installed = this["installed"] == "true",
+        message = this["message"] ?: "",
+        pythonPath = this["pythonPath"] ?: "",
+        pipPath = this["pipPath"] ?: "",
+        rootfsDir = this["rootfsDir"] ?: ""
+    )
 }

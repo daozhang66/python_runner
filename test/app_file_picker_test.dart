@@ -5,11 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:python_runner/models/app_file_entry.dart';
 import 'package:python_runner/pages/app_file_picker_page.dart';
+import 'package:python_runner/pigeon/native_runtime_api.g.dart' as pigeon;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('com.daozhang.py/native_bridge');
+  const listDirectoryChannel = BasicMessageChannel<Object?>(
+    'dev.flutter.pigeon.python_runner.FilePickerHostApi.listFilePickerDirectory',
+    pigeon.FilePickerHostApi.pigeonChannelCodec,
+  );
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -17,40 +21,48 @@ void main() {
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null);
+        .setMockDecodedMessageHandler<Object?>(listDirectoryChannel, null);
   });
 
-  testWidgets('app file picker filters files by extension', (tester) async {
+  void setListDirectoryHandler(
+    List<Map<String, Object>> Function(String path) handler,
+  ) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case 'listFilePickerDirectory':
-          expect(call.arguments, {'path': '/storage/emulated/0'});
-          return [
-            {
-              'path': '/storage/emulated/0/demo.py',
-              'name': 'demo.py',
-              'isDirectory': false,
-              'size': 12,
-              'modifiedAt': 1000,
-            },
-            {
-              'path': '/storage/emulated/0/readme.txt',
-              'name': 'readme.txt',
-              'isDirectory': false,
-              'size': 20,
-              'modifiedAt': 1000,
-            },
-            {
-              'path': '/storage/emulated/0/src',
-              'name': 'src',
-              'isDirectory': true,
-              'size': 0,
-              'modifiedAt': 1000,
-            },
-          ];
-      }
-      throw PlatformException(code: 'missing', message: call.method);
+        .setMockDecodedMessageHandler<Object?>(listDirectoryChannel,
+            (message) async {
+      final path = ((message as List<Object?>).single) as String;
+      return <Object?>[
+        handler(path).map(_nativeAppFileEntryFromMap).toList(),
+      ];
+    });
+  }
+
+  testWidgets('app file picker filters files by extension', (tester) async {
+    setListDirectoryHandler((path) {
+      expect(path, '/storage/emulated/0');
+      return [
+        {
+          'path': '/storage/emulated/0/demo.py',
+          'name': 'demo.py',
+          'isDirectory': false,
+          'size': 12,
+          'modifiedAt': 1000,
+        },
+        {
+          'path': '/storage/emulated/0/readme.txt',
+          'name': 'readme.txt',
+          'isDirectory': false,
+          'size': 20,
+          'modifiedAt': 1000,
+        },
+        {
+          'path': '/storage/emulated/0/src',
+          'name': 'src',
+          'isDirectory': true,
+          'size': 0,
+          'modifiedAt': 1000,
+        },
+      ];
     });
 
     AppFilePickResult? picked;
@@ -87,35 +99,30 @@ void main() {
 
   testWidgets('app file picker navigates to parent directories',
       (tester) async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case 'listFilePickerDirectory':
-          final path = (call.arguments as Map)['path'];
-          if (path == '/storage/emulated/0') {
-            return [
-              {
-                'path': '/storage/emulated/0/src',
-                'name': 'src',
-                'isDirectory': true,
-                'size': 0,
-                'modifiedAt': 1000,
-              }
-            ];
+    setListDirectoryHandler((path) {
+      if (path == '/storage/emulated/0') {
+        return [
+          {
+            'path': '/storage/emulated/0/src',
+            'name': 'src',
+            'isDirectory': true,
+            'size': 0,
+            'modifiedAt': 1000,
           }
-          if (path == '/storage/emulated/0/src') {
-            return [
-              {
-                'path': '/storage/emulated/0/src/demo.py',
-                'name': 'demo.py',
-                'isDirectory': false,
-                'size': 12,
-                'modifiedAt': 1000,
-              }
-            ];
-          }
+        ];
       }
-      throw PlatformException(code: 'missing', message: call.method);
+      if (path == '/storage/emulated/0/src') {
+        return [
+          {
+            'path': '/storage/emulated/0/src/demo.py',
+            'name': 'demo.py',
+            'isDirectory': false,
+            'size': 12,
+            'modifiedAt': 1000,
+          }
+        ];
+      }
+      fail('Unexpected path: $path');
     });
 
     await tester.pumpWidget(
@@ -153,36 +160,31 @@ void main() {
       (tester) async {
     var firstOpen = true;
     final listedPaths = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case 'listFilePickerDirectory':
-          final path = (call.arguments as Map)['path'] as String;
-          listedPaths.add(path);
-          if (path == '/storage/emulated/0') {
-            return [
-              {
-                'path': '/storage/emulated/0/Download',
-                'name': 'Download',
-                'isDirectory': true,
-                'size': 0,
-                'modifiedAt': 1000,
-              }
-            ];
+    setListDirectoryHandler((path) {
+      listedPaths.add(path);
+      if (path == '/storage/emulated/0') {
+        return [
+          {
+            'path': '/storage/emulated/0/Download',
+            'name': 'Download',
+            'isDirectory': true,
+            'size': 0,
+            'modifiedAt': 1000,
           }
-          if (path == '/storage/emulated/0/Download') {
-            return [
-              {
-                'path': '/storage/emulated/0/Download/demo.py',
-                'name': firstOpen ? 'demo.py' : 'second.py',
-                'isDirectory': false,
-                'size': 12,
-                'modifiedAt': 1000,
-              }
-            ];
-          }
+        ];
       }
-      throw PlatformException(code: 'missing', message: call.method);
+      if (path == '/storage/emulated/0/Download') {
+        return [
+          {
+            'path': '/storage/emulated/0/Download/demo.py',
+            'name': firstOpen ? 'demo.py' : 'second.py',
+            'isDirectory': false,
+            'size': 12,
+            'modifiedAt': 1000,
+          }
+        ];
+      }
+      fail('Unexpected path: $path');
     });
 
     Future<void> openPicker() async {
@@ -220,4 +222,16 @@ void main() {
     expect(find.text('second.py'), findsOneWidget);
     expect(listedPaths.last, '/storage/emulated/0/Download');
   });
+}
+
+pigeon.NativeAppFileEntry _nativeAppFileEntryFromMap(
+  Map<String, Object> map,
+) {
+  return pigeon.NativeAppFileEntry(
+    path: map['path']! as String,
+    name: map['name']! as String,
+    isDirectory: map['isDirectory']! as bool,
+    size: map['size']! as int,
+    modifiedAtMillis: map['modifiedAt']! as int,
+  );
 }

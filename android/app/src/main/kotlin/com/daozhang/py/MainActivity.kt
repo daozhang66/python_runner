@@ -260,6 +260,31 @@ class MainActivity : FlutterActivity() {
             })
 
         // MethodChannel
+        RuntimeHostApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            object : RuntimeHostApi {
+                override fun getLinuxLikeRuntimeInfo(): LinuxLikeRuntimeInfo {
+                    return runtimeInfoController.getLinuxLikeRuntimeInfoForPigeon()
+                }
+            }
+        )
+        FilePickerHostApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            object : FilePickerHostApi {
+                override fun getFilePickerRoots(): List<NativeAppFileEntry> {
+                    return nativeFileOperations.getFilePickerRootsForPigeon()
+                }
+
+                override fun listFilePickerDirectory(path: String): List<NativeAppFileEntry> {
+                    return nativeFileOperations.listFilePickerDirectoryForPigeon(path)
+                }
+
+                override fun readFilePickerFile(path: String): ByteArray {
+                    return nativeFileOperations.readFilePickerFile(path)
+                }
+            }
+        )
+
         val methodHandlers = createNativeMethodHandlers()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
             .setMethodCallHandler { call, result ->

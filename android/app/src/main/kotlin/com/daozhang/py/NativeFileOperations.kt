@@ -95,12 +95,20 @@ class NativeFileOperations(
         return roots.values.toList()
     }
 
+    fun getFilePickerRootsForPigeon(): List<NativeAppFileEntry> {
+        return getFilePickerRoots().map { it.toNativeAppFileEntry() }
+    }
+
     fun listFilePickerDirectory(path: String): List<Map<String, Any>> {
         if (path.isBlank()) return getFilePickerRoots()
         val dir = File(path)
         require(dir.exists()) { "目录不存在: $path" }
         require(dir.isDirectory) { "不是目录: $path" }
         return dir.listFiles()?.map { appFileEntryMap(it) } ?: emptyList()
+    }
+
+    fun listFilePickerDirectoryForPigeon(path: String): List<NativeAppFileEntry> {
+        return listFilePickerDirectory(path).map { it.toNativeAppFileEntry() }
     }
 
     fun readFilePickerFile(path: String): ByteArray {
@@ -129,6 +137,16 @@ class NativeFileOperations(
             "isDirectory" to file.isDirectory,
             "size" to if (file.isFile) file.length() else 0L,
             "modifiedAt" to file.lastModified()
+        )
+    }
+
+    private fun Map<String, Any>.toNativeAppFileEntry(): NativeAppFileEntry {
+        return NativeAppFileEntry(
+            path = this["path"]?.toString() ?: "",
+            name = this["name"]?.toString() ?: "",
+            isDirectory = this["isDirectory"] as? Boolean ?: false,
+            size = (this["size"] as? Number)?.toLong() ?: 0L,
+            modifiedAtMillis = (this["modifiedAt"] as? Number)?.toLong() ?: 0L
         )
     }
 }

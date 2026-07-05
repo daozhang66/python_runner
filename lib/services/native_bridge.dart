@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
+import '../pigeon/native_runtime_api.g.dart' as pigeon;
 import 'app_logger.dart';
 import 'native_bridge_contract.dart';
 import '../models/app_file_entry.dart';
@@ -17,8 +18,6 @@ class NativeBridge {
 
   factory NativeBridge() => instance;
 
-  NativeBridge.named();
-
   static const _methodChannel = MethodChannel(NativeBridgeContract.channelName);
   static const _logStreamChannel = EventChannel('com.daozhang.py/log_stream');
   static const _installProgressChannel =
@@ -29,6 +28,15 @@ class NativeBridge {
       EventChannel('com.daozhang.py/execution_status');
   static const _stdinRequestChannel =
       EventChannel('com.daozhang.py/stdin_request');
+
+  final pigeon.RuntimeHostApi _runtimeHostApi;
+  final pigeon.FilePickerHostApi _filePickerHostApi;
+
+  NativeBridge.named({
+    pigeon.RuntimeHostApi? runtimeHostApi,
+    pigeon.FilePickerHostApi? filePickerHostApi,
+  })  : _runtimeHostApi = runtimeHostApi ?? pigeon.RuntimeHostApi(),
+        _filePickerHostApi = filePickerHostApi ?? pigeon.FilePickerHostApi();
 
   Stream<Map<dynamic, dynamic>>? _logStream;
   Stream<Map<dynamic, dynamic>>? _installProgressStream;
@@ -184,17 +192,43 @@ class NativeBridge {
   }
 
   Future<List<AppFileEntry>> getFilePickerRoots() async {
-    final result = await _invoke('getFilePickerRoots', {});
-    return _asList(result)
-        .map((item) => AppFileEntry.fromMap(_asMap(item)))
-        .toList();
+    try {
+      final entries = await _filePickerHostApi.getFilePickerRoots();
+      return entries.map(_appFileEntryFromPigeon).toList();
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('文件根目录', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon文件根目录通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('getFilePickerRoots', {});
+      return _asList(result)
+          .map((item) => AppFileEntry.fromMap(_asMap(item)))
+          .toList();
+    }
   }
 
   Future<List<AppFileEntry>> listFilePickerDirectory(String path) async {
-    final result = await _invoke('listFilePickerDirectory', {'path': path});
-    return _asList(result)
-        .map((item) => AppFileEntry.fromMap(_asMap(item)))
-        .toList();
+    try {
+      final entries = await _filePickerHostApi.listFilePickerDirectory(path);
+      return entries.map(_appFileEntryFromPigeon).toList();
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('文件目录列表', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon文件目录列表通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('listFilePickerDirectory', {'path': path});
+      return _asList(result)
+          .map((item) => AppFileEntry.fromMap(_asMap(item)))
+          .toList();
+    }
   }
 
   Future<AppFileEntry?> openFilePickerTree({String title = '选择目录'}) async {
@@ -204,11 +238,23 @@ class NativeBridge {
   }
 
   Future<List<int>> readFilePickerFile(String path) async {
-    final result = await _invoke('readFilePickerFile', {'path': path});
-    return _asList(result)
-        .whereType<num>()
-        .map((item) => item.toInt())
-        .toList();
+    try {
+      return await _filePickerHostApi.readFilePickerFile(path);
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('文件读取', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon文件读取通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('readFilePickerFile', {'path': path});
+      return _asList(result)
+          .whereType<num>()
+          .map((item) => item.toInt())
+          .toList();
+    }
   }
 
   Future<String> createScriptProject(String projectKey) async {
@@ -326,8 +372,36 @@ class NativeBridge {
   }
 
   Future<Map<String, String>> getLinuxLikeRuntimeInfo() async {
-    final result = await _invoke('getLinuxLikeRuntimeInfo', {});
-    return _stringMap(result);
+    try {
+      final info = await _runtimeHostApi.getLinuxLikeRuntimeInfo();
+      return {
+        'available': info.available.toString(),
+        'installed': info.installed.toString(),
+        'message': info.message,
+        'pythonPath': info.pythonPath,
+        'pipPath': info.pipPath,
+        'rootfsDir': info.rootfsDir,
+      };
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        AppLogger.instance.error(
+          'Pigeon运行时信息调用失败',
+          source: 'NativeBridge',
+          detail: 'code=${e.code}, message=${e.message}',
+        );
+        throw NativeBridgeException(
+          code: int.tryParse(e.code) ?? 1000,
+          message: e.message ?? 'Unknown error',
+        );
+      }
+      AppLogger.instance.warn(
+        'Pigeon运行时信息通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('getLinuxLikeRuntimeInfo', {});
+      return _stringMap(result);
+    }
   }
 
   Future<Map<String, String>> prepareLinuxLikeRuntime() async {
@@ -523,6 +597,28 @@ class NativeBridge {
   Map<String, dynamic> _dynamicMap(dynamic result) {
     final map = _asMap(result);
     return map.map((k, v) => MapEntry(k.toString(), v));
+  }
+
+  AppFileEntry _appFileEntryFromPigeon(pigeon.NativeAppFileEntry entry) {
+    return AppFileEntry(
+      path: entry.path,
+      name: entry.name,
+      isDirectory: entry.isDirectory,
+      size: entry.size,
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(entry.modifiedAtMillis),
+    );
+  }
+
+  Never _throwPigeonBridgeException(String operation, PlatformException e) {
+    AppLogger.instance.error(
+      'Pigeon$operation调用失败',
+      source: 'NativeBridge',
+      detail: 'code=${e.code}, message=${e.message}',
+    );
+    throw NativeBridgeException(
+      code: int.tryParse(e.code) ?? 1000,
+      message: e.message ?? 'Unknown error',
+    );
   }
 
   static Map<dynamic, dynamic> _eventMap(dynamic event) {
