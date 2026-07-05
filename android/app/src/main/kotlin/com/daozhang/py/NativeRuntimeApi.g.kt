@@ -301,6 +301,104 @@ data class NativeAppFileEntry (
     return "NativeAppFileEntry(path=$path, name=$name, isDirectory=$isDirectory, size=$size, modifiedAtMillis=$modifiedAtMillis)"
   }
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class NativePythonInfo (
+  val pythonVersion: String,
+  val sitePackages: String,
+  val pythonPath: String,
+  val chaquopyPipDir: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NativePythonInfo {
+      val pythonVersion = pigeonVar_list[0] as String
+      val sitePackages = pigeonVar_list[1] as String
+      val pythonPath = pigeonVar_list[2] as String
+      val chaquopyPipDir = pigeonVar_list[3] as String
+      return NativePythonInfo(pythonVersion, sitePackages, pythonPath, chaquopyPipDir)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      pythonVersion,
+      sitePackages,
+      pythonPath,
+      chaquopyPipDir,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NativePythonInfo
+    return NativeRuntimeApiPigeonUtils.deepEquals(this.pythonVersion, other.pythonVersion) && NativeRuntimeApiPigeonUtils.deepEquals(this.sitePackages, other.sitePackages) && NativeRuntimeApiPigeonUtils.deepEquals(this.pythonPath, other.pythonPath) && NativeRuntimeApiPigeonUtils.deepEquals(this.chaquopyPipDir, other.chaquopyPipDir)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.pythonVersion)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.sitePackages)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.pythonPath)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.chaquopyPipDir)
+    return result
+  }
+  override fun toString(): String {
+    return "NativePythonInfo(pythonVersion=$pythonVersion, sitePackages=$sitePackages, pythonPath=$pythonPath, chaquopyPipDir=$chaquopyPipDir)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class NativeAppInfo (
+  val appName: String,
+  val packageName: String,
+  val version: String,
+  val buildNumber: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NativeAppInfo {
+      val appName = pigeonVar_list[0] as String
+      val packageName = pigeonVar_list[1] as String
+      val version = pigeonVar_list[2] as String
+      val buildNumber = pigeonVar_list[3] as String
+      return NativeAppInfo(appName, packageName, version, buildNumber)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      appName,
+      packageName,
+      version,
+      buildNumber,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NativeAppInfo
+    return NativeRuntimeApiPigeonUtils.deepEquals(this.appName, other.appName) && NativeRuntimeApiPigeonUtils.deepEquals(this.packageName, other.packageName) && NativeRuntimeApiPigeonUtils.deepEquals(this.version, other.version) && NativeRuntimeApiPigeonUtils.deepEquals(this.buildNumber, other.buildNumber)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.appName)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.packageName)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.version)
+    result = 31 * result + NativeRuntimeApiPigeonUtils.deepHash(this.buildNumber)
+    return result
+  }
+  override fun toString(): String {
+    return "NativeAppInfo(appName=$appName, packageName=$packageName, version=$version, buildNumber=$buildNumber)"
+  }
+}
 private open class NativeRuntimeApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -312,6 +410,16 @@ private open class NativeRuntimeApiPigeonCodec : StandardMessageCodec() {
       130.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           NativeAppFileEntry.fromList(it)
+        }
+      }
+      131.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          NativePythonInfo.fromList(it)
+        }
+      }
+      132.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          NativeAppInfo.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -327,14 +435,24 @@ private open class NativeRuntimeApiPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.toList())
       }
+      is NativePythonInfo -> {
+        stream.write(131)
+        writeValue(stream, value.toList())
+      }
+      is NativeAppInfo -> {
+        stream.write(132)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
 }
 
+
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface RuntimeHostApi {
   fun getLinuxLikeRuntimeInfo(): LinuxLikeRuntimeInfo
+  fun getPythonInfo(callback: (Result<NativePythonInfo>) -> Unit)
 
   companion object {
     /** The codec used by RuntimeHostApi. */
@@ -355,6 +473,24 @@ interface RuntimeHostApi {
               NativeRuntimeApiPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.RuntimeHostApi.getPythonInfo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.getPythonInfo{ result: Result<NativePythonInfo> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(NativeRuntimeApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(NativeRuntimeApiPigeonUtils.wrapResult(data))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)
@@ -418,6 +554,69 @@ interface FilePickerHostApi {
             val pathArg = args[0] as String
             val wrapped: List<Any?> = try {
               listOf(api.readFilePickerFile(pathArg))
+            } catch (exception: Throwable) {
+              NativeRuntimeApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
+/** Generated interface from Pigeon that represents a handler of messages from Flutter. */
+interface AppHostApi {
+  fun getAppInfo(): NativeAppInfo
+  fun checkOverlayPermission(): Boolean
+  fun consumePendingRunScript(): String?
+
+  companion object {
+    /** The codec used by AppHostApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      NativeRuntimeApiPigeonCodec()
+    }
+    /** Sets up an instance of `AppHostApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: AppHostApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.AppHostApi.getAppInfo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getAppInfo())
+            } catch (exception: Throwable) {
+              NativeRuntimeApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.AppHostApi.checkOverlayPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.checkOverlayPermission())
+            } catch (exception: Throwable) {
+              NativeRuntimeApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.AppHostApi.consumePendingRunScript$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.consumePendingRunScript())
             } catch (exception: Throwable) {
               NativeRuntimeApiPigeonUtils.wrapError(exception)
             }

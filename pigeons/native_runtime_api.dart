@@ -43,9 +43,40 @@ class NativeAppFileEntry {
   int modifiedAtMillis;
 }
 
+class NativePythonInfo {
+  NativePythonInfo({
+    required this.pythonVersion,
+    required this.sitePackages,
+    required this.pythonPath,
+    required this.chaquopyPipDir,
+  });
+
+  String pythonVersion;
+  String sitePackages;
+  String pythonPath;
+  String chaquopyPipDir;
+}
+
+class NativeAppInfo {
+  NativeAppInfo({
+    required this.appName,
+    required this.packageName,
+    required this.version,
+    required this.buildNumber,
+  });
+
+  String appName;
+  String packageName;
+  String version;
+  String buildNumber;
+}
+
 @HostApi()
 abstract class RuntimeHostApi {
   LinuxLikeRuntimeInfo getLinuxLikeRuntimeInfo();
+
+  @async
+  NativePythonInfo getPythonInfo();
 }
 
 @HostApi()
@@ -53,4 +84,11 @@ abstract class FilePickerHostApi {
   List<NativeAppFileEntry> getFilePickerRoots();
   List<NativeAppFileEntry> listFilePickerDirectory(String path);
   Uint8List readFilePickerFile(String path);
+}
+
+@HostApi()
+abstract class AppHostApi {
+  NativeAppInfo getAppInfo();
+  bool checkOverlayPermission();
+  String? consumePendingRunScript();
 }

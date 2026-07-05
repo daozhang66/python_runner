@@ -31,12 +31,15 @@ class NativeBridge {
 
   final pigeon.RuntimeHostApi _runtimeHostApi;
   final pigeon.FilePickerHostApi _filePickerHostApi;
+  final pigeon.AppHostApi _appHostApi;
 
   NativeBridge.named({
     pigeon.RuntimeHostApi? runtimeHostApi,
     pigeon.FilePickerHostApi? filePickerHostApi,
+    pigeon.AppHostApi? appHostApi,
   })  : _runtimeHostApi = runtimeHostApi ?? pigeon.RuntimeHostApi(),
-        _filePickerHostApi = filePickerHostApi ?? pigeon.FilePickerHostApi();
+        _filePickerHostApi = filePickerHostApi ?? pigeon.FilePickerHostApi(),
+        _appHostApi = appHostApi ?? pigeon.AppHostApi();
 
   Stream<Map<dynamic, dynamic>>? _logStream;
   Stream<Map<dynamic, dynamic>>? _installProgressStream;
@@ -362,13 +365,39 @@ class NativeBridge {
   }
 
   Future<Map<String, String>> getPythonInfo() async {
-    final result = await _invoke('getPythonInfo', {});
-    return _stringMap(result);
+    try {
+      final info = await _runtimeHostApi.getPythonInfo();
+      return _pythonInfoFromPigeon(info);
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('Python信息', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon Python信息通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('getPythonInfo', {});
+      return _stringMap(result);
+    }
   }
 
   Future<Map<String, String>> getAppInfo() async {
-    final result = await _invoke('getAppInfo', {});
-    return _stringMap(result);
+    try {
+      final info = await _appHostApi.getAppInfo();
+      return _appInfoFromPigeon(info);
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('应用信息', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon应用信息通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('getAppInfo', {});
+      return _stringMap(result);
+    }
   }
 
   Future<Map<String, String>> getLinuxLikeRuntimeInfo() async {
@@ -510,8 +539,20 @@ class NativeBridge {
   }
 
   Future<bool> checkOverlayPermission() async {
-    final result = await _invoke('checkOverlayPermission', {});
-    return _asBool(result);
+    try {
+      return await _appHostApi.checkOverlayPermission();
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('悬浮窗权限查询', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon悬浮窗权限通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('checkOverlayPermission', {});
+      return _asBool(result);
+    }
   }
 
   Future<void> requestOverlayPermission() async {
@@ -535,9 +576,21 @@ class NativeBridge {
   }
 
   Future<String?> consumePendingRunScript() async {
-    final result = await _invoke('consumePendingRunScript', {});
-    if (result == null) return null;
-    return result.toString();
+    try {
+      return await _appHostApi.consumePendingRunScript();
+    } on PlatformException catch (e) {
+      if (e.code != 'channel-error') {
+        _throwPigeonBridgeException('待运行脚本消费', e);
+      }
+      AppLogger.instance.warn(
+        'Pigeon待运行脚本通道不可用，回退MethodChannel',
+        source: 'NativeBridge',
+        detail: e.message,
+      );
+      final result = await _invoke('consumePendingRunScript', {});
+      if (result == null) return null;
+      return result.toString();
+    }
   }
 
   Future<String> downloadAndInstallApk(
@@ -607,6 +660,24 @@ class NativeBridge {
       size: entry.size,
       modifiedAt: DateTime.fromMillisecondsSinceEpoch(entry.modifiedAtMillis),
     );
+  }
+
+  Map<String, String> _pythonInfoFromPigeon(pigeon.NativePythonInfo info) {
+    return {
+      'pythonVersion': info.pythonVersion,
+      'sitePackages': info.sitePackages,
+      'pythonPath': info.pythonPath,
+      'chaquopyPipDir': info.chaquopyPipDir,
+    };
+  }
+
+  Map<String, String> _appInfoFromPigeon(pigeon.NativeAppInfo info) {
+    return {
+      'appName': info.appName,
+      'packageName': info.packageName,
+      'version': info.version,
+      'buildNumber': info.buildNumber,
+    };
   }
 
   Never _throwPigeonBridgeException(String operation, PlatformException e) {

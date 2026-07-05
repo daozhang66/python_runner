@@ -14,37 +14,31 @@ class RuntimeInfoController(
     fun getPythonInfo(result: MethodChannel.Result) {
         Thread {
             try {
-                val py = Python.getInstance()
-                val sys = py.getModule("sys")
-                val version = sys.get("version")?.toString() ?: "未知"
-                val siteModule = py.getModule("site")
-                val sitePackages = try {
-                    val value = siteModule.callAttr("getsitepackages")
-                    val first = try {
-                        value.callAttr("__getitem__", 0)?.toString()
-                    } catch (_: Exception) {
-                        null
-                    }
-                    first ?: value?.toString() ?: "未知"
-                } catch (_: Exception) {
-                    "未知"
-                }
-                val executable = sys.get("executable")?.toString() ?: "未知"
+                val info = loadPythonInfo()
                 mainHandler.post {
-                    val versionLine = version.lines().firstOrNull() ?: version
-                    result.success(
-                        mapOf(
-                            "pythonVersion" to versionLine,
-                            "sitePackages" to sitePackages,
-                            "pythonPath" to executable,
-                            "chaquopyPipDir" to File(filesDir, "chaquopy/pip").absolutePath
-                        )
-                    )
+                    result.success(info.toMethodChannelMap())
                 }
             } catch (e: Exception) {
                 mainHandler.post { result.error("1008", "获取Python信息失败: ${e.message}", null) }
             }
         }.also { it.name = "py-info"; it.start() }
+    }
+
+    fun getPythonInfoForPigeon(callback: (Result<NativePythonInfo>) -> Unit) {
+        Thread {
+            try {
+                val info = loadPythonInfo()
+                mainHandler.post { callback(Result.success(info)) }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    callback(
+                        Result.failure(
+                            FlutterError("1008", "获取Python信息失败: ${e.message}", null)
+                        )
+                    )
+                }
+            }
+        }.also { it.name = "py-info-pigeon"; it.start() }
     }
 
     fun getLinuxLikeRuntimeInfo(result: MethodChannel.Result) {
@@ -106,6 +100,41 @@ class RuntimeInfoController(
             }
         }.also { it.name = "linux-like-install"; it.start() }
     }
+
+    private fun loadPythonInfo(): NativePythonInfo {
+        val py = Python.getInstance()
+        val sys = py.getModule("sys")
+        val version = sys.get("version")?.toString() ?: "未知"
+        val siteModule = py.getModule("site")
+        val sitePackages = try {
+            val value = siteModule.callAttr("getsitepackages")
+            val first = try {
+                value.callAttr("__getitem__", 0)?.toString()
+            } catch (_: Exception) {
+                null
+            }
+            first ?: value?.toString() ?: "未知"
+        } catch (_: Exception) {
+            "未知"
+        }
+        val executable = sys.get("executable")?.toString() ?: "未知"
+        val versionLine = version.lines().firstOrNull() ?: version
+        return NativePythonInfo(
+            pythonVersion = versionLine,
+            sitePackages = sitePackages,
+            pythonPath = executable,
+            chaquopyPipDir = File(filesDir, "chaquopy/pip").absolutePath
+        )
+    }
+}
+
+private fun NativePythonInfo.toMethodChannelMap(): Map<String, String> {
+    return mapOf(
+        "pythonVersion" to pythonVersion,
+        "sitePackages" to sitePackages,
+        "pythonPath" to pythonPath,
+        "chaquopyPipDir" to chaquopyPipDir
+    )
 }
 
 private fun Map<String, String>.toPigeonLinuxLikeRuntimeInfo(): LinuxLikeRuntimeInfo {

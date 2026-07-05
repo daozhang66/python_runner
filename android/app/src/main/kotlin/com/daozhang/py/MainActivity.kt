@@ -266,6 +266,10 @@ class MainActivity : FlutterActivity() {
                 override fun getLinuxLikeRuntimeInfo(): LinuxLikeRuntimeInfo {
                     return runtimeInfoController.getLinuxLikeRuntimeInfoForPigeon()
                 }
+
+                override fun getPythonInfo(callback: (Result<NativePythonInfo>) -> Unit) {
+                    runtimeInfoController.getPythonInfoForPigeon(callback)
+                }
             }
         )
         FilePickerHostApi.setUp(
@@ -281,6 +285,22 @@ class MainActivity : FlutterActivity() {
 
                 override fun readFilePickerFile(path: String): ByteArray {
                     return nativeFileOperations.readFilePickerFile(path)
+                }
+            }
+        )
+        AppHostApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            object : AppHostApi {
+                override fun getAppInfo(): NativeAppInfo {
+                    return appUpdateController.getAppInfoForPigeon()
+                }
+
+                override fun checkOverlayPermission(): Boolean {
+                    return floatingBallController.canShowFloatingBall()
+                }
+
+                override fun consumePendingRunScript(): String? {
+                    return this@MainActivity.consumePendingRunScript()
                 }
             }
         )

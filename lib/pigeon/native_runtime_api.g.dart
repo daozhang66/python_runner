@@ -232,6 +232,126 @@ class NativeAppFileEntry {
   }
 }
 
+class NativePythonInfo {
+  NativePythonInfo({
+    required this.pythonVersion,
+    required this.sitePackages,
+    required this.pythonPath,
+    required this.chaquopyPipDir,
+  });
+
+  String pythonVersion;
+
+  String sitePackages;
+
+  String pythonPath;
+
+  String chaquopyPipDir;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      pythonVersion,
+      sitePackages,
+      pythonPath,
+      chaquopyPipDir,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static NativePythonInfo decode(Object result) {
+    result as List<Object?>;
+    return NativePythonInfo(
+      pythonVersion: result[0]! as String,
+      sitePackages: result[1]! as String,
+      pythonPath: result[2]! as String,
+      chaquopyPipDir: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NativePythonInfo || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(pythonVersion, other.pythonVersion) && _deepEquals(sitePackages, other.sitePackages) && _deepEquals(pythonPath, other.pythonPath) && _deepEquals(chaquopyPipDir, other.chaquopyPipDir);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NativePythonInfo(pythonVersion: $pythonVersion, sitePackages: $sitePackages, pythonPath: $pythonPath, chaquopyPipDir: $chaquopyPipDir)';
+  }
+}
+
+class NativeAppInfo {
+  NativeAppInfo({
+    required this.appName,
+    required this.packageName,
+    required this.version,
+    required this.buildNumber,
+  });
+
+  String appName;
+
+  String packageName;
+
+  String version;
+
+  String buildNumber;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      appName,
+      packageName,
+      version,
+      buildNumber,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static NativeAppInfo decode(Object result) {
+    result as List<Object?>;
+    return NativeAppInfo(
+      appName: result[0]! as String,
+      packageName: result[1]! as String,
+      version: result[2]! as String,
+      buildNumber: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NativeAppInfo || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(appName, other.appName) && _deepEquals(packageName, other.packageName) && _deepEquals(version, other.version) && _deepEquals(buildNumber, other.buildNumber);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NativeAppInfo(appName: $appName, packageName: $packageName, version: $version, buildNumber: $buildNumber)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -246,6 +366,12 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is NativeAppFileEntry) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
+    }    else if (value is NativePythonInfo) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.encode());
+    }    else if (value is NativeAppInfo) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -258,6 +384,10 @@ class _PigeonCodec extends StandardMessageCodec {
         return LinuxLikeRuntimeInfo.decode(readValue(buffer)!);
       case 130:
         return NativeAppFileEntry.decode(readValue(buffer)!);
+      case 131:
+        return NativePythonInfo.decode(readValue(buffer)!);
+      case 132:
+        return NativeAppInfo.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -294,6 +424,25 @@ class RuntimeHostApi {
     )
     ;
     return pigeonVar_replyValue! as LinuxLikeRuntimeInfo;
+  }
+
+  Future<NativePythonInfo> getPythonInfo() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.python_runner.RuntimeHostApi.getPythonInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as NativePythonInfo;
   }
 }
 
@@ -365,5 +514,76 @@ class FilePickerHostApi {
     )
     ;
     return pigeonVar_replyValue! as Uint8List;
+  }
+}
+
+class AppHostApi {
+  /// Constructor for [AppHostApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  AppHostApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  Future<NativeAppInfo> getAppInfo() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.python_runner.AppHostApi.getAppInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as NativeAppInfo;
+  }
+
+  Future<bool> checkOverlayPermission() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.python_runner.AppHostApi.checkOverlayPermission$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
+
+  Future<String?> consumePendingRunScript() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.python_runner.AppHostApi.consumePendingRunScript$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as String?;
   }
 }

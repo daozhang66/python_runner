@@ -111,6 +111,51 @@ void main() {
     expect(info['rootfsDir'], '/rootfs');
   });
 
+  test('NativeBridge reads app state queries through Pigeon', () async {
+    final bridge = NativeBridge.named(
+      runtimeHostApi: _FakeRuntimeHostApi(
+        pigeon.LinuxLikeRuntimeInfo(
+          available: true,
+          installed: true,
+          message: 'ready',
+          pythonPath: '/rootfs/usr/bin/python3',
+          pipPath: '/rootfs/usr/bin/pip3',
+          rootfsDir: '/rootfs',
+        ),
+        pythonInfo: pigeon.NativePythonInfo(
+          pythonVersion: '3.11.0',
+          sitePackages: '/site-packages',
+          pythonPath: '/python',
+          chaquopyPipDir: '/pip',
+        ),
+      ),
+      appHostApi: _FakeAppHostApi(
+        appInfo: pigeon.NativeAppInfo(
+          appName: 'Python Runner',
+          packageName: 'com.daozhang.py',
+          version: '1.2.3',
+          buildNumber: '45',
+        ),
+        overlayPermission: true,
+        pendingScript: 'demo.py',
+      ),
+    );
+
+    final pythonInfo = await bridge.getPythonInfo();
+    final appInfo = await bridge.getAppInfo();
+
+    expect(pythonInfo['pythonVersion'], '3.11.0');
+    expect(pythonInfo['sitePackages'], '/site-packages');
+    expect(pythonInfo['pythonPath'], '/python');
+    expect(pythonInfo['chaquopyPipDir'], '/pip');
+    expect(appInfo['appName'], 'Python Runner');
+    expect(appInfo['packageName'], 'com.daozhang.py');
+    expect(appInfo['version'], '1.2.3');
+    expect(appInfo['buildNumber'], '45');
+    expect(await bridge.checkOverlayPermission(), isTrue);
+    expect(await bridge.consumePendingRunScript(), 'demo.py');
+  });
+
   test('NativeBridge reads file picker data through Pigeon', () async {
     final bridge = NativeBridge.named(
       filePickerHostApi: _FakeFilePickerHostApi(
@@ -180,29 +225,51 @@ void main() {
     final runtimeInfoController = File(
       'android/app/src/main/kotlin/com/daozhang/py/RuntimeInfoController.kt',
     ).readAsStringSync();
+    final appUpdateController = File(
+      'android/app/src/main/kotlin/com/daozhang/py/AppUpdateController.kt',
+    ).readAsStringSync();
 
     expect(pigeonDart, contains('class RuntimeHostApi'));
     expect(pigeonDart, contains('Future<LinuxLikeRuntimeInfo>'));
+    expect(pigeonDart, contains('Future<NativePythonInfo>'));
     expect(pigeonDart, contains('class FilePickerHostApi'));
     expect(pigeonDart, contains('Future<List<NativeAppFileEntry>>'));
     expect(pigeonDart, contains('Future<Uint8List>'));
+    expect(pigeonDart, contains('class AppHostApi'));
+    expect(pigeonDart, contains('Future<NativeAppInfo>'));
+    expect(pigeonDart, contains('Future<bool> checkOverlayPermission'));
+    expect(pigeonDart, contains('Future<String?> consumePendingRunScript'));
     expect(pigeonKotlin, contains('interface RuntimeHostApi'));
     expect(pigeonKotlin, contains('data class LinuxLikeRuntimeInfo'));
+    expect(pigeonKotlin, contains('data class NativePythonInfo'));
     expect(pigeonKotlin, contains('interface FilePickerHostApi'));
     expect(pigeonKotlin, contains('data class NativeAppFileEntry'));
+    expect(pigeonKotlin, contains('interface AppHostApi'));
+    expect(pigeonKotlin, contains('data class NativeAppInfo'));
     expect(mainActivity, contains('RuntimeHostApi.setUp'));
     expect(mainActivity, contains('FilePickerHostApi.setUp'));
+    expect(mainActivity, contains('AppHostApi.setUp'));
     expect(runtimeInfoController, contains('getLinuxLikeRuntimeInfoForPigeon'));
+    expect(runtimeInfoController, contains('getPythonInfoForPigeon'));
+    expect(appUpdateController, contains('getAppInfoForPigeon'));
   });
 }
 
 class _FakeRuntimeHostApi extends pigeon.RuntimeHostApi {
-  _FakeRuntimeHostApi(this.info);
+  _FakeRuntimeHostApi(this.info, {this.pythonInfo});
 
   final pigeon.LinuxLikeRuntimeInfo info;
+  final pigeon.NativePythonInfo? pythonInfo;
 
   @override
   Future<pigeon.LinuxLikeRuntimeInfo> getLinuxLikeRuntimeInfo() async => info;
+
+  @override
+  Future<pigeon.NativePythonInfo> getPythonInfo() async {
+    final info = pythonInfo;
+    if (info != null) return info;
+    return super.getPythonInfo();
+  }
 }
 
 class _FakeFilePickerHostApi extends pigeon.FilePickerHostApi {
@@ -227,4 +294,25 @@ class _FakeFilePickerHostApi extends pigeon.FilePickerHostApi {
 
   @override
   Future<Uint8List> readFilePickerFile(String path) async => bytes;
+}
+
+class _FakeAppHostApi extends pigeon.AppHostApi {
+  _FakeAppHostApi({
+    required this.appInfo,
+    required this.overlayPermission,
+    required this.pendingScript,
+  });
+
+  final pigeon.NativeAppInfo appInfo;
+  final bool overlayPermission;
+  final String? pendingScript;
+
+  @override
+  Future<pigeon.NativeAppInfo> getAppInfo() async => appInfo;
+
+  @override
+  Future<bool> checkOverlayPermission() async => overlayPermission;
+
+  @override
+  Future<String?> consumePendingRunScript() async => pendingScript;
 }

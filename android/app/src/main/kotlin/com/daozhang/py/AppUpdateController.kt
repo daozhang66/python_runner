@@ -17,27 +17,17 @@ class AppUpdateController(
 
     fun getAppInfo(result: MethodChannel.Result) {
         try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            val appName =
-                context.packageManager.getApplicationLabel(context.applicationInfo)?.toString()
-                    ?: context.packageName
-            val versionName = packageInfo.versionName ?: ""
-            val buildNumber = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode.toString()
-            } else {
-                @Suppress("DEPRECATION")
-                packageInfo.versionCode.toString()
-            }
-            result.success(
-                mapOf(
-                    "appName" to appName,
-                    "packageName" to context.packageName,
-                    "version" to versionName,
-                    "buildNumber" to buildNumber
-                )
-            )
+            result.success(loadAppInfo().toMethodChannelMap())
         } catch (e: Exception) {
             result.error("1009", "获取应用信息失败: ${e.message}", null)
+        }
+    }
+
+    fun getAppInfoForPigeon(): NativeAppInfo {
+        return try {
+            loadAppInfo()
+        } catch (e: Exception) {
+            throw FlutterError("1009", "获取应用信息失败: ${e.message}", null)
         }
     }
 
@@ -124,4 +114,33 @@ class AppUpdateController(
             result.error("1012", "打开安装器失败: ${e.message}", null)
         }
     }
+
+    private fun loadAppInfo(): NativeAppInfo {
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val appName =
+            context.packageManager.getApplicationLabel(context.applicationInfo)?.toString()
+                ?: context.packageName
+        val versionName = packageInfo.versionName ?: ""
+        val buildNumber = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            packageInfo.longVersionCode.toString()
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toString()
+        }
+        return NativeAppInfo(
+            appName = appName,
+            packageName = context.packageName,
+            version = versionName,
+            buildNumber = buildNumber
+        )
+    }
+}
+
+private fun NativeAppInfo.toMethodChannelMap(): Map<String, String> {
+    return mapOf(
+        "appName" to appName,
+        "packageName" to packageName,
+        "version" to version,
+        "buildNumber" to buildNumber
+    )
 }
