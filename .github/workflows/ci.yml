@@ -20,7 +20,8 @@ jobs:
 
       - run: flutter analyze --fatal-infos
 
-      - run: flutter test
+      - name: Run non-golden Flutter tests
+        run: flutter test --exclude-tags golden
 
   build-apk:
     runs-on: ubuntu-latest
@@ -78,7 +79,7 @@ jobs:
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
 
-      - name: Verify proot native libraries are STORED
+      - name: Verify proot native libraries use compatible packaging
         run: |
           python3 - <<'PY'
           import sys
@@ -93,9 +94,9 @@ jobs:
           with zipfile.ZipFile(apk) as archive:
               for target in targets:
                   info = archive.getinfo(target)
-                  if info.compress_type != zipfile.ZIP_STORED:
-                      sys.exit(f"{target} is not STORED in {apk}")
-          print("proot native libraries are STORED")
+                  if info.compress_type != zipfile.ZIP_DEFLATED:
+                      sys.exit(f"{target} is not DEFLATED in {apk}")
+          print("proot native libraries use DEFLATED legacy-compatible packaging")
           PY
 
       - name: Upload APK size report

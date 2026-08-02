@@ -13,7 +13,8 @@ void main() {
     expect(ci, contains('verifyReleaseManifestPolicy'));
     expect(ci, contains('reportReleaseApkSize'));
     expect(ci, contains('apksigner'));
-    expect(ci, contains('ZIP_STORED'));
+    expect(ci, contains('ZIP_DEFLATED'));
+    expect(ci, contains('flutter test --exclude-tags golden'));
     expect(ci, contains('build/app/reports/apk-size/release-size.txt'));
   });
 }

@@ -30,7 +30,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/script_workspace_phone_light.png'),
     );
-  });
+  }, tags: const ['golden']);
 
   testWidgets('phone dark empty workspace matches baseline', (tester) async {
     final harness = await _pumpGoldenWorkspace(
@@ -43,7 +43,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/script_workspace_phone_dark_empty.png'),
     );
-  });
+  }, tags: const ['golden']);
 
   testWidgets('phone reorder mode matches baseline', (tester) async {
     final harness = await _pumpGoldenWorkspace(
@@ -65,7 +65,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/script_workspace_phone_reorder.png'),
     );
-  });
+  }, tags: const ['golden']);
 
   testWidgets('tablet light details matches baseline', (tester) async {
     final harness = await _pumpGoldenWorkspace(
@@ -81,7 +81,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/script_workspace_tablet_light_details.png'),
     );
-  });
+  }, tags: const ['golden']);
 
   testWidgets('tablet dark details matches baseline', (tester) async {
     final harness = await _pumpGoldenWorkspace(
@@ -98,7 +98,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/script_workspace_tablet_dark_details.png'),
     );
-  });
+  }, tags: const ['golden']);
 }
 
 Future<ScriptWorkspaceHarness> _pumpGoldenWorkspace(
