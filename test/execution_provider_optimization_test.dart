@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -12,15 +11,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    SharedPreferences.setMockInitialValues(const {
-      'floating_ball_enabled': false,
-    });
-    ExecutionProvider.setNavigateToConsoleHandler(null);
+    SharedPreferences.setMockInitialValues(const {});
   });
 
-  tearDown(() {
-    ExecutionProvider.setNavigateToConsoleHandler(null);
-  });
+  tearDown(() {});
 
   testWidgets(
       'execution provider trims current and history logs to bounded sizes',
@@ -50,6 +44,129 @@ void main() {
 
     provider.dispose();
     await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('execution provider keeps old current-log snapshots stable',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('demo.py');
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'seed',
+      timestamp: DateTime(2026, 1, 1),
+    );
+    await tester.pump();
+    final oldLogs = provider.logs;
+
+    for (var i = 0; i <= ExecutionProvider.maxCurrentLogs; i++) {
+      bridge.emitLog(
+        type: 'stdout',
+        content: 'line $i',
+        timestamp: DateTime(2026, 1, 1).add(Duration(milliseconds: i)),
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(oldLogs, hasLength(1));
+    expect(oldLogs.single.content, 'seed');
+    expect(() => oldLogs.add(oldLogs.single), throwsUnsupportedError);
+    expect(provider.logs, hasLength(ExecutionProvider.maxCurrentLogs));
+    expect(provider.logs.first.content, 'line 1');
+    expect(identical(oldLogs, provider.logs), isFalse);
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('execution provider isolates a history record log snapshot',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('demo.py');
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'prompt> ',
+      timestamp: DateTime(2026, 1, 1),
+    );
+    await tester.pump();
+    final record = provider.logHistory.single;
+    final oldRecordLogs = record.logs;
+
+    bridge.emitStdin(prompt: 'prompt> ');
+    await tester.pump();
+    await provider.sendStdin('answer');
+    expect(oldRecordLogs.single.content, 'prompt> ');
+    expect(record.logs, hasLength(2));
+    expect(record.logs.last.content, 'prompt> answer');
+
+    for (var i = 0; i <= ExecutionProvider.maxLogsPerHistoryRecord; i++) {
+      bridge.emitLog(
+        type: 'stdout',
+        content: 'line $i',
+        timestamp: DateTime(2026, 1, 1).add(Duration(milliseconds: i)),
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(oldRecordLogs, hasLength(1));
+    expect(oldRecordLogs.single.content, 'prompt> ');
+    expect(
+        () => oldRecordLogs.add(oldRecordLogs.single), throwsUnsupportedError);
+    expect(record.logs, hasLength(ExecutionProvider.maxLogsPerHistoryRecord));
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('execution provider keeps old history-list snapshots stable',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('alpha.py');
+    final oldHistory = provider.logHistory;
+    await provider.executeScript('beta.py');
+
+    expect(oldHistory, hasLength(1));
+    expect(oldHistory.single.scriptName, 'alpha.py');
+    expect(() => oldHistory.removeAt(0), throwsUnsupportedError);
+    expect(provider.logHistory, hasLength(2));
+
+    provider.removeHistoryRecord(0);
+    expect(oldHistory, hasLength(1));
+    expect(provider.logHistory.single.scriptName, 'beta.py');
+
+    provider.clearHistory();
+    expect(oldHistory, hasLength(1));
+    expect(provider.logHistory, isEmpty);
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('clearing the console hides output without deleting its history',
+      (tester) async {
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('demo.py');
+    bridge.emitLog(
+      type: 'stdout',
+      content: 'retained in history',
+      timestamp: DateTime(2026, 1, 1),
+    );
+    await tester.pump();
+
+    provider.clearLogs();
+
+    expect(provider.logs, isEmpty);
+    expect(
+        provider.logHistory.single.logs.single.content, 'retained in history');
+
+    provider.dispose();
   });
 
   testWidgets('execution provider trims retained history runs', (tester) async {
@@ -194,7 +311,6 @@ void main() {
   testWidgets('linux-like preference falls back to Chaquopy when unavailable',
       (tester) async {
     SharedPreferences.setMockInitialValues(const {
-      'floating_ball_enabled': false,
       'runtime_backend': 'linux_like',
     });
     final bridge = _ExecutionBridgeFake(linuxLikeAvailable: false);
@@ -214,19 +330,35 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  test('run console binds historical output per script instead of global live buffer',
-      () {
-    final consoleSource =
-        File('lib/pages/run_console_page.dart').readAsStringSync();
+  testWidgets('missing timeout preference uses the visible 60-second default',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(const {});
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
 
-    expect(consoleSource, contains('latestHistoryRecordForScript(scriptName)'));
-    expect(consoleSource, contains('final selectedRecord = isRunning'));
-    expect(consoleSource, contains('final logs = isRunning'));
-    expect(consoleSource, contains('onClear: isRunning'));
-    expect(consoleSource, contains('logVersion: logVersion'));
-    expect(consoleSource, contains('ExecutionStatus.completed'));
-    expect(consoleSource, isNot(contains('(p) => p.logs')));
+    await provider.executeScript('demo.py');
+
+    expect(bridge.lastTimeoutSeconds, 60);
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
   });
+
+  testWidgets('an explicit zero timeout remains unlimited', (tester) async {
+    SharedPreferences.setMockInitialValues(const {
+      'execution_timeout': 0,
+    });
+    final bridge = _ExecutionBridgeFake();
+    final provider = ExecutionProvider(bridge);
+
+    await provider.executeScript('demo.py');
+
+    expect(bridge.lastTimeoutSeconds, isNull);
+
+    provider.dispose();
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
 }
 
 class _ExecutionBridgeFake extends NativeBridge {
@@ -236,13 +368,14 @@ class _ExecutionBridgeFake extends NativeBridge {
   int chaquopyExecuteScriptCalls = 0;
   int linuxLikeExecuteScriptCalls = 0;
   Map<String, String>? lastHookEnv;
+  int? lastTimeoutSeconds;
 
   final StreamController<Map<dynamic, dynamic>> _logController =
       StreamController<Map<dynamic, dynamic>>.broadcast();
   final StreamController<Map<dynamic, dynamic>> _statusController =
       StreamController<Map<dynamic, dynamic>>.broadcast();
-  final Stream<Map<dynamic, dynamic>> _emptyStream =
-      const Stream<Map<dynamic, dynamic>>.empty().asBroadcastStream();
+  final StreamController<Map<dynamic, dynamic>> _stdinController =
+      StreamController<Map<dynamic, dynamic>>.broadcast();
 
   @override
   Stream<Map<dynamic, dynamic>> get logStream => _logController.stream;
@@ -252,7 +385,8 @@ class _ExecutionBridgeFake extends NativeBridge {
       _statusController.stream;
 
   @override
-  Stream<Map<dynamic, dynamic>> get stdinRequestStream => _emptyStream;
+  Stream<Map<dynamic, dynamic>> get stdinRequestStream =>
+      _stdinController.stream;
 
   void emitLog({
     required String type,
@@ -280,6 +414,13 @@ class _ExecutionBridgeFake extends NativeBridge {
     });
   }
 
+  void emitStdin({required String prompt, String? executionId}) {
+    _stdinController.add({
+      'prompt': prompt,
+      if (executionId != null) 'executionId': executionId,
+    });
+  }
+
   @override
   Future<void> executeScript(
     String name,
@@ -290,6 +431,7 @@ class _ExecutionBridgeFake extends NativeBridge {
   }) async {
     chaquopyExecuteScriptCalls++;
     lastHookEnv = hookEnv;
+    lastTimeoutSeconds = timeoutSeconds;
   }
 
   @override
@@ -315,5 +457,6 @@ class _ExecutionBridgeFake extends NativeBridge {
   Future<void> stopExecution() async {}
 
   @override
-  Future<String?> consumePendingRunScript() async => null;
+  Future<void> sendStdin(String input) async {}
+
 }

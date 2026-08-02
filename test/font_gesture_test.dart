@@ -3,20 +3,23 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as legacy_provider;
 import 'package:re_editor/re_editor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:python_runner/features/scripts/application/script_repository.dart';
 import 'package:python_runner/models/log_entry.dart';
+import 'package:python_runner/models/script_file.dart';
+import 'package:python_runner/models/script_group.dart';
 import 'package:python_runner/pages/network_inspector_page.dart';
-import 'package:python_runner/pages/script_editor_page.dart';
+import 'package:python_runner/features/scripts/presentation/pages/script_editor_page.dart';
 import 'package:python_runner/providers/execution_provider.dart';
-import 'package:python_runner/providers/script_provider.dart';
 import 'package:python_runner/services/database_service.dart';
 import 'package:python_runner/services/http_inspector_store.dart';
 import 'package:python_runner/services/native_bridge.dart';
-import 'package:python_runner/widgets/terminal_view.dart';
+import 'package:python_runner/features/console/presentation/widgets/terminal_view.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +42,14 @@ void main() {
                     type: LogType.stdout,
                     content: 'hello from terminal',
                     timestamp: DateTime(2024),
+                  ),
+                  ...List.generate(
+                    4999,
+                    (index) => LogEntry(
+                      type: LogType.stdout,
+                      content: 'large terminal output $index',
+                      timestamp: DateTime(2024),
+                    ),
                   ),
                 ],
               ),
@@ -102,33 +113,6 @@ void main() {
       expect(find.byType(SingleChildScrollView), findsNothing);
     });
 
-    test('terminal view uses logVersion to detect capped log replacement', () {
-      final terminalSource =
-          File('lib/widgets/terminal_view.dart').readAsStringSync();
-      final consoleSource =
-          File('lib/pages/run_console_page.dart').readAsStringSync();
-
-      expect(terminalSource, contains('final int logVersion;'));
-      expect(terminalSource, contains('this.logVersion = 0'));
-      expect(terminalSource,
-          contains('widget.logVersion != oldWidget.logVersion'));
-      expect(consoleSource, contains('logVersion: logVersion'));
-    });
-
-    test('rerun refreshes run start time after starting a new execution', () {
-      final consoleSource =
-          File('lib/pages/run_console_page.dart').readAsStringSync();
-      final rerunBody = RegExp(
-        r'Future<void> _rerun\(\) async \{([\s\S]*?)\r?\n  }\r?\n\r?\n  @override',
-      ).firstMatch(consoleSource)!.group(1)!;
-
-      expect(
-          rerunBody, contains('await exec.executeScript(widget.scriptName)'));
-      expect(rerunBody, contains('if (!mounted) return;'));
-      expect(rerunBody, contains('_captureStartTime()'));
-      expect(rerunBody, contains('setState('));
-    });
-
     testWidgets('script editor hides font button and supports pinch-to-zoom', (
       WidgetTester tester,
     ) async {
@@ -139,19 +123,23 @@ void main() {
       final bridge = _FakeNativeBridge(scriptContents: {
         'demo.py': 'print("hello")\nprint("world")',
       });
+      final repository = _FontGestureScriptRepository(
+          bridge: bridge, database: _FakeDatabaseService());
 
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider(
-              create: (_) => ScriptProvider(bridge, _FakeDatabaseService()),
-            ),
-            ChangeNotifierProvider(
-              create: (_) => ExecutionProvider(bridge),
-            ),
+        ProviderScope(
+          overrides: [
+            scriptRepositoryProvider.overrideWithValue(repository),
           ],
-          child: _buildTestApp(
-            const ScriptEditorPage(scriptName: 'demo.py'),
+          child: legacy_provider.MultiProvider(
+            providers: [
+              legacy_provider.ChangeNotifierProvider(
+                create: (_) => ExecutionProvider(bridge),
+              ),
+            ],
+            child: _buildTestApp(
+              const ScriptEditorPage(scriptName: 'demo.py'),
+            ),
           ),
         ),
       );
@@ -200,7 +188,7 @@ void main() {
 
         try {
           await tester.pumpWidget(
-            ChangeNotifierProvider<HttpInspectorStore>.value(
+            legacy_provider.ChangeNotifierProvider<HttpInspectorStore>.value(
               value: store,
               child: _buildTestApp(
                 const NetworkInspectorPage(),
@@ -338,6 +326,9 @@ class _FakeNativeBridge extends NativeBridge {
   final Stream<Map<dynamic, dynamic>> _emptyStream =
       const Stream<Map<dynamic, dynamic>>.empty().asBroadcastStream();
 
+  /// 暴露给测试 Repository 的文件名集合。
+  Map<String, String> get scriptContents => _scriptContents;
+
   @override
   Stream<Map<dynamic, dynamic>> get logStream => _emptyStream;
 
@@ -377,4 +368,84 @@ class _FakeNativeBridge extends NativeBridge {
 class _FakeDatabaseService extends DatabaseService {
   @override
   Future<void> incrementRunCount(String name) async {}
+}
+
+/// 包装 [_FakeNativeBridge] + [_FakeDatabaseService] 的最小 Repository，供
+/// ScriptEditorPage 经 Riverpod 消费。编辑器测试只需 demo.py 的读写与 runCount。
+class _FontGestureScriptRepository implements ScriptRepository {
+  _FontGestureScriptRepository({required this.bridge, required this.database});
+
+  final _FakeNativeBridge bridge;
+  final _FakeDatabaseService database;
+
+  @override
+  Future<List<ScriptFile>> getAllScripts() async => const [];
+
+  @override
+  Future<ScriptFile?> getScript(String name) async => null;
+
+  @override
+  Future<void> upsertScript(ScriptFile script) async {}
+
+  @override
+  Future<void> deleteScript(String name) async {}
+
+  @override
+  Future<void> renameScript(
+      String oldName, String newName, String newPath) async {}
+
+  @override
+  Future<void> incrementRunCount(String name) =>
+      database.incrementRunCount(name);
+
+  @override
+  Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) async {}
+
+  @override
+  Future<List<ScriptGroup>> getAllGroups() async => const [];
+
+  @override
+  Future<int> createGroup(ScriptGroup group) async => 0;
+
+  @override
+  Future<void> renameGroup(int groupId, String name) async {}
+
+  @override
+  Future<void> updateProjectMainFile(int groupId, String? mainFilePath) async {}
+
+  @override
+  Future<void> touchGroup(int groupId) async {}
+
+  @override
+  Future<void> deleteGroup(int groupId) async {}
+
+  @override
+  Future<void> moveScriptsToGroup(List<ScriptFile> scripts) async {}
+
+  @override
+  Future<List<String>> listScriptFiles() async =>
+      bridge.scriptContents.keys.toList();
+
+  @override
+  Future<String> createScriptFile(String name, {String content = ''}) async =>
+      name;
+
+  @override
+  Future<bool> deleteScriptFile(String name) async => true;
+
+  @override
+  Future<bool> renameScriptFile(String oldName, String newName) async => true;
+
+  @override
+  Future<String> readScriptFile(String name) => bridge.readScript(name);
+
+  @override
+  Future<bool> saveScriptFile(String name, String content) =>
+      bridge.saveScript(name, content);
+
+  @override
+  Future<String> importScriptFromUri(String uri, String name) async => name;
+
+  @override
+  Future<bool> deleteScriptProject(String projectKey) async => true;
 }

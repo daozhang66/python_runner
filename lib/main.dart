@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,24 +9,23 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'services/native_bridge.dart';
-import 'services/database_service.dart';
 import 'services/app_logger.dart';
 import 'services/app_update_manager.dart';
 import 'services/http_inspector_store.dart';
 import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
-import 'providers/script_provider.dart';
 import 'providers/execution_provider.dart';
-import 'providers/package_provider.dart' show PackageProvider;
+import 'features/packages/application/package_controller.dart';
 import 'providers/theme_provider.dart';
-import 'pages/script_list_page.dart';
+import 'providers/app_locale_provider.dart';
+import 'features/scripts/presentation/pages/script_list_page.dart';
 import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/run_console_page.dart';
-import 'utils/app_page_transitions.dart';
 import 'ui/app_design_tokens.dart';
+import 'ui/app_responsive.dart';
 import 'ui/app_theme_palette.dart';
+import 'l10n/app_localizations.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -77,7 +75,6 @@ void main() async {
   };
 
   final bridge = NativeBridge();
-  final db = DatabaseService();
 
   // runZonedGuarded to catch all async errors
   runZonedGuarded(
@@ -90,11 +87,7 @@ void main() async {
           child: legacy_provider.MultiProvider(
             providers: [
               legacy_provider.ChangeNotifierProvider(
-                  create: (_) => ScriptProvider(bridge, db)),
-              legacy_provider.ChangeNotifierProvider(
                   create: (_) => ExecutionProvider(bridge)),
-              legacy_provider.ChangeNotifierProvider(
-                  create: (_) => PackageProvider(bridge)),
               legacy_provider.ChangeNotifierProvider.value(
                   value: httpInspectorStore),
             ],
@@ -144,6 +137,10 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
   ThemeData? _cachedDarkTheme;
   ColorScheme? _cachedLightScheme;
   ColorScheme? _cachedDarkScheme;
+  AppThemePalette? _cachedLightPreset;
+  AppThemePalette? _cachedDarkPreset;
+  String? _cachedLightFontFamily;
+  String? _cachedDarkFontFamily;
 
   @override
   void initState() {
@@ -157,11 +154,6 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      unawaited(
-          legacy_provider.Provider.of<ExecutionProvider>(context, listen: false)
-              .syncFloatingBallVisibility());
-    }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
@@ -184,8 +176,13 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
     final isDark = colorScheme.brightness == Brightness.dark;
     final cachedTheme = isDark ? _cachedDarkTheme : _cachedLightTheme;
     final cachedScheme = isDark ? _cachedDarkScheme : _cachedLightScheme;
+    final cachedPreset = isDark ? _cachedDarkPreset : _cachedLightPreset;
+    final cachedFontFamily =
+        isDark ? _cachedDarkFontFamily : _cachedLightFontFamily;
     if (cachedTheme != null &&
-        (identical(cachedScheme, colorScheme) || cachedScheme == colorScheme)) {
+        (identical(cachedScheme, colorScheme) || cachedScheme == colorScheme) &&
+        cachedPreset == selectedPreset &&
+        cachedFontFamily == fontFamily) {
       return cachedTheme;
     }
 
@@ -418,9 +415,13 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
     if (isDark) {
       _cachedDarkTheme = theme;
       _cachedDarkScheme = colorScheme;
+      _cachedDarkPreset = selectedPreset;
+      _cachedDarkFontFamily = fontFamily;
     } else {
       _cachedLightTheme = theme;
       _cachedLightScheme = colorScheme;
+      _cachedLightPreset = selectedPreset;
+      _cachedLightFontFamily = fontFamily;
     }
     return theme;
   }
@@ -428,17 +429,10 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
   @override
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeProvider);
-    final themeNotifier = ref.read(themeProvider.notifier);
+    final appLocale = ref.watch(appLocaleProvider);
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        // 更新动态颜色到 provider
-        if (themeState.useDynamicColor && lightDynamic != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            themeNotifier.setDynamicPrimary(lightDynamic.primary);
-          });
-        }
-
         // 决定 ColorScheme
         final ColorScheme lightScheme;
         final ColorScheme darkScheme;
@@ -482,7 +476,7 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
 
         return MaterialApp(
           navigatorKey: appNavigatorKey,
-          title: 'Python运行器',
+          onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
           debugShowCheckedModeBanner: false,
           themeMode: isDarkOnly ? ThemeMode.dark : themeState.mode,
           builder: (context, child) {
@@ -494,16 +488,9 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
               child: child ?? const SizedBox.shrink(),
             );
           },
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [
-            Locale('zh', 'CN'),
-            Locale('en', 'US'),
-          ],
-          locale: const Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: appLocale,
           theme: _buildTheme(
             lightScheme,
             themeState.selectedPreset,
@@ -644,7 +631,8 @@ class _SplashGateState extends State<SplashGate>
     );
   }
 
-  Widget _buildSplashContent({
+  Widget _buildSplashContent(
+    BuildContext context, {
     required Color primaryColor,
     required Color surfaceColor,
     required ColorScheme colors,
@@ -687,7 +675,7 @@ class _SplashGateState extends State<SplashGate>
         ),
         const SizedBox(height: 22),
         _buildSplashText(
-          'Python 运行器',
+          AppLocalizations.of(context)!.appTitle,
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -697,7 +685,7 @@ class _SplashGateState extends State<SplashGate>
         ),
         const SizedBox(height: 8),
         _buildSplashText(
-          '人生苦短，我用 Python',
+          AppLocalizations.of(context)!.pythonRunnerSlogan,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w400,
@@ -722,17 +710,9 @@ class _SplashGateState extends State<SplashGate>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF121212) : Colors.white;
+    final bgColor = AppThemeColors.splashSurface(isDark);
     final primaryColor = colors.primary;
-    final gradientColors = isDark
-        ? [
-            const Color(0xFF121212),
-            const Color(0xFF0F172A),
-          ]
-        : [
-            Colors.white,
-            const Color(0xFFEAF2FF),
-          ];
+    final gradientColors = AppThemeColors.splashGradient(isDark);
 
     final splash = Scaffold(
       key: const ValueKey('splash'),
@@ -751,6 +731,7 @@ class _SplashGateState extends State<SplashGate>
             child: ScaleTransition(
               scale: _scale,
               child: _buildSplashContent(
+                context,
                 primaryColor: primaryColor,
                 surfaceColor: bgColor,
                 colors: colors,
@@ -775,7 +756,7 @@ class _SplashGateState extends State<SplashGate>
   }
 }
 
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   final ThemeMode currentThemeMode;
 
   const HomePage({
@@ -784,10 +765,10 @@ class HomePage extends StatefulWidget {
   });
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
   final _appUpdateManager = AppUpdateManager();
   final _scriptListController = ScriptListPageController();
@@ -796,48 +777,21 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(
-        legacy_provider.Provider.of<ExecutionProvider>(
-          context,
-          listen: false,
-        ).syncFloatingBallVisibility(),
-      );
       _checkForUpdatesOnLaunch();
-      // When floating ball triggers a script, switch to script tab and open console page
-      ExecutionProvider.setNavigateToConsoleHandler((scriptName) {
-        if (!mounted) return;
-        setState(() => _currentIndex = 0);
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (!mounted) return;
-          appNavigatorKey.currentState?.push(
-            AppPageTransitions.fadeThrough(
-              RunConsolePage(scriptName: scriptName),
-            ),
-          );
-        });
-      });
     });
-  }
-
-  @override
-  void dispose() {
-    ExecutionProvider.setNavigateToConsoleHandler(null);
-    super.dispose();
   }
 
   void _selectTab(int index) {
     if (index == 2) {
       unawaited(
-        legacy_provider.Provider.of<PackageProvider>(
-          context,
-          listen: false,
-        ).ensurePackagesLoaded(),
+        ref.read(packageControllerProvider.notifier).ensureLoaded(),
       );
     }
     setState(() => _currentIndex = index);
   }
 
   Widget _buildBottomNavigation(ColorScheme colors) {
+    final localizations = AppLocalizations.of(context)!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDark
         ? colors.surfaceContainerHigh
@@ -859,34 +813,82 @@ class _HomePageState extends State<HomePage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
+            color: colors.shadow.withValues(alpha: isDark ? 0.18 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
         ],
       ),
       child: NavigationBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppThemeColors.transparent,
         selectedIndex: _currentIndex,
         onDestinationSelected: _selectTab,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.code_outlined),
-            selectedIcon: Icon(Icons.code),
-            label: '脚本',
+            icon: const Icon(Icons.code_outlined),
+            selectedIcon: const Icon(Icons.code),
+            label: localizations.scripts,
           ),
           NavigationDestination(
-            icon: Icon(Icons.http_outlined),
-            selectedIcon: Icon(Icons.http),
-            label: '网络',
+            icon: const Icon(Icons.http_outlined),
+            selectedIcon: const Icon(Icons.http),
+            label: localizations.network,
           ),
           NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: '库管理',
+            icon: const Icon(Icons.inventory_2_outlined),
+            selectedIcon: const Icon(Icons.inventory_2),
+            label: localizations.packageManager,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNavigationRail() {
+    final localizations = AppLocalizations.of(context)!;
+    return NavigationRail(
+      selectedIndex: _currentIndex,
+      onDestinationSelected: _selectTab,
+      labelType: NavigationRailLabelType.all,
+      destinations: [
+        NavigationRailDestination(
+          icon: const Icon(Icons.code_outlined),
+          selectedIcon: const Icon(Icons.code),
+          label: Text(localizations.scripts),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.http_outlined),
+          selectedIcon: const Icon(Icons.http),
+          label: Text(localizations.network),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.inventory_2_outlined),
+          selectedIcon: const Icon(Icons.inventory_2),
+          label: Text(localizations.packageManager),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPageStack() {
+    return IndexedStack(
+      index: _currentIndex,
+      children: [
+        ScriptListPage(
+          controller: _scriptListController,
+          onSettingsTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SettingsPage(
+                currentThemeMode: widget.currentThemeMode,
+              ),
+              fullscreenDialog: true,
+            ),
+          ).then((_) => _scriptListController.refreshRuntimePreference()),
+        ),
+        const NetworkInspectorPage(),
+        const PackageManagerPage(),
+      ],
     );
   }
 
@@ -912,30 +914,33 @@ class _HomePageState extends State<HomePage> {
               .invokeMethod('moveToBackground');
         }
       },
-      child: Scaffold(
-        appBar: null,
-        body: IndexedStack(
-          index: _currentIndex,
-          children: [
-            ScriptListPage(
-              controller: _scriptListController,
-              onSettingsTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SettingsPage(
-                    currentThemeMode: widget.currentThemeMode,
-                  ),
-                  fullscreenDialog: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (AppBreakpoints.isTabletWidth(constraints.maxWidth)) {
+            return Scaffold(
+              body: SafeArea(
+                child: Row(
+                  children: [
+                    _buildNavigationRail(),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _buildPageStack()),
+                  ],
                 ),
-              ).then((_) => _scriptListController.refreshRuntimePreference()),
+              ),
+            );
+          }
+
+          return Scaffold(
+            appBar: null,
+            body: SafeArea(
+              bottom: false,
+              child: _buildPageStack(),
             ),
-            const NetworkInspectorPage(),
-            const PackageManagerPage(),
-          ],
-        ),
-        bottomNavigationBar: _buildBottomNavigation(
-          Theme.of(context).colorScheme,
-        ),
+            bottomNavigationBar: _buildBottomNavigation(
+              Theme.of(context).colorScheme,
+            ),
+          );
+        },
       ),
     );
   }

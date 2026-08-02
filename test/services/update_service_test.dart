@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:python_runner/services/update_service.dart';
@@ -163,6 +166,84 @@ void main() {
         UpdateService.extractApiErrorMessage(body),
         'API rate limit exceeded',
       );
+    });
+
+    test('bounds successful and error update API responses', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      var mode = 'latest-success-large';
+      server.listen((request) async {
+        if (request.uri.path == '/checksum') {
+          request.response
+            ..statusCode = HttpStatus.internalServerError
+            ..write('e' * (64 * 1024 + 1));
+          await request.response.close();
+          return;
+        }
+        if (mode == 'latest-error-large') {
+          request.response
+            ..statusCode = HttpStatus.internalServerError
+            ..write('e' * (64 * 1024 + 1));
+          await request.response.close();
+          return;
+        }
+        if (mode == 'latest-success-large' || mode == 'logs-success-large') {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..write('x' * (1024 * 1024 + 1));
+          await request.response.close();
+          return;
+        }
+        final checksumUrl =
+            'http://${server.address.address}:${server.port}/checksum';
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write(jsonEncode({
+            'tag_name': 'v1.2.0',
+            'assets': [
+              {
+                'name': 'app.apk',
+                'browser_download_url': checksumUrl,
+                'size': 1,
+                'content_type': 'application/vnd.android.package-archive',
+              },
+              {
+                'name': 'app.apk.sha256',
+                'browser_download_url': checksumUrl,
+                'size': 1,
+                'content_type': 'text/plain',
+              },
+            ],
+          }));
+        await request.response.close();
+      });
+      final service = UpdateService(
+        apiBaseUri:
+            Uri.parse('http://${server.address.address}:${server.port}'),
+      );
+      try {
+        await expectLater(
+          service.fetchLatestRelease(currentVersion: '1.0.0'),
+          throwsA(isA<HttpException>()),
+        );
+
+        mode = 'logs-success-large';
+        await expectLater(
+            service.fetchReleaseLogs(), throwsA(isA<HttpException>()));
+
+        mode = 'latest-error-large';
+        await expectLater(
+          service.fetchLatestRelease(currentVersion: '1.0.0'),
+          throwsA(isA<HttpException>()),
+        );
+
+        mode = 'checksum-release';
+        final update =
+            await service.fetchLatestRelease(currentVersion: '1.0.0');
+        expect(update.apkAsset!.sha256, isNull);
+        expect(update.apkAsset!.checksumError, isNotNull);
+      } finally {
+        await server.close(force: true);
+      }
     });
   });
 }

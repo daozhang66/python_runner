@@ -17,6 +17,9 @@ abstract class RuntimeSession {
   Future<void> interrupt();
   Future<void> terminate();
   Future<int?> waitExit();
+
+  /// Releases session-owned listeners. This is safe to call more than once.
+  Future<void> dispose();
 }
 
 bool isTerminalRuntimeState(ExecutionStatus status) {

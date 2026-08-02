@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,18 +14,21 @@ import '../services/request_override_config.dart';
 import '../runtime/runtime_manager.dart';
 import '../providers/execution_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/app_locale_provider.dart';
+import '../providers/infrastructure_providers.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/app_dialogs.dart';
 import 'update_log_page.dart';
 import 'theme_settings_page.dart';
 import 'app_logs_page.dart';
 import 'app_file_picker_page.dart';
-import 'runtime_manager_page.dart';
+import 'request_override_editor_page.dart';
 
 part 'settings_actions.dart';
 part 'settings_sections.dart';
 part 'settings_widgets.dart';
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   final ThemeMode currentThemeMode;
 
   const SettingsPage({
@@ -33,11 +37,10 @@ class SettingsPage extends StatefulWidget {
   });
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage>
-    with WidgetsBindingObserver {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _mirrorController = TextEditingController();
   String? _exportDir;
   String? _workingDir;
@@ -51,8 +54,6 @@ class _SettingsPageState extends State<SettingsPage>
   bool _recordRequests = true;
   bool _recordResponseBody = false;
   bool _autoCheckUpdates = true;
-  bool _floatingBallEnabled = false;
-  bool _waitingForFloatingBallPermission = false;
   String _runtimeBackend = RuntimeManager.chaquopyBackendId;
   final _bridge = NativeBridge();
   final _appUpdateManager = AppUpdateManager();
@@ -62,31 +63,29 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_syncFloatingBallAfterPermissionReturn());
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          // ── General ──
-          _buildAppearanceSection(),
-
-          _buildRuntimeSection(),
-          _buildNetworkDebugSection(),
-          _buildDiagnosticsSection(),
-          _buildAboutSection(),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            title: Text(AppLocalizations.of(context)!.settings),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              _buildAppearanceSection(),
+              _buildRuntimeSection(),
+              _buildNetworkDebugSection(),
+              _buildDiagnosticsSection(),
+              _buildAboutSection(),
+            ]),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
         ],
       ),
     );
@@ -96,7 +95,6 @@ class _SettingsPageState extends State<SettingsPage>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _mirrorController.dispose();
     _proxyHostController.dispose();
     _proxyPortController.dispose();

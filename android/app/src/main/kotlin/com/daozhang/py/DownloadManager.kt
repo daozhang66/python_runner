@@ -96,6 +96,17 @@ class DownloadManager(
         return file
     }
 
+    fun discardCompletedTask(taskId: String): Boolean {
+        val task = tasks[taskId] ?: loadTask(taskId) ?: return false
+        tasks.remove(taskId)
+        jobs.remove(taskId)?.cancel()
+        File(task.tempFilePath).delete()
+        File(task.finalFilePath).delete()
+        File(task.stateFilePath).delete()
+        File("${task.stateFilePath}.tmp").delete()
+        return true
+    }
+
     private fun launchDownload(task: DownloadTask) {
         jobs.remove(task.taskId)?.cancel()
         tasks[task.taskId] = task
@@ -306,6 +317,7 @@ class DownloadManager(
         val safeFileName = safeApkFileName(fileName)
         val taskId = taskIdFor(safeFileName, version)
         val stateFile = stateFileFor(taskId)
+        cleanupStaleUpdateArtifacts(taskId, safeFileName)
         val existing = readTask(stateFile)
         if (existing != null &&
             existing.url == url &&
@@ -333,6 +345,30 @@ class DownloadManager(
         tasks[taskId] = task
         writeState(task)
         return task
+    }
+
+    private fun cleanupStaleUpdateArtifacts(currentTaskId: String, currentFileName: String) {
+        val keepPaths = mutableSetOf(
+            File(updatesDir, currentFileName).absolutePath,
+            File(updatesDir, "$currentFileName.part").absolutePath,
+            stateFileFor(currentTaskId).absolutePath,
+            "${stateFileFor(currentTaskId).absolutePath}.tmp"
+        )
+        for (taskId in jobs.keys) {
+            val task = tasks[taskId] ?: continue
+            keepPaths += File(task.tempFilePath).absolutePath
+            keepPaths += File(task.finalFilePath).absolutePath
+            keepPaths += File(task.stateFilePath).absolutePath
+            keepPaths += "${task.stateFilePath}.tmp"
+        }
+        updatesDir.listFiles()?.forEach { file ->
+            if (!file.isFile || file.absolutePath in keepPaths) return@forEach
+            val isUpdateArtifact = file.name.endsWith(".apk", ignoreCase = true) ||
+                file.name.endsWith(".apk.part", ignoreCase = true) ||
+                file.name.endsWith(".task_state.json", ignoreCase = true) ||
+                file.name.endsWith(".task_state.json.tmp", ignoreCase = true)
+            if (isUpdateArtifact) file.delete()
+        }
     }
 
     private fun loadTask(taskId: String): DownloadTask? {

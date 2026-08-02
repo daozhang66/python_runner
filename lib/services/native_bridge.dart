@@ -1,5 +1,7 @@
-import 'package:flutter/services.dart';
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../pigeon/native_runtime_api.g.dart' as pigeon;
 import 'app_logger.dart';
 import 'native_bridge_contract.dart';
@@ -7,6 +9,16 @@ import '../models/app_file_entry.dart';
 import '../models/script_project_file.dart';
 import 'project_path_validator.dart';
 import 'script_name_validator.dart';
+
+/// Test-only source override for native event streams.
+///
+/// Production instances continue to receive events from the matching
+/// [EventChannel]. Keeping this injectable lets stream reconnection behavior
+/// be verified without an Android engine.
+@visibleForTesting
+typedef NativeBridgeEventStreamFactory = Stream<dynamic> Function(
+  String channelName,
+);
 
 /// Dart facade for the Android `MethodChannel` and native event streams.
 ///
@@ -32,50 +44,85 @@ class NativeBridge {
   final pigeon.RuntimeHostApi _runtimeHostApi;
   final pigeon.FilePickerHostApi _filePickerHostApi;
   final pigeon.AppHostApi _appHostApi;
+  final NativeBridgeEventStreamFactory _eventStreamFactory;
 
   NativeBridge.named({
     pigeon.RuntimeHostApi? runtimeHostApi,
     pigeon.FilePickerHostApi? filePickerHostApi,
     pigeon.AppHostApi? appHostApi,
+    @visibleForTesting NativeBridgeEventStreamFactory? eventStreamFactory,
   })  : _runtimeHostApi = runtimeHostApi ?? pigeon.RuntimeHostApi(),
         _filePickerHostApi = filePickerHostApi ?? pigeon.FilePickerHostApi(),
-        _appHostApi = appHostApi ?? pigeon.AppHostApi();
+        _appHostApi = appHostApi ?? pigeon.AppHostApi(),
+        _eventStreamFactory = eventStreamFactory ?? _defaultEventStream;
 
-  Stream<Map<dynamic, dynamic>>? _logStream;
-  Stream<Map<dynamic, dynamic>>? _installProgressStream;
-  Stream<Map<dynamic, dynamic>>? _downloadProgressStream;
-  Stream<Map<dynamic, dynamic>>? _executionStatusStream;
-  Stream<Map<dynamic, dynamic>>? _stdinRequestStream;
+  late final _ResettableEventStream<Map<dynamic, dynamic>> _logEvents =
+      _eventStream('com.daozhang.py/log_stream');
+  late final _ResettableEventStream<Map<dynamic, dynamic>>
+      _installProgressEvents = _eventStream('com.daozhang.py/install_progress');
+  late final _ResettableEventStream<Map<dynamic, dynamic>>
+      _downloadProgressEvents =
+      _eventStream('com.daozhang.py/download_progress');
+  late final _ResettableEventStream<Map<dynamic, dynamic>>
+      _executionStatusEvents = _eventStream('com.daozhang.py/execution_status');
+  late final _ResettableEventStream<Map<dynamic, dynamic>> _stdinRequestEvents =
+      _eventStream('com.daozhang.py/stdin_request');
 
-  Stream<Map<dynamic, dynamic>> get logStream =>
-      _logStream ??= _logStreamChannel
-          .receiveBroadcastStream()
-          .map(_eventMap)
-          .asBroadcastStream();
+  Stream<Map<dynamic, dynamic>> get logStream => _logEvents.stream;
 
   Stream<Map<dynamic, dynamic>> get installProgressStream =>
-      _installProgressStream ??= _installProgressChannel
-          .receiveBroadcastStream()
-          .map(_eventMap)
-          .asBroadcastStream();
+      _installProgressEvents.stream;
 
   Stream<Map<dynamic, dynamic>> get downloadProgressStream =>
-      _downloadProgressStream ??= _downloadProgressChannel
-          .receiveBroadcastStream()
-          .map(_eventMap)
-          .asBroadcastStream();
+      _downloadProgressEvents.stream;
 
   Stream<Map<dynamic, dynamic>> get executionStatusStream =>
-      _executionStatusStream ??= _executionStatusChannel
-          .receiveBroadcastStream()
-          .map(_eventMap)
-          .asBroadcastStream();
+      _executionStatusEvents.stream;
 
   Stream<Map<dynamic, dynamic>> get stdinRequestStream =>
-      _stdinRequestStream ??= _stdinRequestChannel
-          .receiveBroadcastStream()
-          .map(_eventMap)
-          .asBroadcastStream();
+      _stdinRequestEvents.stream;
+
+  /// Rebinds native event sources without invalidating existing Dart listeners.
+  ///
+  /// This is a recovery hook for a controlled host after its native event
+  /// sinks have been recreated. Call it only while script execution, package
+  /// installation, and APK download work are all idle: an EventChannel event
+  /// emitted during rebinding cannot be replayed.
+  Future<void> resetEventStreams() {
+    return Future.wait<void>([
+      _logEvents.reset(),
+      _installProgressEvents.reset(),
+      _downloadProgressEvents.reset(),
+      _executionStatusEvents.reset(),
+      _stdinRequestEvents.reset(),
+    ]);
+  }
+
+  _ResettableEventStream<Map<dynamic, dynamic>> _eventStream(
+    String channelName,
+  ) {
+    return _ResettableEventStream<Map<dynamic, dynamic>>(
+      () => _eventStreamFactory(channelName).map(_eventMap),
+    );
+  }
+
+  static Stream<dynamic> _defaultEventStream(String channelName) {
+    switch (channelName) {
+      case 'com.daozhang.py/log_stream':
+        return _logStreamChannel.receiveBroadcastStream();
+      case 'com.daozhang.py/install_progress':
+        return _installProgressChannel.receiveBroadcastStream();
+      case 'com.daozhang.py/download_progress':
+        return _downloadProgressChannel.receiveBroadcastStream();
+      case 'com.daozhang.py/execution_status':
+        return _executionStatusChannel.receiveBroadcastStream();
+      case 'com.daozhang.py/stdin_request':
+        return _stdinRequestChannel.receiveBroadcastStream();
+      default:
+        throw ArgumentError.value(
+            channelName, 'channelName', 'Unknown channel');
+    }
+  }
 
   Future<String> createScript(String name, {String content = ''}) async {
     final safeName = ScriptNameValidator.normalize(name);
@@ -195,43 +242,35 @@ class NativeBridge {
   }
 
   Future<List<AppFileEntry>> getFilePickerRoots() async {
-    try {
-      final entries = await _filePickerHostApi.getFilePickerRoots();
-      return entries.map(_appFileEntryFromPigeon).toList();
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('文件根目录', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon文件根目录通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('getFilePickerRoots', {});
-      return _asList(result)
-          .map((item) => AppFileEntry.fromMap(_asMap(item)))
-          .toList();
-    }
+    return _withPigeonFallback(
+      '文件根目录',
+      () async {
+        final entries = await _filePickerHostApi.getFilePickerRoots();
+        return entries.map(_appFileEntryFromPigeon).toList();
+      },
+      () async {
+        final result = await _invoke('getFilePickerRoots', {});
+        return _asList(result)
+            .map((item) => AppFileEntry.fromMap(_asMap(item)))
+            .toList();
+      },
+    );
   }
 
   Future<List<AppFileEntry>> listFilePickerDirectory(String path) async {
-    try {
-      final entries = await _filePickerHostApi.listFilePickerDirectory(path);
-      return entries.map(_appFileEntryFromPigeon).toList();
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('文件目录列表', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon文件目录列表通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('listFilePickerDirectory', {'path': path});
-      return _asList(result)
-          .map((item) => AppFileEntry.fromMap(_asMap(item)))
-          .toList();
-    }
+    return _withPigeonFallback(
+      '文件目录列表',
+      () async {
+        final entries = await _filePickerHostApi.listFilePickerDirectory(path);
+        return entries.map(_appFileEntryFromPigeon).toList();
+      },
+      () async {
+        final result = await _invoke('listFilePickerDirectory', {'path': path});
+        return _asList(result)
+            .map((item) => AppFileEntry.fromMap(_asMap(item)))
+            .toList();
+      },
+    );
   }
 
   Future<AppFileEntry?> openFilePickerTree({String title = '选择目录'}) async {
@@ -241,23 +280,17 @@ class NativeBridge {
   }
 
   Future<List<int>> readFilePickerFile(String path) async {
-    try {
-      return await _filePickerHostApi.readFilePickerFile(path);
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('文件读取', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon文件读取通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('readFilePickerFile', {'path': path});
-      return _asList(result)
-          .whereType<num>()
-          .map((item) => item.toInt())
-          .toList();
-    }
+    return _withPigeonFallback(
+      '文件读取',
+      () => _filePickerHostApi.readFilePickerFile(path),
+      () async {
+        final result = await _invoke('readFilePickerFile', {'path': path});
+        return _asList(result)
+            .whereType<num>()
+            .map((item) => item.toInt())
+            .toList();
+      },
+    );
   }
 
   Future<String> createScriptProject(String projectKey) async {
@@ -365,72 +398,52 @@ class NativeBridge {
   }
 
   Future<Map<String, String>> getPythonInfo() async {
-    try {
-      final info = await _runtimeHostApi.getPythonInfo();
-      return _pythonInfoFromPigeon(info);
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('Python信息', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon Python信息通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('getPythonInfo', {});
-      return _stringMap(result);
-    }
+    return _withPigeonFallback(
+      'Python信息',
+      () async {
+        final info = await _runtimeHostApi.getPythonInfo();
+        return _pythonInfoFromPigeon(info);
+      },
+      () async {
+        final result = await _invoke('getPythonInfo', {});
+        return _stringMap(result);
+      },
+    );
   }
 
   Future<Map<String, String>> getAppInfo() async {
-    try {
-      final info = await _appHostApi.getAppInfo();
-      return _appInfoFromPigeon(info);
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('应用信息', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon应用信息通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('getAppInfo', {});
-      return _stringMap(result);
-    }
+    return _withPigeonFallback(
+      '应用信息',
+      () async {
+        final info = await _appHostApi.getAppInfo();
+        return _appInfoFromPigeon(info);
+      },
+      () async {
+        final result = await _invoke('getAppInfo', {});
+        return _stringMap(result);
+      },
+    );
   }
 
   Future<Map<String, String>> getLinuxLikeRuntimeInfo() async {
-    try {
-      final info = await _runtimeHostApi.getLinuxLikeRuntimeInfo();
-      return {
-        'available': info.available.toString(),
-        'installed': info.installed.toString(),
-        'message': info.message,
-        'pythonPath': info.pythonPath,
-        'pipPath': info.pipPath,
-        'rootfsDir': info.rootfsDir,
-      };
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        AppLogger.instance.error(
-          'Pigeon运行时信息调用失败',
-          source: 'NativeBridge',
-          detail: 'code=${e.code}, message=${e.message}',
-        );
-        throw NativeBridgeException(
-          code: int.tryParse(e.code) ?? 1000,
-          message: e.message ?? 'Unknown error',
-        );
-      }
-      AppLogger.instance.warn(
-        'Pigeon运行时信息通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('getLinuxLikeRuntimeInfo', {});
-      return _stringMap(result);
-    }
+    return _withPigeonFallback(
+      '运行时信息',
+      () async {
+        final info = await _runtimeHostApi.getLinuxLikeRuntimeInfo();
+        return {
+          'available': info.available.toString(),
+          'installed': info.installed.toString(),
+          'message': info.message,
+          'pythonPath': info.pythonPath,
+          'pipPath': info.pipPath,
+          'rootfsDir': info.rootfsDir,
+        };
+      },
+      () async {
+        final result = await _invoke('getLinuxLikeRuntimeInfo', {});
+        return _stringMap(result);
+      },
+    );
   }
 
   Future<Map<String, String>> prepareLinuxLikeRuntime() async {
@@ -538,61 +551,6 @@ class NativeBridge {
     await _invoke('openUrl', {'url': url});
   }
 
-  Future<bool> checkOverlayPermission() async {
-    try {
-      return await _appHostApi.checkOverlayPermission();
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('悬浮窗权限查询', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon悬浮窗权限通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('checkOverlayPermission', {});
-      return _asBool(result);
-    }
-  }
-
-  Future<void> requestOverlayPermission() async {
-    await _invoke('requestOverlayPermission', {});
-  }
-
-  Future<void> showFloatingBall(String scriptName) async {
-    await _invoke('showFloatingBall', {'scriptName': scriptName});
-  }
-
-  Future<void> hideFloatingBall() async {
-    await _invoke('hideFloatingBall', {});
-  }
-
-  Future<void> updateFloatingBallStatus(String status) async {
-    await _invoke('updateFloatingBallStatus', {'status': status});
-  }
-
-  Future<void> pushFloatingBallOutput(String output) async {
-    await _invoke('pushFloatingBallOutput', {'output': output});
-  }
-
-  Future<String?> consumePendingRunScript() async {
-    try {
-      return await _appHostApi.consumePendingRunScript();
-    } on PlatformException catch (e) {
-      if (e.code != 'channel-error') {
-        _throwPigeonBridgeException('待运行脚本消费', e);
-      }
-      AppLogger.instance.warn(
-        'Pigeon待运行脚本通道不可用，回退MethodChannel',
-        source: 'NativeBridge',
-        detail: e.message,
-      );
-      final result = await _invoke('consumePendingRunScript', {});
-      if (result == null) return null;
-      return result.toString();
-    }
-  }
-
   Future<String> downloadAndInstallApk(
     String url, {
     required String fileName,
@@ -680,15 +638,77 @@ class NativeBridge {
     };
   }
 
+  Future<T> _withPigeonFallback<T>(
+    String operation,
+    Future<T> Function() pigeonCall,
+    Future<T> Function() legacyFallback,
+  ) async {
+    try {
+      return await pigeonCall();
+    } on PlatformException catch (e) {
+      if (!_isRecoverablePigeonPlatformException(e)) {
+        _throwPigeonBridgeException(operation, e);
+      }
+      return _recoverPigeonResponse(operation, e, legacyFallback);
+    } on TypeError catch (e) {
+      return _recoverPigeonResponse(
+        operation,
+        _PigeonResponseFormatException(e),
+        legacyFallback,
+      );
+    } on RangeError catch (e) {
+      return _recoverPigeonResponse(
+        operation,
+        _PigeonResponseFormatException(e),
+        legacyFallback,
+      );
+    } on StateError catch (e) {
+      return _recoverPigeonResponse(
+        operation,
+        _PigeonResponseFormatException(e),
+        legacyFallback,
+      );
+    } on ArgumentError catch (e) {
+      return _recoverPigeonResponse(
+        operation,
+        _PigeonResponseFormatException(e),
+        legacyFallback,
+      );
+    }
+  }
+
+  bool _isRecoverablePigeonPlatformException(PlatformException error) =>
+      error.code == 'channel-error' || error.code == 'null-error';
+
+  Future<T> _recoverPigeonResponse<T>(
+    String operation,
+    Object error,
+    Future<T> Function() legacyFallback,
+  ) async {
+    AppLogger.instance.warn(
+      'Pigeon$operation返回异常，回退MethodChannel',
+      source: 'NativeBridge',
+      detail: '${error.runtimeType}: $error',
+    );
+    return legacyFallback();
+  }
+
   Never _throwPigeonBridgeException(String operation, PlatformException e) {
     AppLogger.instance.error(
       'Pigeon$operation调用失败',
       source: 'NativeBridge',
       detail: 'code=${e.code}, message=${e.message}',
     );
-    throw NativeBridgeException(
-      code: int.tryParse(e.code) ?? 1000,
-      message: e.message ?? 'Unknown error',
+    throw _platformExceptionToNativeBridgeException(e);
+  }
+
+  NativeBridgeException _platformExceptionToNativeBridgeException(
+    PlatformException error,
+  ) {
+    return NativeBridgeException(
+      code: int.tryParse(error.code) ?? NativeBridgeContract.contractErrorCode,
+      rawCode: error.code,
+      message: error.message ?? 'Unknown error',
     );
   }
 
@@ -736,6 +756,7 @@ class NativeBridge {
       );
       throw NativeBridgeException(
         code: NativeBridgeContract.contractErrorCode,
+        rawCode: NativeBridgeContract.contractErrorCode.toString(),
         message: e.message,
       );
     } on PlatformException catch (e) {
@@ -744,19 +765,120 @@ class NativeBridge {
         source: 'NativeBridge',
         detail: 'code=${e.code}, message=${e.message}, args=$arguments',
       );
-      throw NativeBridgeException(
-        code: int.tryParse(e.code) ?? 1000,
-        message: e.message ?? 'Unknown error',
-      );
+      throw _platformExceptionToNativeBridgeException(e);
     }
   }
 }
 
-class NativeBridgeException implements Exception {
-  final int code;
-  final String message;
-  NativeBridgeException({required this.code, required this.message});
+/// Keeps the public broadcast stream stable while its EventChannel source is
+/// replaced. The source is subscribed only while at least one downstream
+/// listener exists.
+class _ResettableEventStream<T> {
+  _ResettableEventStream(this._sourceFactory) {
+    _controller = StreamController<T>.broadcast(
+      onListen: _onListen,
+      onCancel: _onCancel,
+    );
+  }
+
+  final Stream<T> Function() _sourceFactory;
+  late final StreamController<T> _controller;
+  StreamSubscription<T>? _sourceSubscription;
+  Future<void> _operation = Future<void>.value();
+  int _generation = 0;
+  bool _hasListeners = false;
+
+  Stream<T> get stream => _controller.stream;
+
+  Future<void> reset() => _scheduleRebind();
+
+  void _onListen() {
+    _hasListeners = true;
+    unawaited(_scheduleRebind());
+  }
+
+  Future<void> _onCancel() {
+    _hasListeners = false;
+    return _scheduleRebind();
+  }
+
+  Future<void> _scheduleRebind() {
+    final generation = ++_generation;
+    final operation = _operation.then<void>((_) => _rebind(generation));
+    // A failed cancellation must not leave the serial queue permanently
+    // poisoned. The caller that initiated the reset still receives the error.
+    _operation = operation.then<void>((_) {}, onError: (_, __) {});
+    return operation;
+  }
+
+  Future<void> _rebind(int generation) async {
+    final previous = _sourceSubscription;
+    _sourceSubscription = null;
+    await previous?.cancel();
+
+    if (!_hasListeners || generation != _generation) return;
+
+    var completed = false;
+    StreamSubscription<T>? next;
+    try {
+      next = _sourceFactory().listen(
+        (event) {
+          if (_hasListeners && generation == _generation) {
+            _controller.add(event);
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (_hasListeners && generation == _generation) {
+            _controller.addError(error, stackTrace);
+          }
+        },
+        onDone: () {
+          completed = true;
+          if (identical(_sourceSubscription, next)) {
+            _sourceSubscription = null;
+          }
+        },
+      );
+    } catch (error, stackTrace) {
+      if (_hasListeners && generation == _generation) {
+        _controller.addError(error, stackTrace);
+      }
+      return;
+    }
+
+    final nextSubscription = next;
+    if (_hasListeners && generation == _generation && !completed) {
+      _sourceSubscription = nextSubscription;
+    } else {
+      await nextSubscription.cancel();
+    }
+  }
+}
+
+class _PigeonResponseFormatException implements Exception {
+  _PigeonResponseFormatException(this.cause);
+
+  final Object cause;
 
   @override
-  String toString() => 'NativeBridgeException($code): $message';
+  String toString() => 'Malformed Pigeon response: $cause';
+}
+
+class NativeBridgeException implements Exception {
+  final int code;
+  final String rawCode;
+  final String message;
+  NativeBridgeException({
+    required this.code,
+    required this.message,
+    String? rawCode,
+  }) : rawCode = rawCode ?? code.toString();
+
+  @override
+  String toString() {
+    final codeDetail = rawCode == code.toString()
+        ? code.toString()
+        : '$code, rawCode=$rawCode';
+    return 'NativeBridgeException($codeDetail): $message';
+  }
 }

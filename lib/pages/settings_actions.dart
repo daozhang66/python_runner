@@ -27,146 +27,32 @@ extension _SettingsActions on _SettingsPageState {
       _recordRequests = overrideCfg.recordRequests;
       _recordResponseBody = overrideCfg.recordResponseBody;
       _autoCheckUpdates = autoCheckUpdates;
-      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
       _runtimeBackend = RuntimeManager.normalizePreferredBackendId(
         prefs.getString(RuntimeManager.prefsKey),
       );
       _githubMirrorController.text =
           prefs.getString('github_mirror_prefix') ?? '';
     });
-    // Check Linux-like availability
+    await _refreshLinuxLikeAvailability();
+  }
+
+  /// Reads the native runtime state instead of relying on a stale settings
+  /// snapshot after an in-place installation or repair completes.
+  Future<bool> _refreshLinuxLikeAvailability() async {
     try {
       final info = await _bridge.getLinuxLikeRuntimeInfo();
-      if (mounted) {
-        setState(() => _linuxLikeAvailable = info['available'] == 'true');
+      final available = info['available'] == 'true';
+      if (mounted && _linuxLikeAvailable != available) {
+        setState(() => _linuxLikeAvailable = available);
       }
-    } catch (_) {}
-  }
-
-  Future<void> _setFloatingBallEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    if (!enabled) {
-      await prefs.setBool('floating_ball_enabled', false);
-      if (!mounted) return;
-      setState(() {
-        _floatingBallEnabled = false;
-        _waitingForFloatingBallPermission = false;
-      });
-      await legacy_provider.Provider.of<ExecutionProvider>(
-        context,
-        listen: false,
-      ).syncFloatingBallVisibility();
-      return;
-    }
-
-    var hasPermission = false;
-    try {
-      hasPermission = await _bridge.checkOverlayPermission();
-    } catch (_) {}
-
-    if (!hasPermission) {
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('需要悬浮窗权限'),
-          content: const Text('悬浮球需要「显示在其他应用上层」权限。\n\n'
-              '点击确认后，请在系统设置中开启此权限，返回应用后会自动显示悬浮球。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
+      return available;
+    } catch (error, stackTrace) {
+      AppLogger.instance.warn(
+        '读取 Linux-like 运行环境状态失败: $error',
+        source: 'Settings',
+        detail: stackTrace.toString(),
       );
-      if (confirmed != true) return;
-
-      await prefs.setBool('floating_ball_enabled', true);
-      if (!mounted) return;
-      setState(() {
-        _floatingBallEnabled = true;
-        _waitingForFloatingBallPermission = true;
-      });
-      await _bridge.requestOverlayPermission();
-      return;
-    }
-
-    await prefs.setBool('floating_ball_enabled', true);
-    if (!mounted) return;
-    setState(() {
-      _floatingBallEnabled = true;
-      _waitingForFloatingBallPermission = false;
-    });
-    await _syncFloatingBallNow();
-  }
-
-  Future<void> _syncFloatingBallAfterPermissionReturn() async {
-    final prefs = await SharedPreferences.getInstance();
-    final enabled = prefs.getBool('floating_ball_enabled') ?? false;
-    if (!enabled && !_waitingForFloatingBallPermission) return;
-
-    var hasPermission = false;
-    try {
-      hasPermission = await _bridge.checkOverlayPermission();
-    } catch (_) {}
-
-    if (!mounted) return;
-    if (!hasPermission) {
-      final executionProvider = legacy_provider.Provider.of<ExecutionProvider>(
-        context,
-        listen: false,
-      );
-      final messenger = ScaffoldMessenger.of(context);
-      await prefs.setBool('floating_ball_enabled', false);
-      setState(() {
-        _floatingBallEnabled = false;
-        _waitingForFloatingBallPermission = false;
-      });
-      await executionProvider.syncFloatingBallVisibility();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('未授予悬浮窗权限，悬浮球已关闭')),
-      );
-      return;
-    }
-
-    setState(() {
-      _floatingBallEnabled = true;
-      _waitingForFloatingBallPermission = false;
-    });
-    await _syncFloatingBallNow();
-  }
-
-  Future<void> _syncFloatingBallNow() async {
-    final executionProvider = legacy_provider.Provider.of<ExecutionProvider>(
-      context,
-      listen: false,
-    );
-    try {
-      await executionProvider.syncFloatingBallVisibility(throwOnError: true);
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      if (!mounted || !_floatingBallEnabled) return;
-      await executionProvider.syncFloatingBallVisibility(throwOnError: true);
-    } catch (e) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('floating_ball_enabled', false);
-      await executionProvider.syncFloatingBallVisibility();
-      if (!mounted) return;
-      setState(() {
-        _floatingBallEnabled = false;
-        _waitingForFloatingBallPermission = false;
-      });
-      final message = e is NativeBridgeException ? e.message : e.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('悬浮球显示失败：$message')),
-      );
+      return false;
     }
   }
 
@@ -174,13 +60,14 @@ extension _SettingsActions on _SettingsPageState {
     final normalizedBackendId =
         RuntimeManager.normalizePreferredBackendId(backendId);
 
-    // Prevent switching to Linux-like if not installed
+    // Re-check immediately because an installation may have just completed.
     if (normalizedBackendId == RuntimeManager.linuxLikeBackendId &&
-        !_linuxLikeAvailable) {
+        !await _refreshLinuxLikeAvailability()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Linux-like 未安装，请先点击下方「安装/修复」按钮'),
+        SnackBar(
+          content:
+              Text(AppLocalizations.of(context)!.linuxLikeNotInstalledAction),
           duration: Duration(seconds: 3),
         ),
       );
@@ -190,11 +77,25 @@ extension _SettingsActions on _SettingsPageState {
     await RuntimeManager.savePreferredBackendId(normalizedBackendId);
     if (!mounted) return;
 
+    invalidateRuntimeBackendFromWidget(ref);
+    try {
+      await legacy_provider.Provider.of<ExecutionProvider>(
+        context,
+        listen: false,
+      ).onBackendChanged(normalizedBackendId);
+    } catch (e, stackTrace) {
+      AppLogger.instance.warn(
+        '同步执行引擎失败: $e',
+        source: 'Settings',
+        detail: stackTrace.toString(),
+      );
+    }
+    if (!mounted) return;
     setState(() => _runtimeBackend = normalizedBackendId);
 
     final message = normalizedBackendId == RuntimeManager.linuxLikeBackendId
-        ? 'Linux-like 已保存；执行和包管理将使用 Linux-like'
-        : '运行引擎已切换为 Chaquopy';
+        ? AppLocalizations.of(context)!.runtimeSwitchLinuxLike
+        : AppLocalizations.of(context)!.runtimeSwitchChaquopy;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
@@ -211,7 +112,7 @@ extension _SettingsActions on _SettingsPageState {
           final dialog = AlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
-            title: const Text('选择运行引擎'),
+            title: Text(AppLocalizations.of(ctx)!.selectRuntimeEngine),
             contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -219,15 +120,16 @@ extension _SettingsActions on _SettingsPageState {
                 RadioListTile<String>(
                   value: RuntimeManager.chaquopyBackendId,
                   groupValue: _runtimeBackend,
-                  title: const Text('Chaquopy（默认）'),
-                  subtitle: const Text('基于 Python 官方实现，稳定可靠'),
+                  title: Text(AppLocalizations.of(ctx)!.chaquopyDefault),
+                  subtitle: Text(AppLocalizations.of(ctx)!.chaquopyDescription),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 ),
                 RadioListTile<String>(
                   value: RuntimeManager.linuxLikeBackendId,
                   groupValue: _runtimeBackend,
-                  title: const Text('Linux-like（实验）'),
-                  subtitle: const Text('Debian 环境，支持更多包'),
+                  title: Text(AppLocalizations.of(ctx)!.linuxLikeExperimental),
+                  subtitle:
+                      Text(AppLocalizations.of(ctx)!.linuxLikeDescription),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 ),
               ],
@@ -235,7 +137,7 @@ extension _SettingsActions on _SettingsPageState {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(ctx)!.cancel),
               ),
             ],
           );
@@ -250,10 +152,26 @@ extension _SettingsActions on _SettingsPageState {
     }
   }
 
+  Future<void> _showRuntimeInstallDialog() async {
+    final installed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _RuntimeInstallDialog(),
+    );
+    if (!mounted || installed != true) return;
+    await _refreshLinuxLikeAvailability();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(AppLocalizations.of(context)!.runtimeInstalledSuccess)),
+    );
+  }
+
   String get _runtimeBackendSubtitle {
     final label = _runtimeBackend == RuntimeManager.linuxLikeBackendId
-        ? (_linuxLikeAvailable ? '可用' : '未安装')
-        : '可用';
+        ? (_linuxLikeAvailable
+            ? AppLocalizations.of(context)!.available
+            : AppLocalizations.of(context)!.notInstalled)
+        : AppLocalizations.of(context)!.available;
     return '$label：${RuntimeManager.backendStatusMessage(_runtimeBackend)}';
   }
 
@@ -267,8 +185,10 @@ extension _SettingsActions on _SettingsPageState {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('PyPI 源已保存'), duration: Duration(seconds: 1)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.pypiSourceSaved),
+          duration: const Duration(seconds: 1),
+        ),
       );
     }
   }
@@ -279,8 +199,8 @@ extension _SettingsActions on _SettingsPageState {
     await prefs.remove('pypi_index_url');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已恢复官方源（https://pypi.org/simple）'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.officialSourceRestored),
           duration: Duration(seconds: 1),
         ),
       );
@@ -309,12 +229,12 @@ extension _SettingsActions on _SettingsPageState {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
-        title: const Text('下载加速镜像'),
+        title: Text(AppLocalizations.of(ctx)!.downloadMirrorTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('填写 GitHub 代理前缀，加速 APK 下载',
+            Text(AppLocalizations.of(ctx)!.downloadMirrorDescription,
                 style: TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             TextField(
@@ -328,7 +248,7 @@ extension _SettingsActions on _SettingsPageState {
             ),
             const SizedBox(height: 8),
             Text(
-              '留空则直接使用 GitHub 原始地址',
+              AppLocalizations.of(ctx)!.downloadMirrorEmptyHint,
               style: TextStyle(
                   fontSize: 11,
                   color: Theme.of(ctx).colorScheme.onSurfaceVariant),
@@ -338,7 +258,7 @@ extension _SettingsActions on _SettingsPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(ctx)!.cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -346,7 +266,7 @@ extension _SettingsActions on _SettingsPageState {
               _saveGithubMirror();
               Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(AppLocalizations.of(ctx)!.save),
           ),
         ],
       ),
@@ -362,7 +282,7 @@ extension _SettingsActions on _SettingsPageState {
   Future<void> _pickExportDir() async {
     final result = await AppFilePickerPage.pickFolder(
       context,
-      title: '选择脚本导出目录',
+      title: AppLocalizations.of(context)!.selectScriptExportDirectory,
     );
 
     if (result != null) {
@@ -375,8 +295,8 @@ extension _SettingsActions on _SettingsPageState {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('导出目录已设置'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.exportDirectorySet),
             duration: Duration(seconds: 2),
           ),
         );
@@ -387,7 +307,7 @@ extension _SettingsActions on _SettingsPageState {
   Future<void> _pickWorkingDir() async {
     final result = await AppFilePickerPage.pickFolder(
       context,
-      title: '选择工作目录',
+      title: AppLocalizations.of(context)!.selectWorkingDirectory,
     );
 
     if (result != null) {
@@ -400,8 +320,8 @@ extension _SettingsActions on _SettingsPageState {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('工作目录已设置'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.workingDirectorySet),
             duration: Duration(seconds: 2),
           ),
         );
@@ -430,19 +350,15 @@ extension _SettingsActions on _SettingsPageState {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
           surfaceTintColor: Colors.transparent,
-          title: const Text('安全警告'),
-          content: const Text(
-            '允许不安全证书将使网络连接不验证SSL证书，'
-            '这会降低安全性。仅在使用抓包工具调试时启用。\n\n'
-            '确定要启用吗？',
-          ),
+          title: Text(AppLocalizations.of(ctx)!.securityWarning),
+          content: Text(AppLocalizations.of(ctx)!.insecureCertificateWarning),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消')),
+                child: Text(AppLocalizations.of(ctx)!.cancel)),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text('确认启用',
+              child: Text(AppLocalizations.of(ctx)!.confirmEnable,
                   style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
             ),
           ],
@@ -455,14 +371,35 @@ extension _SettingsActions on _SettingsPageState {
   }
 
   Future<void> _saveProxyConfig() async {
-    final host = _proxyHostController.text.trim();
-    final port = int.tryParse(_proxyPortController.text.trim()) ?? 0;
-    await NetworkDebugConfig.instance.setProxyHost(host);
-    await NetworkDebugConfig.instance.setProxyPort(port);
+    final host = _proxyHostController.text;
+    final rawPort = _proxyPortController.text.trim();
+    final port = rawPort.isEmpty ? 0 : int.tryParse(rawPort);
+    if (port == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(AppLocalizations.of(context)!.proxyPortMustBeInteger)),
+        );
+      }
+      return;
+    }
+    try {
+      await NetworkDebugConfig.instance.setProxy(host, port);
+    } on FormatException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('代理配置已保存'), duration: Duration(seconds: 1)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.proxyConfigurationSaved),
+          duration: const Duration(seconds: 1),
+        ),
       );
     }
   }
@@ -493,7 +430,8 @@ extension _SettingsActions on _SettingsPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('完整日志已导出到: $path'),
+              content:
+                  Text(AppLocalizations.of(context)!.fullLogsExportedTo(path)),
               duration: const Duration(seconds: 3)),
         );
       }
@@ -501,7 +439,9 @@ extension _SettingsActions on _SettingsPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: $e'), duration: const Duration(seconds: 2)),
+            content: Text(AppLocalizations.of(context)!.exportFailed),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     }

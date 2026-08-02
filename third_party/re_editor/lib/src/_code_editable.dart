@@ -7,7 +7,6 @@ const EdgeInsetsGeometry _kDefaultPadding = EdgeInsets.all(5);
 const Duration _kCursorBlinkHalfPeriod = Duration(milliseconds: 500);
 
 class _CodeEditable extends StatefulWidget {
-
   final GlobalKey editorKey;
   final String? hint;
   final CodeIndicatorBuilder? indicatorBuilder;
@@ -92,15 +91,17 @@ class _CodeEditable extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() => _CodeEditableState();
-
 }
 
-class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveClientMixin<_CodeEditable>, SingleTickerProviderStateMixin {
-
+class _CodeEditableState extends State<_CodeEditable>
+    with
+        AutomaticKeepAliveClientMixin<_CodeEditable>,
+        SingleTickerProviderStateMixin {
   late bool _didAutoFocus;
   late final _CodeCursorBlinkController _cursorController;
 
   late AnimationController _floatingCursorAnimationController;
+  Timer? _autoCompleteTimer;
 
   late _CodeHighlighter _highlighter;
   late CodeIndicatorValueNotifier _codeIndicatorValueNotifier;
@@ -175,6 +176,7 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
 
   @override
   void dispose() {
+    _autoCompleteTimer?.cancel();
     widget.controller.removeListener(_onCodeInputChanged);
     widget.inputController.removeListener(_onCodeUserInputChanged);
     _highlighter.dispose();
@@ -190,93 +192,82 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
   Widget build(BuildContext context) {
     super.build(context);
     final Widget child = _CodeScrollable(
-      axisDirection: AxisDirection.down,
-      controller: widget.scrollController.verticalScroller,
-      viewportBuilder: (context, ViewportOffset vertical) {
-        Widget codeField;
-        if (widget.wordWrap) {
-          codeField = _buildCodeField(vertical, null);
-        } else {
-          codeField = _CodeScrollable(
-            axisDirection: AxisDirection.right,
-            controller: widget.scrollController.horizontalScroller,
-            viewportBuilder: (context, ViewportOffset horizontal) {
-              return _buildCodeField(vertical, horizontal);
-            },
-            scrollbarBuilder: widget.scrollbarBuilder
-          );
-        }
-        if (widget.controller.value.isInitial) {
-          final String? hint = widget.hint;
-          if (hint != null && hint.isNotEmpty) {
-            codeField = Stack(
+        axisDirection: AxisDirection.down,
+        controller: widget.scrollController.verticalScroller,
+        viewportBuilder: (context, ViewportOffset vertical) {
+          Widget codeField;
+          if (widget.wordWrap) {
+            codeField = _buildCodeField(vertical, null);
+          } else {
+            codeField = _CodeScrollable(
+                axisDirection: AxisDirection.right,
+                controller: widget.scrollController.horizontalScroller,
+                viewportBuilder: (context, ViewportOffset horizontal) {
+                  return _buildCodeField(vertical, horizontal);
+                },
+                scrollbarBuilder: widget.scrollbarBuilder);
+          }
+          if (widget.controller.value.isInitial) {
+            final String? hint = widget.hint;
+            if (hint != null && hint.isNotEmpty) {
+              codeField = Stack(
+                children: [
+                  codeField,
+                  IgnorePointer(
+                      ignoring: true,
+                      child: Padding(
+                        padding: widget.padding,
+                        child: Text(
+                          hint,
+                          style: widget.textStyle
+                              .copyWith(color: widget.hintTextColor),
+                        ),
+                      ))
+                ],
+              );
+            }
+          }
+          final Widget? indicator = widget.indicatorBuilder?.call(
+              context,
+              widget.controller,
+              widget.chunkController,
+              _codeIndicatorValueNotifier);
+          return Container(
+            decoration: BoxDecoration(
+              border: widget.border,
+              color: widget.backgroundColor,
+              borderRadius: widget.borderRadius,
+            ),
+            clipBehavior: widget.clipBehavior,
+            margin: widget.margin,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                codeField,
-                IgnorePointer(
-                  ignoring: true,
-                  child: Padding(
-                    padding: widget.padding,
-                    child: Text(
-                      hint,
-                      style: widget.textStyle.copyWith(
-                        color: widget.hintTextColor
-                      ),
-                    ),
-                  )
+                if (indicator != null) indicator,
+                if (widget.sperator != null) widget.sperator!,
+                Expanded(
+                  child: RepaintBoundary(
+                    child: CompositedTransformTarget(
+                        link: widget.toolbarLayerLink, child: codeField),
+                  ),
                 )
               ],
-            );
-          }
-        }
-        final Widget? indicator = widget.indicatorBuilder?.call(
-          context,
-          widget.controller,
-          widget.chunkController,
-          _codeIndicatorValueNotifier
-        );
-        return Container(
-          decoration: BoxDecoration(
-            border: widget.border,
-            color: widget.backgroundColor,
-            borderRadius: widget.borderRadius,
-          ),
-          clipBehavior: widget.clipBehavior,
-          margin: widget.margin,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (indicator != null)
-                indicator,
-              if (widget.sperator != null)
-                widget.sperator!,
-              Expanded(
-                child: RepaintBoundary(
-                  child: CompositedTransformTarget(
-                    link: widget.toolbarLayerLink,
-                    child: codeField
-                  ),
-                ),
-              )
-            ],
-          ),
-        );
-      },
-      scrollbarBuilder: widget.scrollbarBuilder
-    );
-    return CodeEditorTapRegion(
-      onTapOutside: (_) {
-        widget.focusNode.unfocus();
-      },
-      child: NotificationListener(
-        onNotification: (notification) {
-          if (notification is ScrollStartNotification) {
-            widget.selectionOverlayController.hideToolbar();
-          }
-          return false;
+            ),
+          );
         },
-        child: child
-      )
-    );
+        scrollbarBuilder: widget.scrollbarBuilder);
+    return CodeEditorTapRegion(
+        onTapOutside: (_) {
+          widget.focusNode.unfocus();
+        },
+        child: NotificationListener(
+            onNotification: (notification) {
+              if (notification is ScrollStartNotification) {
+                widget.selectionOverlayController.hideToolbar();
+              }
+              return false;
+            },
+            child: child));
   }
 
   Widget _buildCodeField(ViewportOffset vertical, ViewportOffset? horizontal) {
@@ -284,8 +275,10 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
       key: widget.editorKey,
       verticalViewport: vertical,
       horizontalViewport: horizontal,
-      verticalScrollbarWidth: widget.verticalScrollbarWidth ?? _kScrollbarThickness,
-      horizontalScrollbarHeight: widget.horizontalScrollbarHeight ?? _kScrollbarThickness,
+      verticalScrollbarWidth:
+          widget.verticalScrollbarWidth ?? _kScrollbarThickness,
+      horizontalScrollbarHeight:
+          widget.horizontalScrollbarHeight ?? _kScrollbarThickness,
       selection: widget.controller.selection,
       highlightSelections: widget.findController.allMatchSelections,
       codes: widget.controller.codeLines,
@@ -296,9 +289,8 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
       floatingCursorNotifier: widget.floatingCursorController,
       onRenderParagraphsChanged: (paragraphs) {
         _codeIndicatorValueNotifier.value = CodeIndicatorValue(
-          paragraphs: paragraphs,
-          focusedIndex: widget.controller.selection.extentIndex
-        );
+            paragraphs: paragraphs,
+            focusedIndex: widget.controller.selection.extentIndex);
       },
       selectionColor: widget.selectionColor,
       highlightColor: widget.highlightColor,
@@ -309,7 +301,9 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
       padding: widget.padding,
       readOnly: widget.readOnly,
       // Enable long text rendering when the find is on.
-      maxLengthSingleLineRendering: widget.findController.value != null ? null : widget.maxLengthSingleLineRendering,
+      maxLengthSingleLineRendering: widget.findController.value != null
+          ? null
+          : widget.maxLengthSingleLineRendering,
       startHandleLayerLink: widget.startHandleLayerLink,
       endHandleLayerLink: widget.endHandleLayerLink,
     );
@@ -323,6 +317,7 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
     _updateAutoCompleteState(false);
     updateKeepAlive();
     if (!widget.focusNode.hasFocus) {
+      _autoCompleteTimer?.cancel();
       if (kIsAndroid || kIsIOS) {
         widget.controller.cancelSelection();
       }
@@ -337,23 +332,28 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
     }
     widget.onChanged?.call(widget.controller.value);
     if (widget.controller.codeLines != widget.controller.preValue?.codeLines &&
-      widget.controller.preValue != null) {
+        widget.controller.preValue != null) {
       widget.selectionOverlayController.hideHandle();
       widget.selectionOverlayController.hideToolbar();
     } else {
       _updateAutoCompleteState(false);
     }
     _updateCursorState();
-    setState(() {
-    });
+    setState(() {});
   }
 
   void _onCodeUserInputChanged() {
     if (!mounted) {
       return;
     }
-    // Delay 50ms to update the auto-complate prompt words.
-    Future.delayed(const Duration(milliseconds: 50), () {
+    // Coalesce rapid IME deltas so a long press cannot queue one autocomplete
+    // update per deleted character.
+    _autoCompleteTimer?.cancel();
+    _autoCompleteTimer = Timer(const Duration(milliseconds: 50), () {
+      _autoCompleteTimer = null;
+      if (!mounted) {
+        return;
+      }
       _updateAutoCompleteState(true);
     });
   }
@@ -370,7 +370,8 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
     if (widget.focusNode.hasFocus) {
       return;
     }
-    final CodeLineSelection? currentMatch = widget.findController.currentMatchSelection;
+    final CodeLineSelection? currentMatch =
+        widget.findController.currentMatchSelection;
     if (currentMatch == null) {
       widget.controller.selection = const CodeLineSelection.zero();
       return;
@@ -378,16 +379,16 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
     widget.controller.selection = currentMatch;
     if (currentMatch.isSameLine) {
       widget.controller.makePositionCenterIfInvisible(CodeLinePosition(
-        index: currentMatch.start.index,
-        offset: (currentMatch.startOffset + currentMatch.endOffset) >> 1
-      ));
+          index: currentMatch.start.index,
+          offset: (currentMatch.startOffset + currentMatch.endOffset) >> 1));
     } else {
       widget.controller.makePositionCenterIfInvisible(currentMatch.start);
     }
   }
 
   void _updateCursorState() {
-    if (widget.focusNode.hasFocus && (!widget.readOnly || widget.showCursorWhenReadOnly)) {
+    if (widget.focusNode.hasFocus &&
+        (!widget.readOnly || widget.showCursorWhenReadOnly)) {
       _cursorController.startBlink();
     } else {
       _cursorController.stopBlink();
@@ -398,7 +399,8 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
     if (!mounted) {
       return;
     }
-    final _CodeAutocompleteState? autocompleteState = context.findAncestorStateOfType<_CodeAutocompleteState>();
+    final _CodeAutocompleteState? autocompleteState =
+        context.findAncestorStateOfType<_CodeAutocompleteState>();
     if (autocompleteState == null) {
       return;
     }
@@ -406,43 +408,45 @@ class _CodeEditableState extends State<_CodeEditable> with AutomaticKeepAliveCli
       autocompleteState.dismiss();
       return;
     }
-    if (widget.controller.isComposing || !widget.controller.selection.isCollapsed) {
+    if (widget.controller.isComposing ||
+        !widget.controller.selection.isCollapsed) {
       autocompleteState.dismiss();
       return;
     }
-    final _CodeFieldRender? render = widget.editorKey.currentContext?.findRenderObject() as _CodeFieldRender?;
+    final _CodeFieldRender? render = widget.editorKey.currentContext
+        ?.findRenderObject() as _CodeFieldRender?;
     if (render == null) {
       autocompleteState.dismiss();
       return;
     }
-    final Offset? position = render.calculateTextPositionScreenOffset(widget.controller.selection.extent, true);
+    final Offset? position = render.calculateTextPositionScreenOffset(
+        widget.controller.selection.extent, true);
     if (position == null) {
       autocompleteState.dismiss();
       return;
     }
     autocompleteState.show(
-      layerLink: widget.startHandleLayerLink,
-      position: position,
-      lineHeight: render.lineHeight,
-      value: widget.controller.value,
-      onAutocomplete: (value) {
-        autocompleteState.dismiss();
-        final CodeLineSelection selection = widget.controller.selection;
-        widget.controller.replaceSelection(value.word, selection.copyWith(
-          baseOffset: selection.baseOffset - value.input.length,
-        ));
-        widget.controller.selection = selection.copyWith(
-          baseOffset: selection.baseOffset + value.selection.baseOffset,
-          extentOffset: selection.extentOffset + value.selection.extentOffset,
-        );
-      }
-    );
+        layerLink: widget.startHandleLayerLink,
+        position: position,
+        lineHeight: render.lineHeight,
+        value: widget.controller.value,
+        onAutocomplete: (value) {
+          autocompleteState.dismiss();
+          final CodeLineSelection selection = widget.controller.selection;
+          widget.controller.replaceSelection(
+              value.word,
+              selection.copyWith(
+                baseOffset: selection.baseOffset - value.input.length,
+              ));
+          widget.controller.selection = selection.copyWith(
+            baseOffset: selection.baseOffset + value.selection.baseOffset,
+            extentOffset: selection.extentOffset + value.selection.extentOffset,
+          );
+        });
   }
-
 }
 
 class _CodeCursorBlinkController extends ValueNotifier<bool> {
-
   Timer? _timer;
 
   _CodeCursorBlinkController() : super(false);
@@ -480,5 +484,4 @@ class _CodeCursorBlinkController extends ValueNotifier<bool> {
     stopBlink();
     super.dispose();
   }
-
 }

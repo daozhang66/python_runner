@@ -92,6 +92,9 @@ class AppUpdateController(
             val apkFile = downloadManager.completedFile(taskId)
                 ?: throw IllegalStateException("下载任务未完成或文件不存在")
             val path = apkInstaller.installApk(apkFile)
+            // ApkInstaller has copied the external update APK into its private
+            // install cache before launching the package installer.
+            downloadManager.discardCompletedTask(taskId)
             result.success(path)
         } catch (e: SecurityException) {
             result.error("1011", "请先允许此应用安装APK，然后再重试更新", null)

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/native_bridge.dart';
 import '../services/update_service.dart';
 import '../ui/app_design_tokens.dart';
+import '../l10n/app_localizations.dart';
 
 class UpdateLogPage extends StatefulWidget {
   final UpdateService updateService;
@@ -85,7 +86,7 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('打开发布页失败：$error'),
+          content: Text(AppLocalizations.of(context)!.openReleaseFailed(error)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -94,8 +95,9 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('更新日志')),
+      appBar: AppBar(title: Text(l10n.updateLog)),
       body: Column(
         children: [
           Padding(
@@ -109,11 +111,11 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
                 suffixIcon: _searchController.text.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: '清除搜索',
+                        tooltip: l10n.clearSearch,
                         icon: const Icon(Icons.clear),
                         onPressed: _searchController.clear,
                       ),
-                hintText: '搜索版本或更新内容',
+                hintText: l10n.searchVersionOrNotes,
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -150,7 +152,7 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '更新日志加载失败',
+            AppLocalizations.of(context)!.updateLogLoadFailed,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -168,7 +170,7 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
             child: FilledButton.icon(
               onPressed: _loadLogs,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(AppLocalizations.of(context)!.retry),
             ),
           ),
         ],
@@ -189,7 +191,9 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            _searchController.text.trim().isEmpty ? '暂无更新日志' : '没有匹配的更新日志',
+            _searchController.text.trim().isEmpty
+                ? AppLocalizations.of(context)!.noReleaseLogs
+                : AppLocalizations.of(context)!.noMatchingReleaseLogs,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -278,7 +282,9 @@ class _ReleaseLogCard extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  entry.tagName.isEmpty ? '未命名版本' : entry.tagName,
+                  entry.tagName.isEmpty
+                      ? AppLocalizations.of(context)!.unnamedRelease
+                      : entry.tagName,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
@@ -303,7 +309,7 @@ class _ReleaseLogCard extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    '预发布',
+                    AppLocalizations.of(context)!.prerelease,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -321,7 +327,7 @@ class _ReleaseLogCard extends StatelessWidget {
                 Icon(Icons.schedule, size: 12, color: colors.onSurfaceVariant),
                 const SizedBox(width: 4),
                 Text(
-                  _formatDate(entry.publishedAt),
+                  _formatDate(AppLocalizations.of(context)!, entry.publishedAt),
                   style: TextStyle(
                     fontSize: 12,
                     color: colors.onSurfaceVariant,
@@ -392,7 +398,7 @@ class _ReleaseLogCard extends StatelessWidget {
                           },
                         )
                       : Text(
-                          '当前发布没有填写更新说明。',
+                          AppLocalizations.of(context)!.noReleaseNotes,
                           style: TextStyle(
                             fontSize: 13,
                             color: colors.onSurfaceVariant,
@@ -409,7 +415,7 @@ class _ReleaseLogCard extends StatelessWidget {
                 FilledButton.tonalIcon(
                   onPressed: entry.htmlUrl.isEmpty ? null : onOpenRelease,
                   icon: const Icon(Icons.open_in_new, size: 18),
-                  label: const Text('发布页'),
+                  label: Text(AppLocalizations.of(context)!.releasePage),
                   style: FilledButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -424,17 +430,17 @@ class _ReleaseLogCard extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime? dateTime) {
-    if (dateTime == null) return '发布时间未知';
+  String _formatDate(AppLocalizations l10n, DateTime? dateTime) {
+    if (dateTime == null) return l10n.unknownReleaseDate;
     final now = DateTime.now();
     final diff = now.difference(dateTime);
 
     if (diff.inDays == 0) {
-      return '今天 ${DateFormat('HH:mm').format(dateTime.toLocal())}';
+      return l10n.todayAt(DateFormat('HH:mm').format(dateTime.toLocal()));
     } else if (diff.inDays == 1) {
-      return '昨天 ${DateFormat('HH:mm').format(dateTime.toLocal())}';
+      return l10n.yesterdayAt(DateFormat('HH:mm').format(dateTime.toLocal()));
     } else if (diff.inDays < 7) {
-      return '${diff.inDays} 天前';
+      return l10n.daysAgo(diff.inDays);
     } else {
       return DateFormat('yyyy-MM-dd HH:mm').format(dateTime.toLocal());
     }

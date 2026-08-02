@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:re_editor/re_editor.dart';
 import '../services/http_inspector_store.dart';
 import '../services/native_bridge.dart';
+import '../l10n/app_localizations.dart';
 import '../ui/app_badges.dart';
 import '../ui/app_design_tokens.dart';
 import '../ui/app_empty_state.dart';
@@ -31,7 +33,6 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   @override
   void initState() {
     super.initState();
-    _store.addListener(_onStoreChanged);
     unawaited(_store.loadDisplayPreferences());
   }
 
@@ -41,186 +42,198 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     final providedStore = context.read<HttpInspectorStore?>();
     final nextStore = providedStore ?? HttpInspectorStore.instance;
     if (identical(nextStore, _store)) return;
-    _store.removeListener(_onStoreChanged);
     _store = nextStore;
-    _store.addListener(_onStoreChanged);
     unawaited(_store.loadDisplayPreferences());
-  }
-
-  void _onStoreChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _store.removeListener(_onStoreChanged);
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final records = _store.filteredRecords;
     final colors = Theme.of(context).colorScheme;
-    final stats = _store.visibleStats;
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-          title: const Text('网络请求',
+          title: Text(localizations.networkRequests,
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-      body: Column(
-        children: [
-          AppSearchBar(
-            controller: _searchController,
-            hintText: '搜索 URL / 域名...',
-            onChanged: (v) => _store.setFilterDomain(v.trim()),
-            onClear: () {
-              _searchController.clear();
-              _store.setFilterDomain('');
-            },
-            trailingActions: [
-              IconButton(
-                icon: const Icon(Icons.visibility_outlined, size: 20),
-                selectedIcon:
-                    const Icon(Icons.visibility_off_outlined, size: 20),
-                isSelected: _store.hideNoiseMethods,
-                onPressed: () =>
-                    _store.setHideNoiseMethods(!_store.hideNoiseMethods),
-                tooltip: _store.hideNoiseMethods
-                    ? '显示 DNS/connect/进程记录'
-                    : '隐藏 DNS/connect/进程记录',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                icon: const Icon(Icons.filter_list, size: 20),
-                onPressed: () => _showFilterSheet(context),
-                tooltip: '筛选',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed:
-                    _store.count == 0 ? null : () => _confirmClear(context),
-                tooltip: '清空',
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          // --- Active filters ---
-          if (_store.filterDomain.isNotEmpty ||
-              _store.filterMethod.isNotEmpty ||
-              _store.filterStatus != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              color: AppThemeColors.navigationIndicator(colors),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_alt, size: 14),
-                  const SizedBox(width: 6),
-                  if (_store.filterDomain.isNotEmpty)
-                    _FilterChip(
-                        label: '域名: ${_store.filterDomain}',
-                        onRemove: () => _store.setFilterDomain('')),
-                  if (_store.filterMethod.isNotEmpty)
-                    _FilterChip(
-                        label: '方法: ${_store.filterMethod}',
-                        onRemove: () => _store.setFilterMethod('')),
-                  if (_store.filterStatus != null)
-                    _FilterChip(
-                        label: _store.filterStatus == 0
-                            ? '状态: 错误'
-                            : '状态: ${_store.filterStatus}xx',
-                        onRemove: () => _store.setFilterStatus(null)),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => _store.clearFilters(),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    child: const Text('清除筛选', style: TextStyle(fontSize: 11)),
+      body: ListenableBuilder(
+        listenable: _store,
+        builder: (context, _) {
+          final records = _store.filteredRecords;
+          final stats = _store.visibleStats;
+          return Column(
+            children: [
+              AppSearchBar(
+                controller: _searchController,
+                hintText: localizations.searchUrlOrDomain,
+                onChanged: (v) => _store.setFilterDomain(v.trim()),
+                onClear: () {
+                  _searchController.clear();
+                  _store.setFilterDomain('');
+                },
+                trailingActions: [
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, size: 20),
+                    selectedIcon:
+                        const Icon(Icons.visibility_off_outlined, size: 20),
+                    isSelected: _store.hideNoiseMethods,
+                    onPressed: () =>
+                        _store.setHideNoiseMethods(!_store.hideNoiseMethods),
+                    tooltip: _store.hideNoiseMethods
+                        ? localizations.showNoiseRequests
+                        : localizations.hideNoiseRequests,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.filter_list, size: 20),
+                    onPressed: () => _showFilterSheet(context),
+                    tooltip: localizations.filter,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed:
+                        _store.count == 0 ? null : () => _confirmClear(context),
+                    tooltip: localizations.clear,
+                    visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
-            ),
-          // --- Domain tag bar ---
-          if (_store.count > 0)
-            Builder(builder: (context) {
-              final domains = _store.domainStats;
-              if (domains.isEmpty) return const SizedBox.shrink();
-              return Container(
-                height: 36,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: domains.length > 20 ? 21 : domains.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 6),
-                  itemBuilder: (_, i) {
-                    if (i == 20) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Chip(
-                          label: Text('+${domains.length - 20}',
-                              style: const TextStyle(fontSize: 11)),
+              // --- Active filters ---
+              if (_store.filterDomain.isNotEmpty ||
+                  _store.filterMethod.isNotEmpty ||
+                  _store.filterStatus != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  color: AppThemeColors.navigationIndicator(colors),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.filter_alt, size: 14),
+                      const SizedBox(width: 6),
+                      if (_store.filterDomain.isNotEmpty)
+                        _FilterChip(
+                            label:
+                                localizations.domainFilter(_store.filterDomain),
+                            onRemove: () => _store.setFilterDomain('')),
+                      if (_store.filterMethod.isNotEmpty)
+                        _FilterChip(
+                            label:
+                                localizations.methodFilter(_store.filterMethod),
+                            onRemove: () => _store.setFilterMethod('')),
+                      if (_store.filterStatus != null)
+                        _FilterChip(
+                            label: _store.filterStatus == 0
+                                ? localizations.statusFilterError
+                                : localizations.statusFilter(
+                                    '${_store.filterStatus}xx',
+                                  ),
+                            onRemove: () => _store.setFilterStatus(null)),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => _store.clearFilters(),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: Text(localizations.clearFilters,
+                            style: const TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ),
+              // --- Domain tag bar ---
+              if (_store.count > 0)
+                Builder(builder: (context) {
+                  final domains = _store.domainStats;
+                  if (domains.isEmpty) return const SizedBox.shrink();
+                  return Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: domains.length > 20 ? 21 : domains.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (_, i) {
+                        if (i == 20) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Chip(
+                              label: Text('+${domains.length - 20}',
+                                  style: const TextStyle(fontSize: 11)),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.zero,
+                            ),
+                          );
+                        }
+                        final d = domains[i];
+                        final selected = _store.filterDomain == d.key;
+                        return FilterChip(
+                          label: Text('${d.key} (${d.value})',
+                              style: const TextStyle(fontSize: 10)),
+                          selected: selected,
+                          onSelected: (_) {
+                            _searchController.text = selected ? '' : d.key;
+                            _store.setFilterDomain(selected ? '' : d.key);
+                          },
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           padding: EdgeInsets.zero,
-                        ),
-                      );
-                    }
-                    final d = domains[i];
-                    final selected = _store.filterDomain == d.key;
-                    return FilterChip(
-                      label: Text('${d.key} (${d.value})',
-                          style: const TextStyle(fontSize: 10)),
-                      selected: selected,
-                      onSelected: (_) {
-                        _searchController.text = selected ? '' : d.key;
-                        _store.setFilterDomain(selected ? '' : d.key);
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                        );
                       },
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: EdgeInsets.zero,
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    );
-                  },
-                ),
-              );
-            }),
-          if (_store.count > 0) _buildRequestDashboard(stats),
+                    ),
+                  );
+                }),
+              if (_store.count > 0) _buildRequestDashboard(stats),
 
-          // --- Request list ---
-          Expanded(
-            child: records.isEmpty
-                ? AppEmptyState(
-                    icon: Icons.wifi_find,
-                    title: _store.count == 0 ? '暂无网络请求记录' : '无匹配的请求',
-                    subtitle: _store.count == 0
-                        ? '运行包含网络请求的脚本后，请求将自动显示在这里'
-                        : _emptyRequestSubtitle(),
-                  )
-                : ListView.builder(
-                    itemCount: records.length,
-                    itemBuilder: (context, index) {
-                      final record = records[index];
-                      return _HttpRecordTile(
-                        record: record,
-                        onTap: () => _openDetail(context, record),
-                      );
-                    },
-                  ),
-          ),
-        ],
+              // --- Request list ---
+              Expanded(
+                child: records.isEmpty
+                    ? AppEmptyState(
+                        icon: Icons.wifi_find,
+                        title: _store.count == 0
+                            ? localizations.noNetworkRequests
+                            : localizations.noMatchingRequests,
+                        subtitle: _store.count == 0
+                            ? localizations.runNetworkScriptHint
+                            : _emptyRequestSubtitle(localizations),
+                      )
+                    : ListView.builder(
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(200),
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: true,
+                        itemCount: records.length,
+                        itemBuilder: (context, index) {
+                          final record = records[index];
+                          return _HttpRecordTile(
+                            record: record,
+                            onTap: () => _openDetail(context, record),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  String _emptyRequestSubtitle() {
+  String _emptyRequestSubtitle(AppLocalizations localizations) {
     if (_store.hideNoiseMethods && _store.hiddenNoiseCount > 0) {
-      return '已隐藏 DNS/connect/进程记录，可点击上方按钮显示全部';
+      return localizations.showNoiseRequests;
     }
-    return '尝试清空筛选条件';
+    return localizations.tryClearingFilters;
   }
 
   void _showFilterSheet(BuildContext context) {
@@ -242,13 +255,13 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('筛选网络请求',
+            Text(AppLocalizations.of(ctx)!.filterNetworkRequests,
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             TextField(
               controller: domainCtrl,
-              decoration: const InputDecoration(
-                labelText: '域名 / URL 关键字',
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(ctx)!.domainOrUrlKeyword,
                 hintText: 'example.com',
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -259,7 +272,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               },
             ),
             const SizedBox(height: 12),
-            const Text('请求方法',
+            Text(AppLocalizations.of(ctx)!.requestMethod,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
             Wrap(
@@ -276,7 +289,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                 'CONNECT',
                 'PROCESS'
               ].map((m) {
-                final label = m.isEmpty ? '全部' : m;
+                final label = m.isEmpty ? AppLocalizations.of(ctx)!.all : m;
                 final selected = _store.filterMethod == m;
                 return ChoiceChip(
                   label: Text(label, style: const TextStyle(fontSize: 12)),
@@ -290,14 +303,14 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
               }).toList(),
             ),
             const SizedBox(height: 12),
-            const Text('状态码',
+            Text(AppLocalizations.of(ctx)!.statusCode,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
-                _statusChip(ctx, null, '全部'),
-                _statusChip(ctx, 0, '错误'),
+                _statusChip(ctx, null, AppLocalizations.of(ctx)!.all),
+                _statusChip(ctx, 0, AppLocalizations.of(ctx)!.error),
                 _statusChip(ctx, 200, '2xx'),
                 _statusChip(ctx, 300, '3xx'),
                 _statusChip(ctx, 400, '4xx'),
@@ -313,7 +326,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
                     _store.setFilterDomain(domainCtrl.text.trim());
                     Navigator.pop(ctx);
                   },
-                  child: const Text('应用'),
+                  child: Text(AppLocalizations.of(ctx)!.apply),
                 ),
               ],
             ),
@@ -346,8 +359,9 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     final colors = Theme.of(context).colorScheme;
     final visibleTotal = stats['total'] as int? ?? 0;
     final countLabel = visibleTotal == _store.count
-        ? '全部 ${_store.count}'
-        : '显示 $visibleTotal / 全部 ${_store.count}';
+        ? AppLocalizations.of(context)!.allRequestsCount(_store.count)
+        : AppLocalizations.of(context)!
+            .visibleRequestsCount(visibleTotal, _store.count);
     return AppSurface(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: Padding(
@@ -388,18 +402,22 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清空网络请求记录'),
-        content: const Text('确定要清空所有已捕获的网络请求记录吗？'),
+        title: Text(AppLocalizations.of(ctx)!.clearNetworkRequests),
+        content: Text(AppLocalizations.of(ctx)!.clearNetworkRequestsConfirm),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppLocalizations.of(ctx)!.cancel),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               _store.clear();
             },
-            child: Text('清空',
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text(
+              AppLocalizations.of(ctx)!.clear,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ),
         ],
       ),

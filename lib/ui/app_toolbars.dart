@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_design_tokens.dart';
+import '../l10n/app_localizations.dart';
 
 /// 统一搜索栏组件。
 ///
@@ -15,7 +16,7 @@ class AppSearchBar extends StatelessWidget {
   const AppSearchBar({
     super.key,
     required this.controller,
-    this.hintText = '搜索...',
+    this.hintText = '',
     required this.onChanged,
     this.onClear,
     this.autofocus = false,
@@ -25,6 +26,7 @@ class AppSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fieldFill =
         isDark ? colors.surfaceContainer : AppThemeColors.softSurface(colors);
@@ -77,7 +79,7 @@ class AppSearchBar extends StatelessWidget {
                       autocorrect: false,
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: hintText,
+                        hintText: hintText.isEmpty ? l10n.search : hintText,
                         hintStyle: TextStyle(color: hintColor),
                         border: InputBorder.none,
                         filled: false,
@@ -95,7 +97,7 @@ class AppSearchBar extends StatelessWidget {
                       icon: Icon(Icons.close, size: 16, color: iconColor),
                       onPressed: onClear,
                       visualDensity: VisualDensity.compact,
-                      tooltip: '清空',
+                      tooltip: l10n.clear,
                     ),
                 ],
               ),

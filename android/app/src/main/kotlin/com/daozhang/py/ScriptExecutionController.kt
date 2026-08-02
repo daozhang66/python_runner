@@ -1,6 +1,7 @@
 package com.daozhang.py
 
 import android.os.Handler
+import android.util.Log
 import com.chaquo.python.Python
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
@@ -8,6 +9,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ScriptExecutionController(
     private val mainHandler: Handler,
@@ -23,14 +25,58 @@ class ScriptExecutionController(
     private val deletePythonCacheDirectories: (File) -> Unit
 ) {
     companion object {
+        private const val TAG = "ScriptExecution"
         private const val LINUX_LIKE_GRACEFUL_STOP_MS = 300L
+        private const val MAX_CAPTURED_OUTPUT_CHARS = 256 * 1024
     }
+
+    private class BoundedOutputBuffer(private val maxChars: Int) {
+        private val content = StringBuilder()
+        private var truncated = false
+
+        fun appendLine(line: String) {
+            content.append(line).append('\n')
+            if (content.length > maxChars) {
+                content.delete(0, content.length - maxChars)
+                truncated = true
+            }
+        }
+
+        fun tail(limit: Int): String {
+            val prefix = if (truncated) "[输出已截断]\n" else ""
+            return prefix + content.takeLast(limit)
+        }
+
+        override fun toString(): String =
+            (if (truncated) "[输出已截断]\n" else "") + content.toString()
+    }
+
+    private data class ProcessOutputCapture(
+        val thread: Thread,
+        val failed: AtomicBoolean
+    )
 
     private val executionStateLock = Any()
     private var currentExecutionThread: Thread? = null
     private var currentExecutionProcess: Process? = null
     private var currentExecutionId: String? = null
-    @Volatile private var currentExecutionStopRequested = false
+    private var currentExecutionStopRequested: AtomicBoolean? = null
+    private var currentOutputPollThread: Thread? = null
+    private var currentWatchdogThread: Thread? = null
+
+    private fun reportFailure(
+        operation: String,
+        error: Throwable,
+        executionId: String? = null,
+        notifyConsole: Boolean = true
+    ) {
+        val detail = "${error.javaClass.simpleName}: ${error.message ?: "unknown"}"
+        val suffix = executionId?.let { " (executionId=$it)" }.orEmpty()
+        Log.w(TAG, "$operation 失败$suffix: $detail", error)
+        if (notifyConsole && executionId != null) {
+            sendLog("stderr", "[运行时警告] $operation 失败：$detail", executionId)
+        }
+    }
 
     // --- Script Execution ---
 
@@ -38,24 +84,18 @@ class ScriptExecutionController(
         // If a previous execution is still running, force-stop it first
         val oldThread = synchronized(executionStateLock) { currentExecutionThread }
         if (oldThread != null && oldThread.isAlive) {
+            val oldExecutionId = synchronized(executionStateLock) { currentExecutionId }
             try {
                 val py = Python.getInstance()
                 val runner = py.getModule("script_runner")
                 runner.callAttr("stop_running")
-            } catch (_: Exception) {}
-            // Send completion status for the old execution
-            val oldId = synchronized(executionStateLock) { currentExecutionId }
-            if (oldId != null) {
-                sendStatus(oldId, "stopped", 0)
+            } catch (e: Exception) {
+                reportFailure("停止上一轮 Chaquopy 执行", e, oldExecutionId)
             }
-            // Wait briefly for the old thread to actually terminate
-            // so it doesn't interfere with the new execution
-            try {
-                oldThread.join(2000)
-            } catch (_: Exception) {}
             synchronized(executionStateLock) {
-                currentExecutionThread = null
-                currentExecutionId = null
+                currentExecutionStopRequested?.set(true)
+                currentOutputPollThread?.interrupt()
+                currentWatchdogThread?.interrupt()
             }
         }
 
@@ -70,8 +110,18 @@ class ScriptExecutionController(
             return
         }
 
-        synchronized(executionStateLock) {
-            currentExecutionId = executionId
+        val hookEnvJson = if (hookEnv != null && hookEnv.isNotEmpty()) {
+            try {
+                JSONObject().apply {
+                    hookEnv.forEach { (key, value) -> put(key, value) }
+                }.toString()
+            } catch (e: Exception) {
+                reportFailure("序列化脚本 Hook 环境", e, executionId, notifyConsole = false)
+                result.error("1002", "脚本 Hook 环境无效: ${e.message}", null)
+                return
+            }
+        } else {
+            ""
         }
 
         // Start foreground service to keep alive in background
@@ -82,21 +132,34 @@ class ScriptExecutionController(
 
         val code = file.readText()
         val scriptFilePath = file.absolutePath
-        val scriptDone = java.util.concurrent.atomic.AtomicBoolean(false)
-
-        // Serialize hookEnv to JSON string for passing to Python
-        val hookEnvJson = if (hookEnv != null && hookEnv.isNotEmpty()) {
-            try {
-                val jsonObj = JSONObject()
-                for ((k, v) in hookEnv) {
-                    jsonObj.put(k, v)
+        val scriptDone = AtomicBoolean(false)
+        val stopRequested = AtomicBoolean(false)
+        val timedOut = AtomicBoolean(false)
+        val terminalSent = AtomicBoolean(false)
+        fun finish(status: String, exitCode: Int?) {
+            if (!terminalSent.compareAndSet(false, true)) return
+            sendStatus(executionId, status, exitCode)
+            val wasCurrent = synchronized(executionStateLock) {
+                if (currentExecutionId == executionId) {
+                    currentExecutionId = null
+                    currentExecutionThread = null
+                    currentOutputPollThread = null
+                    currentWatchdogThread = null
+                    currentExecutionStopRequested = null
+                    true
+                } else {
+                    false
                 }
-                jsonObj.toString()
-            } catch (_: Exception) { "" }
-        } else { "" }
+            }
+            if (wasCurrent) stopForegroundService()
+        }
+        synchronized(executionStateLock) {
+            currentExecutionId = executionId
+            currentExecutionStopRequested = stopRequested
+        }
 
         // Polling thread: reads output from Python's queue and forwards to Flutter
-        Thread {
+        val pollThread = Thread {
             val py = Python.getInstance()
             val runner = py.getModule("script_runner")
             while (!scriptDone.get()) {
@@ -114,10 +177,16 @@ class ScriptExecutionController(
                         }
                     }
                     Thread.sleep(50)
+                } catch (_: InterruptedException) {
+                    break
                 } catch (e: Exception) {
-                    // Don't silently die 鈥?check if script is still running
                     if (scriptDone.get()) break
-                    Thread.sleep(200)
+                    reportFailure("读取 Chaquopy 输出", e, executionId)
+                    try {
+                        Thread.sleep(200)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
                 }
             }
             // Final poll to flush remaining output
@@ -132,8 +201,14 @@ class ScriptExecutionController(
                         sendLog(type, content, executionId)
                     }
                 }
-            } catch (_: Exception) {}
-        }.also { it.name = "output-poll"; it.isDaemon = true; it.start() }
+            } catch (e: Exception) {
+                // The script has already reached a terminal path; retain that
+                // result while leaving a Logcat breadcrumb for lost tail output.
+                reportFailure("刷新 Chaquopy 剩余输出", e, executionId, notifyConsole = false)
+            }
+        }.also { it.name = "output-poll"; it.isDaemon = true }
+        synchronized(executionStateLock) { currentOutputPollThread = pollThread }
+        pollThread.start()
 
         // Execution thread
         val executionThread = Thread {
@@ -153,21 +228,12 @@ class ScriptExecutionController(
                 // Small delay to let the polling thread flush remaining output
                 Thread.sleep(200)
                 val finalStatus = when {
-                    synchronized(executionStateLock) { currentExecutionStopRequested } -> "stopped"
+                    timedOut.get() -> "timeout"
+                    stopRequested.get() -> "stopped"
                     exitCode == 0 -> "completed"
                     else -> "error"
                 }
-                sendStatus(
-                    executionId,
-                    finalStatus,
-                    if (finalStatus == "stopped") 0 else exitCode
-                )
-                synchronized(executionStateLock) {
-                    currentExecutionId = null
-                    currentExecutionThread = null
-                }
-                // Stop foreground service
-                stopForegroundService()
+                finish(finalStatus, if (finalStatus == "stopped") 0 else exitCode)
             }
         }.also { it.name = "python-exec" }
         synchronized(executionStateLock) {
@@ -177,36 +243,37 @@ class ScriptExecutionController(
 
         // Watchdog thread: kill script if it exceeds the timeout
         if (timeoutSeconds > 0) {
-            Thread {
+            val watchdogThread = Thread {
                 try {
-                    val timeoutMs = timeoutSeconds * 1000L
+                    val timeoutMs = timeoutSeconds.toLong()
+                        .coerceAtMost(Long.MAX_VALUE / 1000L) * 1000L
                     Thread.sleep(timeoutMs)
                     if (!scriptDone.get()) {
                         // Script is still running 鈥?kill it
+                        timedOut.set(true)
+                        sendLog(
+                            "stderr",
+                            "脚本执行超时（${timeoutSeconds}秒），正在停止",
+                            executionId
+                        )
                         try {
                             val py = Python.getInstance()
                             val runner = py.getModule("script_runner")
                             runner.callAttr("stop_running")
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {
+                            reportFailure("超时停止 Chaquopy 脚本", e, executionId)
+                        }
                         // Wait for exec thread to finish
-                        synchronized(executionStateLock) { currentExecutionThread }?.join(3000)
+                        executionThread.join(3000)
                         if (!scriptDone.get()) {
                             scriptDone.set(true)
-                            sendLog(
-                                "stderr",
-                                "脚本执行超时（${timeoutSeconds}秒），已强制停止",
-                                executionId
-                            )
-                            sendStatus(executionId, "timeout", 1)
-                            synchronized(executionStateLock) {
-                                currentExecutionId = null
-                                currentExecutionThread = null
-                            }
-                            stopForegroundService()
+                            finish("timeout", 1)
                         }
                     }
                 } catch (_: InterruptedException) {}
-            }.also { it.name = "timeout-watchdog"; it.isDaemon = true; it.start() }
+            }.also { it.name = "timeout-watchdog"; it.isDaemon = true }
+            synchronized(executionStateLock) { currentWatchdogThread = watchdogThread }
+            watchdogThread.start()
         }
     }
 
@@ -226,13 +293,19 @@ class ScriptExecutionController(
     fun stopExecution(result: MethodChannel.Result) {
         val thread = synchronized(executionStateLock) { currentExecutionThread }
         if (thread != null && thread.isAlive) {
+            val executionId = synchronized(executionStateLock) { currentExecutionId }
             try {
                 val py = Python.getInstance()
                 val runner = py.getModule("script_runner")
                 runner.callAttr("stop_running")
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                reportFailure("停止 Chaquopy 脚本", e, executionId)
+            }
             // Send "stopping" status so Flutter UI updates immediately
-            val execId = synchronized(executionStateLock) { currentExecutionId }
+            val execId = synchronized(executionStateLock) {
+                currentExecutionStopRequested?.set(true)
+                currentExecutionId
+            }
             if (execId != null) {
                 sendStatus(execId, "stopping", null)
             }
@@ -252,6 +325,7 @@ class ScriptExecutionController(
         projectMainFilePath: String?,
         result: MethodChannel.Result
     ) {
+        val stopRequested = AtomicBoolean(false)
         val info = linuxLikeRuntimeManager.getInfo()
         if (info["available"] != "true") {
             result.error("1017", info["message"] ?: "Linux-like runtime unavailable", null)
@@ -260,13 +334,16 @@ class ScriptExecutionController(
 
         val oldProcess = synchronized(executionStateLock) { currentExecutionProcess }
         if (oldProcess != null && oldProcess.isAlive) {
+            val oldExecutionId = synchronized(executionStateLock) { currentExecutionId }
             synchronized(executionStateLock) {
-                currentExecutionStopRequested = true
+                currentExecutionStopRequested?.set(true)
             }
-            stopProcessTree(oldProcess)
+            stopProcessTree(oldProcess, executionId = oldExecutionId)
             try {
                 oldProcess.waitFor(LINUX_LIKE_GRACEFUL_STOP_MS, TimeUnit.MILLISECONDS)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                reportFailure("等待上一轮 Linux-like 进程退出", e, oldExecutionId)
+            }
         }
 
         val executionTarget = try {
@@ -329,7 +406,7 @@ class ScriptExecutionController(
 
         synchronized(executionStateLock) {
             currentExecutionId = executionId
-            currentExecutionStopRequested = false
+            currentExecutionStopRequested = stopRequested
         }
         startForegroundExecution(executionTarget.displayName)
 
@@ -339,7 +416,13 @@ class ScriptExecutionController(
         val executionEnvironment = environment?.toMutableMap() ?: mutableMapOf()
         val resolvedWorkingDir = executionTarget.workingDir
         executionEnvironment["HOME"] = resolvedWorkingDir
-        executionTarget.pycacheCleanupRoots.forEach { deletePythonCacheDirectories(it) }
+        executionTarget.pycacheCleanupRoots.forEach { root ->
+            try {
+                deletePythonCacheDirectories(root)
+            } catch (e: Exception) {
+                reportFailure("执行前清理 Python 缓存", e, executionId)
+            }
+        }
         if (executionTarget.pythonPathEntries.isNotEmpty()) {
             val existingPythonPath = executionEnvironment["PYTHONPATH"]?.takeIf { it.isNotBlank() }
             executionEnvironment["PYTHONPATH"] =
@@ -359,8 +442,8 @@ class ScriptExecutionController(
         val linuxLikeExecutionThread = Thread {
             var exitCode = 1
             var status = "error"
-            val stdout = StringBuilder()
-            val stderr = StringBuilder()
+            val stdout = BoundedOutputBuffer(MAX_CAPTURED_OUTPUT_CHARS)
+            val stderr = BoundedOutputBuffer(MAX_CAPTURED_OUTPUT_CHARS)
             var executionTempDir: String? = null
             try {
                 val processBuilder = ProcessBuilder(command)
@@ -375,60 +458,87 @@ class ScriptExecutionController(
                     currentExecutionProcess = process
                 }
 
-                val stdoutThread =
+                val stdoutCapture =
                     collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId)
-                val stderrThread =
+                val stderrCapture =
                     collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId)
 
                 if (timeoutSeconds > 0) {
-                    Thread {
+                    val watchdogThread = Thread {
                         try {
-                            Thread.sleep(timeoutSeconds * 1000L)
+                            val timeoutMs = timeoutSeconds.toLong()
+                                .coerceAtMost(Long.MAX_VALUE / 1000L) * 1000L
+                            Thread.sleep(timeoutMs)
                             if (process.isAlive) {
                                 timedOut.set(true)
-                                synchronized(executionStateLock) {
-                                    currentExecutionStopRequested = true
-                                }
+                                stopRequested.set(true)
                                 sendLog(
                                     "stderr",
                                     "脚本执行超时（${timeoutSeconds}秒），已强制停止",
                                     executionId
                                 )
-                                stopProcessTree(process)
+                                stopProcessTree(process, executionId = executionId)
                             }
                         } catch (_: InterruptedException) {}
-                    }.also { it.name = "linux-like-timeout-watchdog"; it.isDaemon = true; it.start() }
+                    }.also { it.name = "linux-like-timeout-watchdog"; it.isDaemon = true }
+                    synchronized(executionStateLock) {
+                        if (currentExecutionId == executionId) {
+                            currentWatchdogThread = watchdogThread
+                        }
+                    }
+                    watchdogThread.start()
                 }
 
                 exitCode = process.waitFor()
-                stdoutThread.join(500)
-                stderrThread.join(500)
+                closeProcessStdin(process, executionId)
+                stdoutCapture.thread.join()
+                stderrCapture.thread.join()
                 status = when {
                     timedOut.get() -> "timeout"
-                    synchronized(executionStateLock) { currentExecutionStopRequested } -> "stopped"
+                    stopRequested.get() -> "stopped"
+                    stdoutCapture.failed.get() || stderrCapture.failed.get() -> "error"
                     exitCode == 0 -> "completed"
                     else -> "error"
                 }
                 if (status == "error" || status == "timeout") {
+                    if (stdoutCapture.failed.get() || stderrCapture.failed.get()) {
+                        sendLog("stderr", "输出捕获失败，无法确认脚本输出完整性", executionId)
+                    }
                     writeScriptErrorLog(
                         executionTarget.displayName,
                         "Linux-like process exited with code $exitCode",
-                        "stdout:\n${stdout.takeLast(4000)}\n\nstderr:\n${stderr.takeLast(4000)}"
+                        "stdout:\n${stdout.tail(4000)}\n\nstderr:\n${stderr.tail(4000)}"
                     )
                 }
             } catch (e: Throwable) {
                 sendLog("stderr", "Linux-like执行错误: ${e.message}", executionId)
-                status = if (synchronized(executionStateLock) { currentExecutionStopRequested }) "stopped" else "error"
+                status = if (stopRequested.get()) "stopped" else "error"
                 exitCode = 1
                 writeScriptErrorLog(executionTarget.displayName, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
             } finally {
-                executionTarget.pycacheCleanupRoots.forEach { deletePythonCacheDirectories(it) }
+                synchronized(executionStateLock) {
+                    if (currentExecutionId == executionId) {
+                        currentWatchdogThread?.interrupt()
+                        currentWatchdogThread = null
+                    }
+                }
+                executionTarget.pycacheCleanupRoots.forEach { root ->
+                    try {
+                        deletePythonCacheDirectories(root)
+                    } catch (e: Exception) {
+                        reportFailure("清理 Python 缓存", e, executionId)
+                    }
+                }
                 synchronized(executionStateLock) {
                     currentExecutionProcess = null
                     currentExecutionThread = null
                     currentExecutionId = null
                 }
-                linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+                try {
+                    linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+                } catch (e: Exception) {
+                    reportFailure("清理 Linux-like 临时目录", e, executionId)
+                }
                 sendStatus(executionId, status, exitCode)
                 stopForegroundService()
             }
@@ -458,17 +568,11 @@ class ScriptExecutionController(
         val process = synchronized(executionStateLock) { currentExecutionProcess }
         if (process != null && process.isAlive) {
             val execId = synchronized(executionStateLock) {
-                currentExecutionStopRequested = true
+                currentExecutionStopRequested?.set(true)
                 currentExecutionId
             }
             if (execId != null) sendStatus(execId, "stopping", null)
-            process.destroy()
-            Thread {
-                try {
-                    Thread.sleep(LINUX_LIKE_GRACEFUL_STOP_MS)
-                    if (process.isAlive) stopProcessTree(process, forceOnly = true)
-                } catch (_: InterruptedException) {}
-            }.also { it.name = "linux-like-stop"; it.isDaemon = true; it.start() }
+            stopProcessTree(process, executionId = execId)
             result.success(true)
         } else {
             result.success(false)
@@ -492,90 +596,35 @@ class ScriptExecutionController(
         val pycacheCleanupRoots: List<File> = emptyList()
     )
 
-    private fun stopProcessTree(process: Process, forceOnly: Boolean = false) {
-        val pid = processPid(process)
-        if (!forceOnly) {
-            process.destroy()
-            pid?.let { killProcessTree(it, force = false) }
-            Thread.sleep(LINUX_LIKE_GRACEFUL_STOP_MS)
-        }
-        pid?.let { killProcessTree(it, force = true) }
-        if (process.isAlive) process.destroyForcibly()
-    }
-
-    private fun processPid(process: Process): Int? {
-        return try {
-            val field = process.javaClass.getDeclaredField("pid")
-            field.isAccessible = true
-            field.getInt(process)
-        } catch (_: Throwable) {
-            null
+    private fun stopProcessTree(
+        process: Process,
+        forceOnly: Boolean = false,
+        executionId: String? = null
+    ) {
+        LinuxProcessTree.stop(process, forceOnly) { operation, error ->
+            reportFailure(operation, error, executionId)
         }
     }
 
-    private fun killProcessTree(rootPid: Int, force: Boolean) {
-        val pids = collectDescendantPids(rootPid).asReversed() + rootPid
-        pids.forEach { pid ->
-            try {
-                android.os.Process.sendSignal(pid, if (force) 9 else 15)
-            } catch (_: Throwable) {
-                if (force) {
-                    try {
-                        android.os.Process.killProcess(pid)
-                    } catch (_: Throwable) {
-                    }
-                }
-            }
+    /** Releases controller-owned workers when the hosting Activity goes away. */
+    fun shutdown() {
+        var process: Process? = null
+        synchronized(executionStateLock) {
+            currentExecutionStopRequested?.set(true)
+            currentOutputPollThread?.interrupt()
+            currentWatchdogThread?.interrupt()
+            process = currentExecutionProcess
         }
-    }
-
-    private fun collectDescendantPids(rootPid: Int): List<Int> {
-        val result = linkedSetOf<Int>()
-        val queue = ArrayDeque<Int>()
-        queue.add(rootPid)
-        while (queue.isNotEmpty()) {
-            val pid = queue.removeFirst()
-            readDirectChildPids(pid).forEach { child ->
-                if (result.add(child)) queue.add(child)
-            }
+        try {
+            val py = Python.getInstance()
+            py.getModule("script_runner").callAttr("stop_running")
+        } catch (e: Exception) {
+            // The interpreter may already be unavailable during teardown.
+            Log.d(TAG, "Activity 销毁时停止 Chaquopy 解释器失败: ${e.message}")
         }
-        return result.toList()
-    }
-
-    private fun readDirectChildPids(pid: Int): List<Int> {
-        val fromTaskChildren = try {
-            File("/proc/$pid/task").listFiles()
-                ?.flatMap { task ->
-                    File(task, "children").takeIf { it.isFile }
-                        ?.readText()
-                        ?.split(Regex("\\s+"))
-                        ?.mapNotNull { it.toIntOrNull() }
-                        ?: emptyList()
-                }
-                ?.distinct()
-                ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
-        if (fromTaskChildren.isNotEmpty()) return fromTaskChildren
-
-        return try {
-            File("/proc").listFiles()
-                ?.mapNotNull { entry ->
-                    val childPid = entry.name.toIntOrNull() ?: return@mapNotNull null
-                    val status = File(entry, "status")
-                    if (!status.isFile) return@mapNotNull null
-                    val parentPid = status.useLines { lines ->
-                        lines.firstOrNull { it.startsWith("PPid:") }
-                            ?.substringAfter(':')
-                            ?.trim()
-                            ?.toIntOrNull()
-                    }
-                    if (parentPid == pid) childPid else null
-                }
-                ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
+        val runningProcess = process
+        if (runningProcess != null && runningProcess.isAlive) {
+            stopProcessTree(runningProcess, executionId = synchronized(executionStateLock) { currentExecutionId })
         }
     }
 
@@ -589,32 +638,42 @@ class ScriptExecutionController(
         linuxLikeRuntimeManager.applyHostEnvironment(processBuilder.environment(), environment)
         val executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
         val process = processBuilder.start()
-        val stdout = StringBuilder()
-        val stderr = StringBuilder()
-        val stdoutThread = collectProcessOutput(process.inputStream, "stdout", stdout, emitLogs)
-        val stderrThread = collectProcessOutput(process.errorStream, "stderr", stderr, emitLogs)
+        val stdout = BoundedOutputBuffer(MAX_CAPTURED_OUTPUT_CHARS)
+        val stderr = BoundedOutputBuffer(MAX_CAPTURED_OUTPUT_CHARS)
+        val stdoutCapture = collectProcessOutput(process.inputStream, "stdout", stdout, emitLogs)
+        val stderrCapture = collectProcessOutput(process.errorStream, "stderr", stderr, emitLogs)
         return try {
             val exitCode = process.waitFor()
-            stdoutThread.join(500)
-            stderrThread.join(500)
+            closeProcessStdin(process, null)
+            stdoutCapture.thread.join()
+            stderrCapture.thread.join()
             LinuxLikeCommandResult(
-                exitCode = exitCode,
+                exitCode = if (stdoutCapture.failed.get() || stderrCapture.failed.get()) 1 else exitCode,
                 stdout = stdout.toString(),
-                stderr = stderr.toString()
+                stderr = if (stdoutCapture.failed.get() || stderrCapture.failed.get()) {
+                    "[输出捕获失败]\n${stderr}"
+                } else {
+                    stderr.toString()
+                }
             )
         } finally {
-            linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+            try {
+                linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
+            } catch (e: Exception) {
+                reportFailure("清理 Linux-like 命令临时目录", e, notifyConsole = false)
+            }
         }
     }
 
     private fun collectProcessOutput(
         inputStream: java.io.InputStream,
         type: String,
-        buffer: StringBuilder,
+        buffer: BoundedOutputBuffer,
         emitLogs: Boolean,
         executionId: String? = null
-    ): Thread {
-        return Thread {
+    ): ProcessOutputCapture {
+        val failed = AtomicBoolean(false)
+        val thread = Thread {
             try {
                 BufferedReader(InputStreamReader(inputStream)).useLines { lines ->
                     lines.forEach { line ->
@@ -625,12 +684,24 @@ class ScriptExecutionController(
                             )
                             return@forEach
                         }
-                        buffer.append(line).append('\n')
+                        buffer.appendLine(line)
                         if (emitLogs) sendLog(type, line, executionId)
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                failed.set(true)
+                reportFailure("读取 Linux-like $type 输出", e, executionId)
+            }
         }.also { it.name = "linux-like-capture-$type"; it.isDaemon = true; it.start() }
+        return ProcessOutputCapture(thread, failed)
+    }
+
+    private fun closeProcessStdin(process: Process, executionId: String?) {
+        try {
+            process.outputStream.close()
+        } catch (e: Exception) {
+            reportFailure("关闭 Linux-like stdin", e, executionId)
+        }
     }
 
     private fun parseLinuxLikePrompt(payload: String): String {

@@ -1,11 +1,32 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:python_runner/features/scripts/application/script_workspace_controller.dart';
 import 'package:python_runner/models/script_file.dart';
 import 'package:python_runner/models/script_group.dart';
-import 'package:python_runner/providers/script_provider.dart';
-import 'package:python_runner/services/database_service.dart';
-import 'package:python_runner/services/native_bridge.dart';
 
+import 'support/script_test_helper.dart';
+
+/// 脚本工作台 Controller 的排序/置顶/项目行为回归测试（原 ScriptProvider 用例）。
+///
+/// 三个用例与迁移前 legacy ChangeNotifier 完全一致，用于验证 Riverpod 化后
+/// 排序算法、置顶提升规则与项目最近使用刷新 1:1 保留。
 void main() {
+  ScriptFile script(
+    String name,
+    DateTime time, {
+    required int sortOrder,
+    int? groupId,
+    bool isPinned = false,
+  }) =>
+      ScriptFile(
+        name: name,
+        path: name,
+        createdAt: time,
+        modifiedAt: time,
+        sortOrder: sortOrder,
+        groupId: groupId,
+        isPinned: isPinned,
+      );
+
   test('running a script promotes it to the front of its current group',
       () async {
     final now = DateTime.fromMillisecondsSinceEpoch(1000);
@@ -17,33 +38,32 @@ void main() {
       modifiedAt: now,
     );
     final scripts = [
-      _script('a.py', now, sortOrder: 0, groupId: group.id),
-      _script('b.py', now, sortOrder: 1, groupId: group.id),
-      _script('c.py', now, sortOrder: 2, groupId: group.id),
-      _script('home.py', now, sortOrder: 0),
+      script('a.py', now, sortOrder: 0, groupId: group.id),
+      script('b.py', now, sortOrder: 1, groupId: group.id),
+      script('c.py', now, sortOrder: 2, groupId: group.id),
+      script('home.py', now, sortOrder: 0),
     ];
-    final db = _MemoryDatabaseService(groups: [group], scripts: scripts);
-    final provider = ScriptProvider(
-      _MemoryNativeBridge(scripts.map((script) => script.name).toList()),
-      db,
-    );
+    final repo = FakeScriptRepository(groups: [group], scripts: scripts);
+    final container = buildScriptContainer(repository: repo);
+    addTearDown(container.dispose);
+    final notifier = container.read(scriptWorkspaceControllerProvider.notifier);
 
-    await provider.loadScripts();
+    await notifier.load();
     expect(
-      provider.scriptsInGroup(group.id).map((script) => script.name),
+      notifier.scriptsInGroup(group.id).map((s) => s.name),
       ['a.py', 'b.py', 'c.py'],
     );
 
-    await provider.incrementRunCount('c.py');
+    await notifier.incrementRunCount('c.py');
 
     expect(
-      provider.scriptsInGroup(group.id).map((script) => script.name),
+      notifier.scriptsInGroup(group.id).map((s) => s.name),
       ['c.py', 'a.py', 'b.py'],
     );
-    expect(provider.scriptsInGroup(group.id).first.runCount, 1);
-    expect(provider.ungroupedScripts.map((script) => script.name), ['home.py']);
+    expect(notifier.scriptsInGroup(group.id).first.runCount, 1);
+    expect(notifier.ungroupedScripts.map((s) => s.name), ['home.py']);
     expect(
-      db.sortOrderUpdates.last.map((script) => script.name),
+      repo.lastBatchSortOrders?.map((s) => s.name),
       ['c.py', 'a.py', 'b.py'],
     );
   });
@@ -51,25 +71,24 @@ void main() {
   test('running a pinned script keeps pinned order fixed', () async {
     final now = DateTime.fromMillisecondsSinceEpoch(1000);
     final scripts = [
-      _script('pinned-a.py', now, sortOrder: 0, isPinned: true),
-      _script('pinned-b.py', now, sortOrder: 1, isPinned: true),
-      _script('regular.py', now, sortOrder: 2),
+      script('pinned-a.py', now, sortOrder: 0, isPinned: true),
+      script('pinned-b.py', now, sortOrder: 1, isPinned: true),
+      script('regular.py', now, sortOrder: 2),
     ];
-    final db = _MemoryDatabaseService(groups: const [], scripts: scripts);
-    final provider = ScriptProvider(
-      _MemoryNativeBridge(scripts.map((script) => script.name).toList()),
-      db,
-    );
+    final repo = FakeScriptRepository(scripts: scripts);
+    final container = buildScriptContainer(repository: repo);
+    addTearDown(container.dispose);
+    final notifier = container.read(scriptWorkspaceControllerProvider.notifier);
 
-    await provider.loadScripts();
-    await provider.incrementRunCount('pinned-b.py');
+    await notifier.load();
+    await notifier.incrementRunCount('pinned-b.py');
 
     expect(
-      provider.ungroupedScripts.map((script) => script.name),
+      notifier.ungroupedScripts.map((s) => s.name),
       ['pinned-a.py', 'pinned-b.py', 'regular.py'],
     );
-    expect(provider.ungroupedScripts[1].runCount, 1);
-    expect(db.sortOrderUpdates, isEmpty);
+    expect(notifier.ungroupedScripts[1].runCount, 1);
+    expect(repo.batchUpdateSortOrdersCount, 0);
   });
 
   test('using a project refreshes its recent time without moving folders',
@@ -92,97 +111,25 @@ void main() {
       projectKey: 'project_1',
       mainFilePath: 'main.py',
     );
-    final db = _MemoryDatabaseService(
-      groups: [regularGroup, project],
-      scripts: const [],
-    );
-    final provider = ScriptProvider(_MemoryNativeBridge(const []), db);
+    final repo =
+        FakeScriptRepository(groups: [regularGroup, project], scripts: const []);
+    final container = buildScriptContainer(repository: repo);
+    addTearDown(container.dispose);
+    final notifier = container.read(scriptWorkspaceControllerProvider.notifier);
 
-    await provider.loadScripts();
-    await provider.markProjectGroupUsed(project);
+    await notifier.load();
+    await notifier.markProjectGroupUsed(project);
 
-    expect(db.touchedGroupIds, [project.id]);
+    // touchGroup 应被调用一次（项目分组）。
+    expect(repo.touchGroupCount, 1);
+    expect(repo.lastTouchedGroupId, project.id);
     expect(
-        provider.groups
-            .firstWhere((group) => group.id == project.id)
-            .modifiedAt,
-        isNot(oldTime));
-    expect(provider.groups.firstWhere((group) => group.id == regularGroup.id),
-        regularGroup);
-  });
-}
-
-ScriptFile _script(
-  String name,
-  DateTime time, {
-  required int sortOrder,
-  int? groupId,
-  bool isPinned = false,
-}) {
-  return ScriptFile(
-    name: name,
-    path: name,
-    createdAt: time,
-    modifiedAt: time,
-    sortOrder: sortOrder,
-    groupId: groupId,
-    isPinned: isPinned,
-  );
-}
-
-class _MemoryNativeBridge extends NativeBridge {
-  final List<String> names;
-
-  _MemoryNativeBridge(this.names) : super.named();
-
-  @override
-  Future<List<String>> listScripts() async => names;
-}
-
-class _MemoryDatabaseService extends DatabaseService {
-  final List<ScriptGroup> groups;
-  final List<ScriptFile> scripts;
-  final List<List<ScriptFile>> sortOrderUpdates = [];
-  final List<int> touchedGroupIds = [];
-
-  _MemoryDatabaseService({
-    required this.groups,
-    required this.scripts,
-  });
-
-  @override
-  Future<List<ScriptGroup>> getAllGroups() async => List.of(groups);
-
-  @override
-  Future<List<ScriptFile>> getAllScripts() async => List.of(scripts);
-
-  @override
-  Future<void> incrementRunCount(String name) async {
-    final index = scripts.indexWhere((script) => script.name == name);
-    if (index < 0) return;
-    scripts[index] = scripts[index].copyWith(
-      runCount: scripts[index].runCount + 1,
-      modifiedAt: DateTime.now(),
+      notifier.groups.firstWhere((g) => g.id == project.id).modifiedAt,
+      isNot(oldTime),
     );
-  }
-
-  @override
-  Future<void> batchUpdateSortOrders(List<ScriptFile> updates) async {
-    sortOrderUpdates.add(List.of(updates));
-    for (final update in updates) {
-      final index = scripts.indexWhere((script) => script.name == update.name);
-      if (index >= 0) {
-        scripts[index] = scripts[index].copyWith(sortOrder: update.sortOrder);
-      }
-    }
-  }
-
-  @override
-  Future<void> touchGroup(int groupId) async {
-    touchedGroupIds.add(groupId);
-    final index = groups.indexWhere((group) => group.id == groupId);
-    if (index >= 0) {
-      groups[index] = groups[index].copyWith(modifiedAt: DateTime.now());
-    }
-  }
+    expect(
+      notifier.groups.firstWhere((g) => g.id == regularGroup.id),
+      regularGroup,
+    );
+  });
 }

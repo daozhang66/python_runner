@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 /// 统一间距常量，基于 4px 网格。
 abstract final class AppSpacing {
+  static const hairline = 1.0;
   static const xxs = 2.0;
   static const xs = 4.0;
   static const sm = 8.0;
@@ -14,6 +15,30 @@ abstract final class AppSpacing {
   // 卡片间距语义化常量
   static const cardVertical = 8.0;
   static const cardHorizontal = 16.0;
+}
+
+/// Typography and compact control metrics that must remain consistent across
+/// dense operational screens without changing their established layout.
+abstract final class AppTextSize {
+  static const nano = 8.5;
+  static const micro = 9.0;
+  static const compact = 10.0;
+  static const compactEmphasis = 10.5;
+  static const label = 11.0;
+  static const body = 12.0;
+  static const bodyEmphasis = 13.0;
+  static const bodyLarge = 14.0;
+  static const toolbarTitle = 15.0;
+  static const title = 16.0;
+  static const headline = 20.0;
+}
+
+abstract final class AppControlMetrics {
+  static const compactMetaMaxWidth = 132.0;
+  static const regularMetaMaxWidth = 180.0;
+  static const compactMetaIcon = 11.0;
+  static const regularMetaIcon = 12.0;
+  static const terminalLogLineHeight = 1.3;
 }
 
 /// 统一圆角常量。
@@ -48,6 +73,32 @@ abstract final class AppOpacity {
 }
 
 abstract final class AppThemeColors {
+  static const transparent = Colors.transparent;
+  static const terminalDarkCanvas = Color(0xFF0D1117);
+  static const terminalDarkSurface = Color(0xFF161B22);
+  static const terminalDarkText = Color(0xFFE6EDF3);
+  static const terminalDarkMuted = Color(0xFF8B949E);
+  static const terminalDarkToolbarText = Color(0xFFC9D1D9);
+  static const terminalDarkAccent = Color(0xFF79C0FF);
+  static const terminalDarkError = Color(0xFFF85149);
+  static const terminalDarkBorder = Color(0xFF30363D);
+  static const terminalDarkControl = Color(0xFF21262D);
+  static const terminalLightCanvas = Color(0xFFFAFAFA);
+  static const terminalLightSurface = Color(0xFFF0F0F0);
+  static const terminalLightInput = Color(0xFFFFFFFF);
+  static const consoleLightCanvas = Color(0xFF1E1E1E);
+  static const consoleLightSurface = Color(0xFF2D2D2D);
+  static const consoleWindowClose = Color(0xFFFF5F56);
+  static const consoleWindowMinimize = Color(0xFFFFBD2E);
+  static const consoleWindowMaximize = Color(0xFF27C93F);
+  static const jsonNull = Color(0xFF7B8190);
+  static const jsonBoolean = Color(0xFF7A52C7);
+  static const jsonNumber = Color(0xFFB26418);
+  static const jsonString = Color(0xFF1D8A63);
+  static const splashDarkSurface = Color(0xFF121212);
+  static const splashDarkEnd = Color(0xFF0F172A);
+  static const splashLightSurface = Color(0xFFFFFFFF);
+  static const splashLightEnd = Color(0xFFEAF2FF);
   static const darkBackground = Color(0xFF111318);
   static const darkSurface = Color(0xFF181B22);
   static const darkSurfaceHigh = Color(0xFF202431);
@@ -56,6 +107,41 @@ abstract final class AppThemeColors {
   static const darkBorder = Color(0xFF2B303A);
   static const darkMaskedText = Color(0xFFC8CEDF);
   static const lightMaskedText = Color(0xFF050505);
+
+  static Color terminalLog(BuildContext context) =>
+      Theme.of(context).colorScheme.tertiary;
+
+  static Color terminalCanvas(bool isDark) =>
+      isDark ? terminalDarkCanvas : terminalLightCanvas;
+
+  static Color terminalSurface(bool isDark) =>
+      isDark ? terminalDarkSurface : terminalLightSurface;
+
+  static Color terminalInput(bool isDark) =>
+      isDark ? terminalDarkCanvas : terminalLightInput;
+
+  static Color terminalText(ColorScheme colors, bool isDark) =>
+      isDark ? terminalDarkText : colors.onSurface;
+
+  static Color terminalMuted(ColorScheme colors, bool isDark) =>
+      isDark ? terminalDarkMuted : colors.onSurfaceVariant;
+
+  static Color terminalAccent(ColorScheme colors, bool isDark) =>
+      isDark ? terminalDarkAccent : colors.primary;
+
+  static Color terminalError(ColorScheme colors, bool isDark) =>
+      isDark ? terminalDarkError : colors.error;
+
+  static Color terminalBorder(ColorScheme colors, bool isDark) => isDark
+      ? terminalDarkBorder
+      : colors.outlineVariant.withValues(alpha: AppOpacity.border);
+
+  static Color splashSurface(bool isDark) =>
+      isDark ? splashDarkSurface : splashLightSurface;
+
+  static List<Color> splashGradient(bool isDark) => isDark
+      ? const [splashDarkSurface, splashDarkEnd]
+      : const [splashLightSurface, splashLightEnd];
 
   static bool isDark(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark;

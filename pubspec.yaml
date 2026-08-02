@@ -2,7 +2,7 @@ name: python_runner
 description: "Python运行器 - Android端Python脚本运行环境"
 publish_to: 'none'
 
-version: 1.5.5+29
+version: 1.5.7+31
 
 environment:
   sdk: ^3.5.0
@@ -48,9 +48,11 @@ dev_dependencies:
   pigeon: ^27.1.0
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/python_hooks/
+    - IMG_20260802_014149.png
 
   fonts:
     - family: MiSans

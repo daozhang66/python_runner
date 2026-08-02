@@ -18,11 +18,6 @@ import java.util.Locale
 
 class MainActivity : FlutterActivity() {
 
-    companion object {
-        private const val FLOATING_BALL_PREFS_NAME = "floating_ball_prefs"
-        private const val KEY_PENDING_RUN_SCRIPT = "pending_run_script"
-    }
-
     private val METHOD_CHANNEL = "com.daozhang.py/native_bridge"
     private val LOG_STREAM_CHANNEL = "com.daozhang.py/log_stream"
     private val INSTALL_PROGRESS_CHANNEL = "com.daozhang.py/install_progress"
@@ -44,7 +39,6 @@ class MainActivity : FlutterActivity() {
     private val nativeFileOperations by lazy {
         NativeFileOperations(filesDir, contentResolver, scriptFileStore)
     }
-    private val floatingBallController by lazy { FloatingBallController(this, mainHandler) }
     private val chaquopyPackageController by lazy {
         ChaquopyPackageController(mainHandler, ::sendInstallProgress)
     }
@@ -95,40 +89,6 @@ class MainActivity : FlutterActivity() {
     }
     private var batteryOptRequested = false
 
-    private var pendingRunScript: String? = null
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleRunScriptIntent(intent)
-    }
-
-    private fun handleRunScriptIntent(intent: Intent?) {
-        val name = intent?.getStringExtra("run_script")
-        if (!name.isNullOrBlank()) {
-            val safeName = try {
-                normalizeScriptName(name)
-            } catch (_: IllegalArgumentException) {
-                intent.removeExtra("run_script")
-                return
-            }
-            pendingRunScript = safeName
-            getSharedPreferences(FLOATING_BALL_PREFS_NAME, MODE_PRIVATE)
-                .edit()
-                .putString(KEY_PENDING_RUN_SCRIPT, safeName)
-                .apply()
-            intent.removeExtra("run_script")
-        }
-    }
-
-    fun consumePendingRunScript(): String? {
-        val prefs = getSharedPreferences(FLOATING_BALL_PREFS_NAME, MODE_PRIVATE)
-        val name = pendingRunScript ?: prefs.getString(KEY_PENDING_RUN_SCRIPT, null)
-        pendingRunScript = null
-        prefs.edit().remove(KEY_PENDING_RUN_SCRIPT).apply()
-        return name
-    }
-
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         // Register native crash handler ASAP 鈥?before Flutter engine init
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -154,7 +114,6 @@ class MainActivity : FlutterActivity() {
 
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        handleRunScriptIntent(intent)
     }
 
     private fun scriptsDir(): File {
@@ -295,13 +254,6 @@ class MainActivity : FlutterActivity() {
                     return appUpdateController.getAppInfoForPigeon()
                 }
 
-                override fun checkOverlayPermission(): Boolean {
-                    return floatingBallController.canShowFloatingBall()
-                }
-
-                override fun consumePendingRunScript(): String? {
-                    return this@MainActivity.consumePendingRunScript()
-                }
             }
         )
 
@@ -580,29 +532,6 @@ class MainActivity : FlutterActivity() {
                 moveTaskToBack(true)
                 result.success(null)
             },
-            "checkOverlayPermission" to { _, result ->
-                result.success(floatingBallController.canShowFloatingBall())
-            },
-            "requestOverlayPermission" to { _, result ->
-                floatingBallController.requestOverlayPermission()
-                result.success(null)
-            },
-            "showFloatingBall" to { call, result ->
-                floatingBallController.showFloatingBall(call.argument<String>("scriptName"), result)
-            },
-            "hideFloatingBall" to { _, result -> floatingBallController.hideFloatingBall(result) },
-            "updateFloatingBallStatus" to { call, result ->
-                floatingBallController.updateFloatingBallStatus(
-                    call.argument<String>("status") ?: "running",
-                    result
-                )
-            },
-            "pushFloatingBallOutput" to { call, result ->
-                floatingBallController.pushFloatingBallOutput(call.argument<String>("output") ?: "", result)
-            },
-            "consumePendingRunScript" to { _, result ->
-                result.success(consumePendingRunScript())
-            }
         )
     }
 
@@ -904,7 +833,6 @@ class MainActivity : FlutterActivity() {
         try {
             stopService(Intent(this, PythonForegroundService::class.java))
         } catch (_: Exception) {}
-        // FloatingBallService lifecycle is managed by Flutter-side execution_provider
     }
 
     private fun _writeScriptErrorLog(scriptName: String, errorMessage: String, stackTrace: String?) {
@@ -965,6 +893,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        scriptExecutionController.shutdown()
         coroutineScope.cancel()
         super.onDestroy()
     }

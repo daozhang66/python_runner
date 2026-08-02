@@ -35,12 +35,6 @@ Python Runner is a Flutter-based Android app for running Python scripts with scr
   - Log search, error-only filter, copy, clear
   - Execution timeout control
 
-- **Floating ball**
-  - Runtime status indicator
-  - Edge snapping and auto-collapse
-  - Quick rerun for recent scripts
-  - Drag to stop in the bottom stop zone
-
 - **Package manager**
   - Install / uninstall Python packages
   - Optional version pinning
@@ -66,7 +60,8 @@ Python Runner is a Flutter-based Android app for running Python scripts with scr
   - Global UA / header / cookie / timeout / redirect overrides
 
 - **Logs and diagnostics**
-  - System log viewer, export, and clear
+  - App logs retain the latest 500 entries across restarts and support viewing, export, and clear
+  - Cleared app logs cannot be recovered
   - Crash log and script error log capture
   - Diagnostic export
 
@@ -132,6 +127,8 @@ It supports:
 - JSON tree viewer
 - Request override configuration
 - Response body limits: images up to 30 MB, text / JSON defaults to 10 MB, audio / video records metadata only
+
+Request overrides apply to scripts started after the configuration is saved. They support global User-Agent, Cookie, JSON Headers, a default timeout, redirect handling, and the configured network-debug proxy. Domain rules accept `example.com` and `*.example.com`; rules are evaluated in list order and the first match overrides global fields with the same name. Configurations can be copied for export or pasted for import.
 
 ## Project structure
 

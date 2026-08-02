@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import '../models/script_group.dart';
 import '../models/script_project_file.dart';
+import '../services/app_logger.dart';
 import '../services/script_project_service.dart';
 
 class ScriptProjectProvider extends ChangeNotifier {
   final ScriptProjectService _service;
+  final AppLogger _logger = AppLogger.instance;
 
   ScriptGroup _group;
   List<ScriptProjectFile> _files = [];
@@ -34,6 +36,15 @@ class ScriptProjectProvider extends ChangeNotifier {
   bool get dirty => _dirty;
   String? get error => _error;
 
+  void _recordFailure(String operation, Object error, StackTrace stackTrace) {
+    _error = error.toString();
+    _logger.error(
+      '$operation failed: $error',
+      source: 'ScriptProjectProvider',
+      detail: stackTrace.toString(),
+    );
+  }
+
   void updateGroup(ScriptGroup group) {
     _group = group;
     notifyListeners();
@@ -57,8 +68,8 @@ class ScriptProjectProvider extends ChangeNotifier {
         _content = '';
         _dirty = false;
       }
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('加载项目文件', e, stackTrace);
     } finally {
       _loading = false;
       notifyListeners();
@@ -66,22 +77,35 @@ class ScriptProjectProvider extends ChangeNotifier {
   }
 
   Future<void> selectFile(String path) async {
-    final file = _files.firstWhere(
-      (item) => item.path == path,
-      orElse: () => throw StateError('文件不存在: $path'),
-    );
-    if (file.isDirectory) return;
-    _loading = true;
-    _error = null;
-    notifyListeners();
+    final previousSelectedPath = _selectedPath;
+    final previousContent = _content;
+    final previousDirty = _dirty;
+    var loadingStarted = false;
     try {
-      _content = await _service.readProjectFile(_group, path);
+      final file = _files.firstWhere(
+        (item) => item.path == path,
+        orElse: () => throw StateError('文件不存在: $path'),
+      );
+      if (file.isDirectory) return;
+
+      _loading = true;
+      loadingStarted = true;
+      _error = null;
+      notifyListeners();
+
+      final nextContent = await _service.readProjectFile(_group, path);
+      _content = nextContent;
       _selectedPath = path;
       _dirty = false;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _selectedPath = previousSelectedPath;
+      _content = previousContent;
+      _dirty = previousDirty;
+      _recordFailure('读取项目文件', e, stackTrace);
     } finally {
-      _loading = false;
+      if (loadingStarted) {
+        _loading = false;
+      }
       notifyListeners();
     }
   }
@@ -106,8 +130,8 @@ class ScriptProjectProvider extends ChangeNotifier {
         await load();
       }
       return success;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('保存项目文件', e, stackTrace);
       return false;
     } finally {
       _saving = false;
@@ -124,8 +148,8 @@ class ScriptProjectProvider extends ChangeNotifier {
         await selectFile(path);
       }
       return success;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('创建项目文件', e, stackTrace);
       notifyListeners();
       return false;
     }
@@ -137,8 +161,8 @@ class ScriptProjectProvider extends ChangeNotifier {
       final success = await _service.createProjectDirectory(_group, path);
       if (success) await load();
       return success;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('创建项目目录', e, stackTrace);
       notifyListeners();
       return false;
     }
@@ -158,8 +182,8 @@ class ScriptProjectProvider extends ChangeNotifier {
         await load();
       }
       return success;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('删除项目条目', e, stackTrace);
       notifyListeners();
       return false;
     }
@@ -177,8 +201,8 @@ class ScriptProjectProvider extends ChangeNotifier {
         await load();
       }
       return success;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('重命名项目条目', e, stackTrace);
       notifyListeners();
       return false;
     }
@@ -190,8 +214,8 @@ class ScriptProjectProvider extends ChangeNotifier {
       final imported = await _service.importZip(_group, uri);
       await load();
       return imported;
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('导入项目压缩包', e, stackTrace);
       notifyListeners();
       return const [];
     }
@@ -201,8 +225,8 @@ class ScriptProjectProvider extends ChangeNotifier {
     _error = null;
     try {
       return await _service.exportZip(_group, destDir: destDir);
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, stackTrace) {
+      _recordFailure('导出项目压缩包', e, stackTrace);
       notifyListeners();
       return '';
     }

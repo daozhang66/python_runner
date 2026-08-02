@@ -663,23 +663,26 @@ def _hook_urllib_request():
     global _HOOKED_URLLIB_REQUEST
     try:
         import urllib.request
+        import socket
     except ImportError:
         return
 
-    if _HOOKED_URLLIB_REQUEST or getattr(urllib.request.urlopen, '_pyrunner_hooked', False):
+    if (_HOOKED_URLLIB_REQUEST or
+            getattr(urllib.request.OpenerDirector.open, '_pyrunner_hooked', False)):
         return
     _HOOKED_URLLIB_REQUEST = True
 
-    _original_urlopen = urllib.request.urlopen
+    _original_open = urllib.request.OpenerDirector.open
 
-    def _patched_urlopen(url, data=None, timeout=None, **kwargs):
+    def _patched_open(self, fullurl, data=None,
+                      timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
         record_id = str(uuid.uuid4())[:8]
         start_time = time.time()
         ts_ms = int(start_time * 1000)
 
         # Determine URL string and headers from Request object or string
-        if isinstance(url, urllib.request.Request):
-            req_obj = url
+        if isinstance(fullurl, urllib.request.Request):
+            req_obj = fullurl
             str_url = req_obj.full_url
             method = req_obj.get_method()
             req_headers = _safe_headers_dict(dict(req_obj.header_items()))
@@ -694,7 +697,7 @@ def _hook_urllib_request():
                     req_obj.add_header(k, v)
                 req_headers = _safe_headers_dict(overridden)
         else:
-            str_url = str(url)
+            str_url = str(fullurl)
             method = 'POST' if data else 'GET'
             req_headers = {}
             if _CFG['override_enabled']:
@@ -703,9 +706,10 @@ def _hook_urllib_request():
                 for k, v in overridden.items():
                     req_obj.add_header(k, v)
                 req_headers = _safe_headers_dict(overridden)
-                url = req_obj
+                fullurl = req_obj
 
-        if timeout is None and _CFG['override_enabled'] and _CFG['default_timeout']:
+        if (timeout is None or timeout is socket._GLOBAL_DEFAULT_TIMEOUT) and \
+                _CFG['override_enabled'] and _CFG['default_timeout']:
             timeout = _CFG['default_timeout']
 
         record = {
@@ -721,10 +725,7 @@ def _hook_urllib_request():
         }
 
         try:
-            if timeout is not None:
-                response = _original_urlopen(url, data=data, timeout=timeout, **kwargs)
-            else:
-                response = _original_urlopen(url, data=data, **kwargs)
+            response = _original_open(self, fullurl, data=data, timeout=timeout)
             elapsed_ms = int((time.time() - start_time) * 1000)
             record['status_code'] = response.getcode()
             record['response_headers'] = _safe_headers_dict(dict(response.headers))
@@ -747,8 +748,8 @@ def _hook_urllib_request():
             _send_record(record)
             raise
 
-    _patched_urlopen._pyrunner_hooked = True
-    urllib.request.urlopen = _patched_urlopen
+    _patched_open._pyrunner_hooked = True
+    urllib.request.OpenerDirector.open = _patched_open
 
 
 class _UrllibResponseWrapper:

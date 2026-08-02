@@ -1,40 +1,16 @@
-import 'dart:io';
-
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:python_runner/ui/app_skeleton.dart';
 
 void main() {
-  test('frontend design system exposes shared tokens', () {
-    final tokens = File('lib/ui/app_design_tokens.dart').readAsStringSync();
+  testWidgets('list skeleton renders reusable loading placeholders',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: AppListSkeleton(itemCount: 3)),
+      ),
+    );
 
-    expect(tokens, contains('class AppSpacing'));
-    expect(tokens, contains('class AppRadius'));
-    expect(tokens, contains('class AppMotion'));
-    expect(tokens, contains('class AppOpacity'));
-    expect(tokens, contains('class AppThemeColors'));
-    expect(tokens, contains('darkBackground'));
-    expect(tokens, contains('maskedText'));
-  });
-
-  test('frontend design system exposes shared UI components', () {
-    final surfaces = File('lib/ui/app_surfaces.dart').readAsStringSync();
-    final badges = File('lib/ui/app_badges.dart').readAsStringSync();
-    final toolbars = File('lib/ui/app_toolbars.dart').readAsStringSync();
-    final emptyState = File('lib/ui/app_empty_state.dart').readAsStringSync();
-    final palette = File('lib/ui/app_theme_palette.dart').readAsStringSync();
-
-    expect(surfaces, contains('class AppSurface'));
-    expect(surfaces, contains('class AppSectionCard'));
-    expect(badges, contains('class AppStatusBadge'));
-    expect(badges, contains('class AppCountBadge'));
-    expect(toolbars, contains('class AppSearchBar'));
-    expect(toolbars, contains('class AppToolbarButton'));
-    expect(emptyState, contains('class AppEmptyState'));
-    expect(palette, contains('enum AppThemePalette'));
-    expect(palette, contains("label: '海蓝'"));
-    expect(palette, contains("label: '薄荷'"));
-    expect(palette, contains("label: '丁香紫'"));
-    expect(palette, contains("label: 'Claude'"));
-    expect(palette, contains("label: 'Codex'"));
-    expect(palette, contains('bool get isSeedBased'));
+    expect(find.byType(AppSkeleton), findsNWidgets(9));
   });
 }

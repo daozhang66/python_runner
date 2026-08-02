@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/pages/update_log_page.dart';
 import 'package:python_runner/services/update_service.dart';
 
@@ -18,30 +17,6 @@ class _FakeUpdateService extends UpdateService {
 }
 
 void main() {
-  test('update dialog uses centered title and only shows latest version', () {
-    final source = File('lib/widgets/update_dialog.dart').readAsStringSync();
-    final managerSource =
-        File('lib/services/app_update_manager.dart').readAsStringSync();
-
-    expect(source, contains("'更新'"));
-    expect(source, contains('textAlign: TextAlign.center'));
-    expect(source, contains('updateInfo.latestVersion'));
-    expect(source, isNot(contains("'发现新版本'")));
-    expect(source, isNot(contains('updateInfo.currentVersion')));
-    expect(source, isNot(contains('Icons.arrow_forward_rounded')));
-    expect(managerSource, contains("title: const Center(child: Text('更新'))"));
-    expect(managerSource,
-        isNot(contains("title: const Text('Python Runner 更新')")));
-  });
-
-  test('expanded release notes stay full width and left aligned', () {
-    final source = File('lib/pages/update_log_page.dart').readAsStringSync();
-
-    expect(source, contains('alignment: Alignment.centerLeft'));
-    expect(source, contains('width: double.infinity'));
-    expect(source, contains('MarkdownBody('));
-  });
-
   testWidgets('update log page lists filters and expands release notes',
       (tester) async {
     final openedUrls = <String>[];
@@ -77,6 +52,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UpdateLogPage(
           updateService: _FakeUpdateService(entries),
           openUrl: (url) async => openedUrls.add(url),

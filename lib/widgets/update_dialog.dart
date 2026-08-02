@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/app_design_tokens.dart';
 
 class UpdateDialog extends StatelessWidget {
   final AppUpdateInfo updateInfo;
@@ -22,22 +24,24 @@ class UpdateDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final colorScheme = theme.colorScheme;
     final size = MediaQuery.of(context).size;
     final maxContentHeight = size.height * 0.5;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.circular(AppSpacing.xl)),
       elevation: 0,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppThemeColors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: AppRadius.circular(AppSpacing.xl),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: colorScheme.shadow.withValues(alpha: 0.15),
               blurRadius: 25,
               offset: const Offset(0, 10),
             ),
@@ -68,11 +72,11 @@ class UpdateDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        '更新',
+                        l10n.update,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
-                          fontSize: 20,
+                          fontSize: AppTextSize.headline,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -97,7 +101,7 @@ class UpdateDialog extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          _formatDate(updateInfo.publishedAt!),
+                          _formatDate(l10n, updateInfo.publishedAt!),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -122,7 +126,7 @@ class UpdateDialog extends StatelessWidget {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            '更新日志',
+                            l10n.releaseNotes,
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: colorScheme.primary,
                               fontWeight: FontWeight.w600,
@@ -152,7 +156,7 @@ class UpdateDialog extends StatelessWidget {
                             p: theme.textTheme.bodyMedium?.copyWith(
                               color: colorScheme.onSurface,
                               height: 1.6,
-                              fontSize: 14,
+                              fontSize: AppTextSize.bodyLarge,
                             ),
                             h1: theme.textTheme.titleLarge?.copyWith(
                               color: colorScheme.onSurface,
@@ -201,12 +205,39 @@ class UpdateDialog extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '大小: ${_formatFileSize(updateInfo.apkAsset!.size)}',
+                          l10n.fileSize(
+                              _formatFileSize(updateInfo.apkAsset!.size)),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
+                    ),
+                  ),
+
+                if (updateInfo.apkAsset?.checksumError case final error?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.checksumUnavailable,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.checksumUnavailableDetail(error),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -227,10 +258,10 @@ class UpdateDialog extends StatelessWidget {
                         ),
                         icon: const Icon(Icons.download_rounded, size: 20),
                         label: Text(
-                          '立即更新',
+                          l10n.updateNow,
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 15,
+                            fontSize: AppTextSize.toolbarTitle,
                           ),
                         ),
                       ),
@@ -254,9 +285,10 @@ class UpdateDialog extends StatelessWidget {
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              child: const Text(
-                                '不再提示',
-                                style: TextStyle(fontSize: 13),
+                              child: Text(
+                                l10n.dontRemind,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.bodyEmphasis),
                               ),
                             ),
 
@@ -274,9 +306,10 @@ class UpdateDialog extends StatelessWidget {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               icon: Icon(Icons.open_in_new, size: 14),
-                              label: const Text(
-                                '查看详情',
-                                style: TextStyle(fontSize: 13),
+                              label: Text(
+                                l10n.viewDetails,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.bodyEmphasis),
                               ),
                             ),
 
@@ -294,9 +327,10 @@ class UpdateDialog extends StatelessWidget {
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            child: const Text(
-                              '稍后提醒',
-                              style: TextStyle(fontSize: 13),
+                            child: Text(
+                              l10n.remindLater,
+                              style: const TextStyle(
+                                  fontSize: AppTextSize.bodyEmphasis),
                             ),
                           ),
                         ],
@@ -328,7 +362,7 @@ class UpdateDialog extends StatelessWidget {
       child: Text(
         'v$version',
         style: TextStyle(
-          fontSize: 12,
+          fontSize: AppTextSize.body,
           fontWeight: FontWeight.w700,
           color: colorScheme.primary,
         ),
@@ -347,16 +381,16 @@ class UpdateDialog extends StatelessWidget {
   }
 
   /// 格式化日期
-  String _formatDate(DateTime date) {
+  String _formatDate(AppLocalizations l10n, DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
 
     if (diff.inDays == 0) {
-      return '今天';
+      return l10n.today;
     } else if (diff.inDays == 1) {
-      return '昨天';
+      return l10n.yesterday;
     } else if (diff.inDays < 7) {
-      return '${diff.inDays} 天前';
+      return l10n.daysAgo(diff.inDays);
     } else {
       return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     }

@@ -89,6 +89,4 @@ abstract class FilePickerHostApi {
 @HostApi()
 abstract class AppHostApi {
   NativeAppInfo getAppInfo();
-  bool checkOverlayPermission();
-  String? consumePendingRunScript();
 }

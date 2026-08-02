@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'app_logger.dart';
 
 final RegExp _sha256Pattern = RegExp(r'\b[a-fA-F0-9]{64}\b');
 
@@ -16,6 +19,7 @@ class ReleaseAssetInfo {
   final String contentType;
   final String? sha256;
   final String? checksumDownloadUrl;
+  final String? checksumError;
 
   const ReleaseAssetInfo({
     required this.name,
@@ -24,6 +28,7 @@ class ReleaseAssetInfo {
     required this.contentType,
     this.sha256,
     this.checksumDownloadUrl,
+    this.checksumError,
   });
 
   factory ReleaseAssetInfo.fromJson(Map<String, dynamic> json) {
@@ -43,6 +48,7 @@ class ReleaseAssetInfo {
   ReleaseAssetInfo copyWith({
     String? sha256,
     String? checksumDownloadUrl,
+    String? checksumError,
   }) {
     return ReleaseAssetInfo(
       name: name,
@@ -51,6 +57,7 @@ class ReleaseAssetInfo {
       contentType: contentType,
       sha256: sha256 ?? this.sha256,
       checksumDownloadUrl: checksumDownloadUrl ?? this.checksumDownloadUrl,
+      checksumError: checksumError ?? this.checksumError,
     );
   }
 }
@@ -149,14 +156,31 @@ class UpdateService {
   static const String _owner = 'daozhang66';
   static const String _repo = 'python_runner';
   static const String _apiVersion = '2022-11-28';
+  static const int _maxSuccessResponseBytes = 1024 * 1024;
+  static const int _maxErrorResponseBytes = 64 * 1024;
+
+  UpdateService({
+    HttpClient Function()? clientFactory,
+    Uri? apiBaseUri,
+  })  : _clientFactory = clientFactory ?? HttpClient.new,
+        _apiBaseUri = apiBaseUri ?? Uri.https('api.github.com', '/');
+
+  final HttpClient Function() _clientFactory;
+  final Uri _apiBaseUri;
+
+  Uri _apiUri(String path, [Map<String, String>? queryParameters]) =>
+      _apiBaseUri.replace(
+        path: path,
+        queryParameters: queryParameters,
+      );
 
   Future<AppUpdateInfo> fetchLatestRelease({
     required String currentVersion,
   }) async {
-    final client = HttpClient();
+    final client = _clientFactory();
     try {
       final request = await client.getUrl(
-        Uri.https('api.github.com', '/repos/$_owner/$_repo/releases/latest'),
+        _apiUri('/repos/$_owner/$_repo/releases/latest'),
       );
       request.headers
           .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
@@ -165,8 +189,11 @@ class UpdateService {
       request.headers.set('X-GitHub-Api-Version', _apiVersion);
 
       final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
       if (response.statusCode != HttpStatus.ok) {
+        final body = await _readResponseBody(
+          response,
+          maxBytes: _maxErrorResponseBytes,
+        );
         final apiMessage = extractApiErrorMessage(body);
         throw HttpException(
           apiMessage == null
@@ -175,6 +202,10 @@ class UpdateService {
           uri: request.uri,
         );
       }
+      final body = await _readResponseBody(
+        response,
+        maxBytes: _maxSuccessResponseBytes,
+      );
 
       final updateInfo = parseLatestReleaseResponse(
         body: body,
@@ -210,9 +241,16 @@ class UpdateService {
         currentVersion: currentVersion,
       );
       return updateInfo.copyWith(apkAsset: asset.copyWith(sha256: checksum));
-    } catch (_) {
-      // Keep the update visible but leave sha256 empty so auto-install is blocked.
-      return updateInfo;
+    } catch (error, stackTrace) {
+      AppLogger.instance.warn(
+        'Checksum retrieval failed: $error',
+        source: 'UpdateService',
+        detail: stackTrace.toString(),
+      );
+      // Keep the update visible but leave sha256 empty so auto-install remains blocked.
+      return updateInfo.copyWith(
+        apkAsset: asset.copyWith(checksumError: error.toString()),
+      );
     }
   }
 
@@ -228,21 +266,19 @@ class UpdateService {
         .set(HttpHeaders.userAgentHeader, 'python_runner/$currentVersion');
 
     final response = await request.close();
-    final bytes = <int>[];
-    await for (final chunk in response) {
-      bytes.addAll(chunk);
-      if (bytes.length > 64 * 1024) {
-        throw const FormatException('Checksum asset is too large');
-      }
-    }
     if (response.statusCode != HttpStatus.ok) {
+      await _readResponseBody(response, maxBytes: _maxErrorResponseBytes);
       throw HttpException(
         'Checksum download failed: ${response.statusCode}',
         uri: uri,
       );
     }
+    final body = await _readResponseBody(
+      response,
+      maxBytes: _maxErrorResponseBytes,
+    );
     final checksum = extractSha256Checksum(
-      utf8.decode(bytes, allowMalformed: true),
+      body,
     );
     if (checksum == null) {
       throw const FormatException('Checksum asset does not contain SHA-256');
@@ -252,11 +288,10 @@ class UpdateService {
 
   Future<List<ReleaseLogEntry>> fetchReleaseLogs({int limit = 20}) async {
     final normalizedLimit = limit.clamp(1, 100).toInt();
-    final client = HttpClient();
+    final client = _clientFactory();
     try {
       final request = await client.getUrl(
-        Uri.https(
-          'api.github.com',
+        _apiUri(
           '/repos/$_owner/$_repo/releases',
           {'per_page': '$normalizedLimit'},
         ),
@@ -267,8 +302,11 @@ class UpdateService {
       request.headers.set('X-GitHub-Api-Version', _apiVersion);
 
       final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
       if (response.statusCode != HttpStatus.ok) {
+        final body = await _readResponseBody(
+          response,
+          maxBytes: _maxErrorResponseBytes,
+        );
         final apiMessage = extractApiErrorMessage(body);
         throw HttpException(
           apiMessage == null
@@ -277,6 +315,10 @@ class UpdateService {
           uri: request.uri,
         );
       }
+      final body = await _readResponseBody(
+        response,
+        maxBytes: _maxSuccessResponseBytes,
+      );
 
       return parseReleaseLogsResponse(
         body: body,
@@ -285,6 +327,20 @@ class UpdateService {
     } finally {
       client.close(force: true);
     }
+  }
+
+  static Future<String> _readResponseBody(
+    HttpClientResponse response, {
+    required int maxBytes,
+  }) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      if (bytes.length + chunk.length > maxBytes) {
+        throw HttpException('Update response exceeds $maxBytes bytes');
+      }
+      bytes.add(chunk);
+    }
+    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
   }
 
   static AppUpdateInfo parseLatestReleaseResponse({

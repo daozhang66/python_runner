@@ -36,9 +36,6 @@ object NativeBridgeContract {
         "installLinuxLikeRequirements" to listOf("requirementsPath", "displayName"),
         "uninstallLinuxLikePackage" to listOf("packageName"),
         "openUrl" to listOf("url"),
-        "showFloatingBall" to listOf("scriptName"),
-        "updateFloatingBallStatus" to listOf("status"),
-        "pushFloatingBallOutput" to listOf("output"),
         "downloadAndInstallApk" to listOf("url", "fileName", "sha256"),
         "startApkDownload" to listOf("url", "fileName", "sha256"),
         "cancelDownload" to listOf("taskId"),
@@ -72,8 +69,6 @@ object NativeBridgeContract {
         "saveProjectFile.content",
         "sendStdin.input",
         "sendLinuxLikeStdin.input",
-        "showFloatingBall.scriptName",
-        "pushFloatingBallOutput.output",
     )
 
     fun validate(method: String, arguments: Any?): String? {

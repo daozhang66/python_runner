@@ -37,9 +37,6 @@ class NativeBridgeContract {
     'installLinuxLikeRequirements': ['requirementsPath', 'displayName'],
     'uninstallLinuxLikePackage': ['packageName'],
     'openUrl': ['url'],
-    'showFloatingBall': ['scriptName'],
-    'updateFloatingBallStatus': ['status'],
-    'pushFloatingBallOutput': ['output'],
     'downloadAndInstallApk': ['url', 'fileName', 'sha256'],
     'startApkDownload': ['url', 'fileName', 'sha256'],
     'cancelDownload': ['taskId'],
@@ -78,8 +75,6 @@ class NativeBridgeContract {
     'saveProjectFile.content',
     'sendStdin.input',
     'sendLinuxLikeStdin.input',
-    'showFloatingBall.scriptName',
-    'pushFloatingBallOutput.output',
   };
 
   static const Set<String> knownMethods = {
@@ -132,13 +127,6 @@ class NativeBridgeContract {
     'uninstallLinuxLikePackage',
     'listLinuxLikePackages',
     'moveToBackground',
-    'checkOverlayPermission',
-    'requestOverlayPermission',
-    'showFloatingBall',
-    'hideFloatingBall',
-    'updateFloatingBallStatus',
-    'pushFloatingBallOutput',
-    'consumePendingRunScript',
   };
 
   static void validate(String method, Map<String, dynamic> arguments) {

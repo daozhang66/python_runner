@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_design_tokens.dart';
+
 class ProgressIndicatorWidget extends StatefulWidget {
   final String label;
   final List<String> logs;
@@ -77,17 +79,19 @@ class _ProgressIndicatorWidgetState extends State<ProgressIndicatorWidget>
           Container(
             constraints: const BoxConstraints(maxHeight: 120),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0D1117) : const Color(0xFF1E1E1E),
+              color: isDark
+                  ? AppThemeColors.terminalDarkCanvas
+                  : AppThemeColors.consoleLightCanvas,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.15),
+                    ? AppThemeColors.terminalDarkText.withValues(alpha: 0.08)
+                    : colors.onSurface.withValues(alpha: 0.15),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
+                  color: colors.shadow.withValues(alpha: 0.2),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
@@ -101,24 +105,25 @@ class _ProgressIndicatorWidgetState extends State<ProgressIndicatorWidget>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   color: isDark
-                      ? const Color(0xFF161B22)
-                      : const Color(0xFF2D2D2D),
+                      ? AppThemeColors.terminalDarkSurface
+                      : AppThemeColors.consoleLightSurface,
                   child: Row(
                     children: [
-                      _buildDot(const Color(0xFFFF5F56)),
+                      _buildDot(AppThemeColors.consoleWindowClose),
                       const SizedBox(width: 6),
-                      _buildDot(const Color(0xFFFFBD2E)),
+                      _buildDot(AppThemeColors.consoleWindowMinimize),
                       const SizedBox(width: 6),
-                      _buildDot(const Color(0xFF27C93F)),
+                      _buildDot(AppThemeColors.consoleWindowMaximize),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           'CONSOLE OUTPUT',
                           style: TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 10,
+                            fontSize: AppTextSize.compact,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white54 : Colors.white60,
+                            color: colors.onSurface
+                                .withValues(alpha: isDark ? 0.54 : 0.60),
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -136,11 +141,11 @@ class _ProgressIndicatorWidgetState extends State<ProgressIndicatorWidget>
                         padding: const EdgeInsets.symmetric(vertical: 2.0),
                         child: Text(
                           widget.logs[index],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 12,
-                            color: Color(0xFF39FF14),
-                            height: 1.3,
+                            fontSize: AppTextSize.body,
+                            color: AppThemeColors.terminalLog(context),
+                            height: AppControlMetrics.terminalLogLineHeight,
                           ),
                         ),
                       );

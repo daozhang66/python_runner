@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -163,6 +164,12 @@ class HttpRecord {
   int get storedBodyBytes =>
       (requestBody?.length ?? 0) + capturedResponseBodyBytes;
 
+  /// Exact UTF-8 cost of this record in the V2 JSONL active log.
+  ///
+  /// Records are immutable once admitted to the store; caching avoids encoding
+  /// the whole active window again whenever a new capture is appended.
+  late final int storedJsonBytes = utf8.encode(jsonEncode(toJson())).length + 1;
+
   /// Parse from JSON map sent by Python hook.
   factory HttpRecord.fromJson(Map<String, dynamic> json) {
     Map<String, String> parseHeaders(dynamic h) {
@@ -282,15 +289,33 @@ class HttpInspectorStore extends ChangeNotifier {
         _persistDebounce = persistDebounce,
         _persistMaxDelay = persistMaxDelay,
         _throwOnStorageError = throwOnStorageError,
-        _storageWriter = storageWriter ?? _defaultStorageWriter;
+        _storageWriter = storageWriter ?? _defaultStorageWriter,
+        _usesStorageWriterOverride = storageWriter != null;
 
   static final HttpInspectorStore instance = HttpInspectorStore._();
 
+  /// Maximum number of recent records available to the inspector UI.
   static const int maxRecords = 5000;
-  static const int maxCapturedBodyBytes = 24 * 1024 * 1024;
+
+  /// Maximum total persisted size of the active JSONL window.
+  static const int maxCapturedBodyBytes = 8 * 1024 * 1024;
+
+  /// Hard limit for all newly captured data in one persisted record, including
+  /// headers, URL and errors as well as request/response bodies.
+  static const int maxBodyBytesPerNewRecord = 256 * 1024;
+
+  static const int _maxHeadersPerNewRecord = 64;
+  static const int _maxHeaderNameBytes = 256;
+  static const int _maxHeaderValueBytes = 1024;
+  static const int _maxUrlBytes = 8192;
+  static const int _maxErrorBytes = 8192;
+  static const int _maxLibraryBytes = 128;
   static const Duration _defaultPersistDebounce = Duration(milliseconds: 250);
   static const Duration _defaultPersistMaxDelay = Duration(seconds: 2);
-  static const String _storageFileName = 'http_inspector_records.json';
+  static const String _storageFileName = 'http_inspector_records.v2.jsonl';
+  static const String _legacyStorageFileName = 'http_inspector_records.json';
+  static const String _legacyArchiveFileName =
+      'http_inspector_records.legacy.json';
   static const String _hideNoiseMethodsPrefsKey =
       'http_inspector_hide_noise_methods';
   static const Set<String> noiseMethods = {'DNS', 'CONNECT', 'PROCESS'};
@@ -318,6 +343,7 @@ class HttpInspectorStore extends ChangeNotifier {
   final Duration _persistMaxDelay;
   final bool _throwOnStorageError;
   final HttpInspectorStorageWriter _storageWriter;
+  final bool _usesStorageWriterOverride;
   String _filterDomain = '';
   String _filterMethod = '';
   int? _filterStatus; // null = all, 0 = errors, 200 = 2xx, etc.
@@ -336,8 +362,16 @@ class HttpInspectorStore extends ChangeNotifier {
   int _persistedRevision = 0;
   bool _persistInFlight = false;
   bool _needsFollowUpPersist = false;
+  int? _failedPersistRevision;
+  final List<_PendingAppend> _pendingAppends = [];
+  int _compactionRequiredRevision = 0;
   bool _loaded = false;
   Object? _lastStorageError;
+  List<HttpRecord>? _filteredRecordsCache;
+  Map<String, dynamic>? _visibleStatsCache;
+  List<MapEntry<String, int>>? _domainStatsCache;
+  int? _hiddenNoiseCountCache;
+  Map<String, dynamic>? _statsCache;
 
   List<HttpRecord> get records => List.unmodifiable(_records);
   int get count => _records.length;
@@ -348,20 +382,23 @@ class HttpInspectorStore extends ChangeNotifier {
   bool get hideNoiseMethods => _hideNoiseMethods;
   bool get isLoaded => _loaded;
   Object? get lastStorageError => _lastStorageError;
-  Map<String, dynamic> get stats => {
+  Map<String, dynamic> get stats => _statsCache ??= Map.unmodifiable({
         'total': _totalCount,
         'success': _successCount,
         'error': _errorCount,
         'avgMs': _durationCount > 0
             ? (_totalDurationMs / _durationCount).round()
             : null,
-      };
-  Map<String, dynamic> get visibleStats => _statsFor(filteredRecords);
-  int get hiddenNoiseCount =>
+      });
+  Map<String, dynamic> get visibleStats =>
+      _visibleStatsCache ??= Map.unmodifiable(_statsFor(filteredRecords));
+  int get hiddenNoiseCount => _hiddenNoiseCountCache ??=
       _hideNoiseMethods ? _records.where(_isNoiseRecord).length : 0;
 
   /// Get filtered records (newest first).
   List<HttpRecord> get filteredRecords {
+    final cached = _filteredRecordsCache;
+    if (cached != null) return cached;
     var list = _recordsForCurrentNoisePreference(newestFirst: true);
     if (_filterDomain.isNotEmpty) {
       final d = _filterDomain.toLowerCase();
@@ -384,11 +421,21 @@ class HttpInspectorStore extends ChangeNotifier {
             .toList();
       }
     }
-    return list;
+    return _filteredRecordsCache = List.unmodifiable(list);
+  }
+
+  void _invalidateDerivedCaches({bool statsChanged = false}) {
+    _filteredRecordsCache = null;
+    _visibleStatsCache = null;
+    _domainStatsCache = null;
+    _hiddenNoiseCountCache = null;
+    if (statsChanged) _statsCache = null;
   }
 
   void setFilterDomain(String v) {
+    if (_filterDomain == v) return;
     _filterDomain = v;
+    _invalidateDerivedCaches();
     notifyListeners();
   }
 
@@ -398,18 +445,22 @@ class HttpInspectorStore extends ChangeNotifier {
       _hideNoiseMethods = false;
       unawaited(_saveHideNoiseMethodsPreference(false));
     }
+    _invalidateDerivedCaches();
     notifyListeners();
   }
 
   void setHideNoiseMethods(bool value) {
     if (_hideNoiseMethods == value) return;
     _hideNoiseMethods = value;
+    _invalidateDerivedCaches();
     notifyListeners();
     unawaited(_saveHideNoiseMethodsPreference(value));
   }
 
   void setFilterStatus(int? v) {
+    if (_filterStatus == v) return;
     _filterStatus = v;
+    _invalidateDerivedCaches();
     notifyListeners();
   }
 
@@ -417,11 +468,14 @@ class HttpInspectorStore extends ChangeNotifier {
     _filterDomain = '';
     _filterMethod = '';
     _filterStatus = null;
+    _invalidateDerivedCaches();
     notifyListeners();
   }
 
   /// Get domain statistics: list of (domain, count) sorted by count desc.
   List<MapEntry<String, int>> get domainStats {
+    final cached = _domainStatsCache;
+    if (cached != null) return cached;
     final counts = <String, int>{};
     for (final r in _recordsForCurrentNoisePreference()) {
       final d = r.domain;
@@ -431,7 +485,7 @@ class HttpInspectorStore extends ChangeNotifier {
     }
     final entries = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return entries;
+    return _domainStatsCache = List.unmodifiable(entries);
   }
 
   Future<void> loadDisplayPreferences() {
@@ -482,6 +536,7 @@ class HttpInspectorStore extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _hideNoiseMethods = prefs.getBool(_hideNoiseMethodsPrefsKey) ?? true;
+      _invalidateDerivedCaches();
       notifyListeners();
     } catch (e) {
       debugPrint('HttpInspectorStore.loadDisplayPreferences error: $e');
@@ -501,13 +556,19 @@ class HttpInspectorStore extends ChangeNotifier {
   void addFromJson(Map<String, dynamic> json) {
     try {
       if (json['note'] != null) return;
-      final record = HttpRecord.fromJson(json);
+      final record = _normalizeNewRecord(HttpRecord.fromJson(json));
       if (record.url.isEmpty) return;
       _records.add(record);
       _addToStats(record);
-      _applyLimits();
+      final compact = _applyLimits();
+      _invalidateDerivedCaches(statsChanged: true);
+      final revision = _markDirtyAndSchedulePersist();
+      if (compact) {
+        _compactionRequiredRevision = revision;
+      } else {
+        _pendingAppends.add(_PendingAppend(record, revision));
+      }
       notifyListeners();
-      _markDirtyAndSchedulePersist();
     } catch (e) {
       debugPrint('HttpInspectorStore.addFromJson error: $e');
     }
@@ -517,8 +578,11 @@ class HttpInspectorStore extends ChangeNotifier {
   void clear() {
     _records.clear();
     _resetStats();
+    _invalidateDerivedCaches(statsChanged: true);
+    _pendingAppends.clear();
+    final revision = _markDirtyAndSchedulePersist();
+    _compactionRequiredRevision = revision;
     notifyListeners();
-    _markDirtyAndSchedulePersist();
   }
 
   Future<void> ensureLoaded() {
@@ -527,6 +591,9 @@ class HttpInspectorStore extends ChangeNotifier {
 
   Future<void> flush() async {
     _cancelPersistTimers();
+    // A caller explicitly flushing (lifecycle/export) is an intentional retry;
+    // automatic timers still do not spin on the same failed revision.
+    _failedPersistRevision = null;
     await _requestPersist();
   }
 
@@ -681,25 +748,22 @@ class HttpInspectorStore extends ChangeNotifier {
     }
 
     var totalBytes =
-        trimmed.fold<int>(0, (sum, record) => sum + record.storedBodyBytes);
+        trimmed.fold<int>(0, (sum, record) => sum + record.storedJsonBytes);
     while (totalBytes > maxCapturedBodyBytes && trimmed.length > 1) {
-      totalBytes -= trimmed.first.storedBodyBytes;
+      totalBytes -= trimmed.first.storedJsonBytes;
       trimmed.removeAt(0);
     }
     if (totalBytes > maxCapturedBodyBytes && trimmed.isNotEmpty) {
       final record = trimmed.last;
-      trimmed[trimmed.length - 1] = record.copyWith(
-        clearRequestBody: true,
-        clearResponseBodyPreview: true,
-        responseBodyBytes:
-            record.responseBodyBytes ?? record.capturedResponseBodyBytes,
-        responseBodyTruncated: true,
+      trimmed[trimmed.length - 1] = _normalizeRecordToBudget(
+        record,
+        maxBytes: maxCapturedBodyBytes,
       );
     }
     return trimmed;
   }
 
-  void _applyLimits() {
+  bool _applyLimits() {
     final trimmed = trimRecords(_records);
     var changed = trimmed.length != _records.length;
     if (!changed) {
@@ -710,7 +774,7 @@ class HttpInspectorStore extends ChangeNotifier {
         }
       }
     }
-    if (!changed) return;
+    if (!changed) return false;
     final removedCount = _records.length - trimmed.length;
     for (final removed in _records.take(removedCount)) {
       _removeFromStats(removed);
@@ -718,6 +782,8 @@ class HttpInspectorStore extends ChangeNotifier {
     _records
       ..clear()
       ..addAll(trimmed);
+    _invalidateDerivedCaches(statsChanged: true);
+    return true;
   }
 
   void _resetStats() {
@@ -726,6 +792,7 @@ class HttpInspectorStore extends ChangeNotifier {
     _errorCount = 0;
     _totalDurationMs = 0;
     _durationCount = 0;
+    _statsCache = null;
   }
 
   void _addToStats(HttpRecord record) {
@@ -736,6 +803,7 @@ class HttpInspectorStore extends ChangeNotifier {
       _totalDurationMs += record.durationMs!;
       _durationCount++;
     }
+    _statsCache = null;
   }
 
   void _removeFromStats(HttpRecord record) {
@@ -746,6 +814,7 @@ class HttpInspectorStore extends ChangeNotifier {
       _totalDurationMs -= record.durationMs!;
       _durationCount--;
     }
+    _statsCache = null;
   }
 
   void _recomputeStats() {
@@ -753,11 +822,14 @@ class HttpInspectorStore extends ChangeNotifier {
     for (final record in _records) {
       _addToStats(record);
     }
+    _invalidateDerivedCaches(statsChanged: true);
   }
 
-  void _markDirtyAndSchedulePersist() {
+  int _markDirtyAndSchedulePersist() {
     _dirtyRevision++;
+    _failedPersistRevision = null;
     _schedulePersist();
+    return _dirtyRevision;
   }
 
   void _schedulePersist() {
@@ -786,18 +858,13 @@ class HttpInspectorStore extends ChangeNotifier {
   Future<void> _loadFromDisk() async {
     try {
       final file = await _storageFile();
+      await _cleanTemporaryFiles(file);
       if (await file.exists()) {
-        final text = await file.readAsString();
-        final decoded = jsonDecode(text);
-        if (decoded is List) {
-          final loaded = decoded
-              .whereType<Map>()
-              .map((e) => HttpRecord.fromJson(Map<String, dynamic>.from(e)))
-              .where((record) => record.url.isNotEmpty)
-              .toList();
-          _records
-            ..clear()
-            ..addAll(trimRecords(loaded));
+        _replaceRecords(await _readJsonLines(file));
+      } else {
+        final legacy = await _legacyStorageFile();
+        if (await legacy.exists()) {
+          _replaceRecords(await _migrateLegacyFile(legacy, file));
         }
       }
       _lastStorageError = null;
@@ -813,6 +880,9 @@ class HttpInspectorStore extends ChangeNotifier {
   }
 
   Future<void> _requestPersist() {
+    if (_failedPersistRevision == _dirtyRevision) {
+      return Future<void>.value();
+    }
     if (_persistInFlight) {
       _needsFollowUpPersist = true;
     }
@@ -827,7 +897,7 @@ class HttpInspectorStore extends ChangeNotifier {
       if (_persistedRevision >= _dirtyRevision) {
         continue;
       }
-      final persisted = await _persistSnapshot();
+      final persisted = await _persistChanges();
       if (!persisted) {
         break;
       }
@@ -837,20 +907,39 @@ class HttpInspectorStore extends ChangeNotifier {
     } while (_needsFollowUpPersist);
   }
 
-  Future<bool> _persistSnapshot() async {
+  Future<bool> _persistChanges() async {
     final snapshotRevision = _dirtyRevision;
-    final snapshot =
-        _records.map((record) => record.toJson()).toList(growable: false);
+    final shouldCompact = _compactionRequiredRevision > _persistedRevision;
+    final snapshot = shouldCompact ? List<HttpRecord>.of(_records) : null;
+    final appends = shouldCompact
+        ? const <_PendingAppend>[]
+        : _pendingAppends
+            .where((pending) => pending.revision <= snapshotRevision)
+            .toList(growable: false);
     _persistInFlight = true;
     try {
       final file = await _storageFile();
       await file.parent.create(recursive: true);
-      await _storageWriter(file, jsonEncode(snapshot));
+      if (shouldCompact) {
+        await _compactStorage(file, snapshot!);
+      } else if (appends.isNotEmpty) {
+        await _writeLines(
+          file,
+          appends.map((pending) => _recordLine(pending.record)),
+          append: true,
+        );
+      }
       _persistedRevision = snapshotRevision;
+      _pendingAppends
+          .removeWhere((pending) => pending.revision <= snapshotRevision);
+      if (_compactionRequiredRevision <= snapshotRevision) {
+        _compactionRequiredRevision = 0;
+      }
       _lastStorageError = null;
       return true;
     } catch (e) {
       _lastStorageError = e;
+      _failedPersistRevision = snapshotRevision;
       debugPrint('HttpInspectorStore.persist error: $e');
       if (_throwOnStorageError) rethrow;
       return false;
@@ -864,10 +953,348 @@ class HttpInspectorStore extends ChangeNotifier {
     return File('${dir.path}${Platform.pathSeparator}$_storageFileName');
   }
 
+  Future<File> _legacyStorageFile() async {
+    final dir = await _supportDirectoryProvider();
+    return File('${dir.path}${Platform.pathSeparator}$_legacyStorageFileName');
+  }
+
+  Future<File> _legacyArchiveFile() async {
+    final dir = await _supportDirectoryProvider();
+    return File('${dir.path}${Platform.pathSeparator}$_legacyArchiveFileName');
+  }
+
+  Future<void> _cleanTemporaryFiles(File file) async {
+    for (final temporary in [
+      _temporaryStorageFile(file),
+      _writerTemporaryFile(file),
+    ]) {
+      if (await temporary.exists()) {
+        await temporary.delete();
+      }
+    }
+  }
+
+  Future<List<HttpRecord>> _readJsonLines(File file) async {
+    final loaded = <HttpRecord>[];
+    await for (final line in file
+        .openRead()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      if (line.trim().isEmpty) continue;
+      try {
+        final decoded = jsonDecode(line);
+        if (decoded is! Map) continue;
+        final record = _normalizeRecordToBudget(
+          HttpRecord.fromJson(Map<String, dynamic>.from(decoded)),
+        );
+        if (record.url.isNotEmpty) loaded.add(record);
+      } catch (e) {
+        // A process interruption can only corrupt a trailing JSONL line; keep
+        // all preceding records and make malformed external edits non-fatal.
+        debugPrint('HttpInspectorStore.skip malformed JSONL record: $e');
+      }
+    }
+    return trimRecords(loaded);
+  }
+
+  Future<List<HttpRecord>> _migrateLegacyFile(File legacy, File v2) async {
+    final records = ListQueue<HttpRecord>();
+    var totalBytes = 0;
+    await for (final object in _readLegacyJsonObjects(legacy)) {
+      try {
+        final record = _normalizeRecordToBudget(HttpRecord.fromJson(object));
+        if (record.url.isEmpty) continue;
+        records.addLast(record);
+        totalBytes += record.storedJsonBytes;
+        while (records.length > maxRecords ||
+            (totalBytes > maxCapturedBodyBytes && records.length > 1)) {
+          totalBytes -= records.removeFirst().storedJsonBytes;
+        }
+      } catch (e) {
+        debugPrint('HttpInspectorStore.skip malformed legacy record: $e');
+      }
+    }
+
+    final migrated = List<HttpRecord>.of(records);
+    await _compactStorage(v2, migrated);
+    final archive = await _legacyArchiveFile();
+    if (!await archive.exists()) {
+      try {
+        await legacy.rename(archive.path);
+      } catch (e) {
+        // V2 is already durable. Keep the untouched source if it cannot be
+        // renamed, rather than risking a destructive replacement.
+        debugPrint('HttpInspectorStore.archive legacy source error: $e');
+      }
+    }
+    return migrated;
+  }
+
+  Stream<Map<String, dynamic>> _readLegacyJsonObjects(File file) async* {
+    final buffer = StringBuffer();
+    var collecting = false;
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+
+    await for (final chunk in file.openRead().transform(utf8.decoder)) {
+      for (final codeUnit in chunk.codeUnits) {
+        final char = String.fromCharCode(codeUnit);
+        if (!collecting) {
+          if (char == '{') {
+            collecting = true;
+            depth = 1;
+            buffer.write(char);
+          }
+          continue;
+        }
+
+        buffer.write(char);
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (char == '\\') {
+            escaped = true;
+          } else if (char == '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (char == '"') {
+          inString = true;
+        } else if (char == '{') {
+          depth++;
+        } else if (char == '}') {
+          depth--;
+          if (depth == 0) {
+            final text = buffer.toString();
+            buffer.clear();
+            collecting = false;
+            try {
+              final decoded = jsonDecode(text);
+              if (decoded is Map) {
+                yield Map<String, dynamic>.from(decoded);
+              }
+            } catch (e) {
+              debugPrint('HttpInspectorStore.skip malformed legacy JSON: $e');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void _replaceRecords(List<HttpRecord> records) {
+    _records
+      ..clear()
+      ..addAll(records);
+    _pendingAppends.clear();
+    _compactionRequiredRevision = 0;
+  }
+
+  Future<void> _compactStorage(File file, List<HttpRecord> records) async {
+    final temporary = _temporaryStorageFile(file);
+    await file.parent.create(recursive: true);
+    if (await temporary.exists()) await temporary.delete();
+    try {
+      await _writeLines(
+        temporary,
+        records.map(_recordLine),
+        append: false,
+      );
+      await temporary.rename(file.path);
+    } finally {
+      if (await temporary.exists()) {
+        try {
+          await temporary.delete();
+        } catch (_) {
+          // Startup cleanup handles an interrupted replacement.
+        }
+      }
+    }
+  }
+
+  Future<void> _writeLines(
+    File file,
+    Iterable<String> lines, {
+    required bool append,
+  }) async {
+    if (!_usesStorageWriterOverride) {
+      final sink = file.openWrite(
+        mode: append ? FileMode.append : FileMode.write,
+      );
+      try {
+        for (final line in lines) {
+          sink.write(line);
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
+      }
+      return;
+    }
+
+    if (!append && await file.exists()) await file.delete();
+    for (final line in lines) {
+      final writerTemporary = _writerTemporaryFile(file);
+      if (await writerTemporary.exists()) await writerTemporary.delete();
+      try {
+        await _storageWriter(writerTemporary, line);
+        await file.writeAsString(
+          await writerTemporary.readAsString(),
+          mode: FileMode.append,
+          flush: true,
+        );
+      } finally {
+        if (await writerTemporary.exists()) await writerTemporary.delete();
+      }
+    }
+    if (!append && !await file.exists()) {
+      await file.writeAsString('', flush: true);
+    }
+  }
+
+  String _recordLine(HttpRecord record) => '${jsonEncode(record.toJson())}\n';
+
+  static File _temporaryStorageFile(File file) => File('${file.path}.tmp');
+
+  static File _writerTemporaryFile(File file) => File('${file.path}.writer');
+
+  static HttpRecord _normalizeNewRecord(HttpRecord record) =>
+      _normalizeRecordToBudget(record);
+
+  static HttpRecord _normalizeRecordToBudget(
+    HttpRecord record, {
+    int maxBytes = maxBodyBytesPerNewRecord,
+  }) {
+    final normalized = _normalizeMetadata(record);
+    final originalResponse = normalized.responseBodyPreview;
+    final originalResponseBytes =
+        normalized.responseBodyBytes ?? normalized.capturedResponseBodyBytes;
+    final base = normalized.copyWith(
+      clearRequestBody: true,
+      clearResponseBodyPreview: true,
+      responseBodyBytes: originalResponseBytes,
+      responseBodyTruncated: normalized.responseBodyTruncated ||
+          (originalResponse?.isNotEmpty ?? false),
+    );
+    var remaining = maxBytes - base.storedJsonBytes;
+    if (remaining <= 0) return base;
+
+    var request = _truncateUtf8(normalized.requestBody, remaining);
+    remaining -= request.bytes;
+    var response = _truncateUtf8(originalResponse, remaining);
+    var responseTruncated = normalized.responseBodyTruncated ||
+        response.truncated ||
+        (request.truncated && originalResponse != null);
+    var result = base.copyWith(
+      requestBody: request.value,
+      responseBodyPreview: response.value,
+      responseBodyBytes: originalResponseBytes,
+      responseBodyTruncated: responseTruncated,
+    );
+
+    // JSON escaping can make the serialized value larger than its raw UTF-8
+    // byte count. Tighten the body budget until the persisted line fits.
+    for (var attempt = 0;
+        result.storedJsonBytes > maxBytes && attempt < 8;
+        attempt++) {
+      final excess = result.storedJsonBytes - maxBytes;
+      if (response.value != null && response.value!.isNotEmpty) {
+        final target = (response.bytes - excess - 32).clamp(0, response.bytes);
+        response = _truncateUtf8(response.value, target);
+        responseTruncated = true;
+      } else if (request.value != null && request.value!.isNotEmpty) {
+        final target = (request.bytes - excess - 32).clamp(0, request.bytes);
+        request = _truncateUtf8(request.value, target);
+      } else {
+        break;
+      }
+      result = base.copyWith(
+        requestBody: request.value,
+        responseBodyPreview: response.value,
+        responseBodyBytes: originalResponseBytes,
+        responseBodyTruncated: responseTruncated,
+      );
+    }
+    return result;
+  }
+
+  static HttpRecord _normalizeMetadata(HttpRecord record) {
+    return HttpRecord(
+      id: _truncateUtf8(record.id, _maxUrlBytes).value ?? '',
+      timestamp: record.timestamp,
+      method: _truncateUtf8(record.method, _maxHeaderNameBytes).value ?? 'GET',
+      url: _truncateUtf8(record.url, _maxUrlBytes).value ?? '',
+      requestHeaders: _truncateHeaders(record.requestHeaders),
+      requestBody: record.requestBody,
+      usedProxy: record.usedProxy,
+      sslVerify: record.sslVerify,
+      library:
+          _truncateUtf8(record.library, _maxLibraryBytes).value ?? 'unknown',
+      statusCode: record.statusCode,
+      responseHeaders: record.responseHeaders == null
+          ? null
+          : _truncateHeaders(record.responseHeaders!),
+      responseBodyPreview: record.responseBodyPreview,
+      responseBodyBytes: record.responseBodyBytes,
+      responseBodyTruncated: record.responseBodyTruncated,
+      errorType: _truncateUtf8(record.errorType, _maxErrorBytes).value,
+      errorMessage: _truncateUtf8(record.errorMessage, _maxErrorBytes).value,
+      durationMs: record.durationMs,
+    );
+  }
+
+  static Map<String, String> _truncateHeaders(Map<String, String> headers) {
+    final result = <String, String>{};
+    for (final entry in headers.entries.take(_maxHeadersPerNewRecord)) {
+      final key = _truncateUtf8(entry.key, _maxHeaderNameBytes).value ?? '';
+      final value =
+          _truncateUtf8(entry.value, _maxHeaderValueBytes).value ?? '';
+      if (key.isNotEmpty) result[key] = value;
+    }
+    return result;
+  }
+
+  static _TruncatedText _truncateUtf8(String? value, int limit) {
+    if (value == null || value.isEmpty || limit <= 0) {
+      return _TruncatedText(
+          limit <= 0 && (value?.isNotEmpty ?? false) ? '' : value,
+          limit <= 0 && (value?.isNotEmpty ?? false),
+          0);
+    }
+    final encoded = utf8.encode(value);
+    if (encoded.length <= limit) {
+      return _TruncatedText(value, false, encoded.length);
+    }
+    const suffix = '\n… (truncated)';
+    final suffixBytes = utf8.encode(suffix).length;
+    final prefixLength = (limit - suffixBytes).clamp(0, encoded.length);
+    final prefix =
+        utf8.decode(encoded.take(prefixLength).toList(), allowMalformed: true);
+    final text = prefix + (limit >= suffixBytes ? suffix : '…');
+    return _TruncatedText(text, true, utf8.encode(text).length);
+  }
+
   static Future<void> _defaultStorageWriter(
     File file,
     String payload,
   ) async {
     await file.writeAsString(payload, flush: true);
   }
+}
+
+class _TruncatedText {
+  const _TruncatedText(this.value, this.truncated, this.bytes);
+
+  final String? value;
+  final bool truncated;
+  final int bytes;
+}
+
+class _PendingAppend {
+  const _PendingAppend(this.record, this.revision);
+
+  final HttpRecord record;
+  final int revision;
 }

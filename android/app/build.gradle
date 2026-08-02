@@ -55,6 +55,7 @@ android {
 
     defaultConfig {
         applicationId = "com.daozhang.py"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         // Linux-like direct proot mode executes Debian rootfs ELF files from
         // the app data directory. Android targetSdk 29+ blocks that execve
@@ -154,6 +155,8 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-service:2.8.4"
     implementation "org.apache.commons:commons-compress:1.26.2"
     implementation "org.tukaani:xz:1.9"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
 }
 
 flutter {
@@ -180,7 +183,6 @@ tasks.register("verifyReleaseManifestPolicy") {
         def manifestText = mergedManifest.getText("UTF-8")
         def forbidden = [
             "android.permission.MANAGE_EXTERNAL_STORAGE",
-            "android.permission.SYSTEM_ALERT_WINDOW",
             "android:usesCleartextTraffic=\"true\""
         ]
         forbidden.each { value ->

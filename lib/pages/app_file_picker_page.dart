@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_file_entry.dart';
 import '../services/native_bridge.dart';
 
 enum PickerMode {
-  file,   // 选择文件
+  file, // 选择文件
   folder, // 选择文件夹
 }
 
@@ -224,7 +225,9 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
   String get _filterDescription {
     final exactName = widget.exactFileName?.trim();
     if (exactName != null && exactName.isNotEmpty) return exactName;
-    if (widget.allowedExtensions.isEmpty) return '全部文件';
+    if (widget.allowedExtensions.isEmpty) {
+      return AppLocalizations.of(context)!.allFiles;
+    }
     return widget.allowedExtensions
         .map((extension) =>
             extension.startsWith('.') ? extension : '.$extension')
@@ -253,14 +256,16 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _goBack,
-            tooltip: _currentPath == null ? '返回' : '上一级',
+            tooltip: _currentPath == null
+                ? AppLocalizations.of(context)!.back
+                : AppLocalizations.of(context)!.upOneLevel,
           ),
           title: Text(widget.title),
           actions: [
             if (widget.mode == PickerMode.folder && _currentPath != null)
               TextButton.icon(
                 icon: const Icon(Icons.check, size: 20),
-                label: const Text('选择'),
+                label: Text(AppLocalizations.of(context)!.select),
                 onPressed: () {
                   Navigator.pop(
                     context,
@@ -273,13 +278,13 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
               ),
             IconButton(
               icon: const Icon(Icons.home_outlined),
-              tooltip: '内部存储',
+              tooltip: AppLocalizations.of(context)!.internalStorage,
               onPressed: _loadStorageRoot,
             ),
             if (widget.allowSystemPicker)
               IconButton(
                 icon: const Icon(Icons.upload_file_outlined),
-                tooltip: '系统选择文件',
+                tooltip: AppLocalizations.of(context)!.systemFilePicker,
                 onPressed: () => Navigator.pop(
                   context,
                   const AppFilePickResult.systemPicker(),
@@ -297,7 +302,8 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _currentPath ?? '存储位置',
+                    _currentPath ??
+                        AppLocalizations.of(context)!.storageLocations,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -317,7 +323,8 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
                               icon: const Icon(Icons.close, size: 18),
                               onPressed: _searchController.clear,
                             ),
-                      hintText: '搜索 $_filterDescription',
+                      hintText: AppLocalizations.of(context)!
+                          .searchFiles(_filterDescription),
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -351,8 +358,10 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
                             const SizedBox(height: 12),
                             Text(
                               _currentPath == null
-                                  ? '没有可浏览的文件'
-                                  : '当前目录没有 $_filterDescription',
+                                  ? AppLocalizations.of(context)!
+                                      .noBrowsableFiles
+                                  : AppLocalizations.of(context)!
+                                      .noFilesInDirectory(_filterDescription),
                               style: TextStyle(
                                 color: colors.onSurface,
                                 fontWeight: FontWeight.w600,
@@ -361,8 +370,10 @@ class _AppFilePickerPageState extends State<AppFilePickerPage> {
                             const SizedBox(height: 6),
                             Text(
                               _currentPath == null
-                                  ? '可以使用右上角系统选择文件兜底。'
-                                  : '可以返回上一级目录，或回到内部存储。',
+                                  ? AppLocalizations.of(context)!
+                                      .systemFilePickerHint
+                                  : AppLocalizations.of(context)!
+                                      .goUpOrInternalStorageHint,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: colors.onSurfaceVariant,

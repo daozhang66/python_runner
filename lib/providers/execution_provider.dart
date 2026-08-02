@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +8,7 @@ import '../models/execution_state.dart';
 import '../services/native_bridge.dart';
 import '../services/app_logger.dart';
 import '../services/http_inspector_store.dart';
+import '../services/execution_id_generator.dart';
 import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
 import '../services/project_path_validator.dart';
@@ -22,7 +22,8 @@ class ScriptLogRecord {
   final String executionId;
   final String scriptName;
   final DateTime startTime;
-  final List<LogEntry> logs;
+  final List<LogEntry> _logs;
+  List<LogEntry>? _logsSnapshot;
   ExecutionStatus status;
   int? exitCode;
 
@@ -33,21 +34,44 @@ class ScriptLogRecord {
     List<LogEntry>? logs,
     this.status = ExecutionStatus.running,
     this.exitCode,
-  }) : logs = logs ?? [];
+  }) : _logs = List<LogEntry>.of(logs ?? const <LogEntry>[]);
+
+  /// An immutable point-in-time view of this execution's output.
+  List<LogEntry> get logs =>
+      _logsSnapshot ??= List.unmodifiable(List<LogEntry>.of(_logs));
+
+  int appendLog(LogEntry entry, {required int maxItems}) {
+    _logs.add(entry);
+    var removed = 0;
+    if (_logs.length > maxItems) {
+      removed = _logs.length - maxItems;
+      _logs.removeRange(0, removed);
+    }
+    _logsSnapshot = null;
+    return removed;
+  }
+
+  void replaceLastLog(LogEntry entry) {
+    if (_logs.isEmpty) return;
+    _logs[_logs.length - 1] = entry;
+    _logsSnapshot = null;
+  }
+
+  bool get hasLogs => _logs.isNotEmpty;
+
+  int get logCount => _logs.length;
 
   String get logsAsText {
-    return logs.map((e) => e.content).join('\n');
+    return _logs.map((e) => e.content).join('\n');
   }
 }
 
 class _ExecutionPreferences {
-  final bool floatingBallEnabled;
   final String? workingDir;
   final int? timeoutSeconds;
   final String preferredRuntimeBackendId;
 
   const _ExecutionPreferences({
-    required this.floatingBallEnabled,
     required this.workingDir,
     required this.timeoutSeconds,
     required this.preferredRuntimeBackendId,
@@ -62,12 +86,17 @@ class ExecutionProvider extends ChangeNotifier {
   final NativeBridge _bridge;
   RuntimeManager _runtimeManager;
   final bool _runtimeManagerLocked;
-  int _executionSequence = 0;
+  final ExecutionIdGenerator _executionIdGenerator = ExecutionIdGenerator();
 
   ExecutionState _state = const ExecutionState();
-  final List<LogEntry> _logs = [];
-  late final UnmodifiableListView<LogEntry> _logsView =
-      UnmodifiableListView(_logs);
+  final List<LogEntry> _orphanLogs = [];
+  String? _currentLogRecordId;
+  int _currentLogStart = 0;
+  int? _currentLogEnd;
+  List<LogEntry>? _currentLogsSnapshot;
+  List<LogEntry>? _currentLogsSnapshotSource;
+  int _currentLogsSnapshotStart = 0;
+  int? _currentLogsSnapshotEnd;
   final Map<String, ScriptLogRecord> _historyByExecutionId = {};
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
@@ -79,34 +108,45 @@ class ExecutionProvider extends ChangeNotifier {
 
   /// History of all script execution logs
   final List<ScriptLogRecord> _logHistory = [];
-  late final UnmodifiableListView<ScriptLogRecord> _logHistoryView =
-      UnmodifiableListView(_logHistory);
-
-  bool _floatingBallEnabled = false;
-
-  /// Callback for navigating to the console page when script is triggered from floating ball.
-  static void Function(String scriptName)? onNavigateToConsole;
-  static String? _pendingNavigateScriptName;
-
-  static void setNavigateToConsoleHandler(
-      void Function(String scriptName)? handler) {
-    onNavigateToConsole = handler;
-    if (handler != null && _pendingNavigateScriptName != null) {
-      final pending = _pendingNavigateScriptName!;
-      _pendingNavigateScriptName = null;
-      handler(pending);
-    }
-  }
+  List<ScriptLogRecord>? _logHistorySnapshot;
 
   /// Throttled notification timer — batches rapid updates into a single
   /// notifyListeners() call after a short delay (100ms).
   Timer? _notifyTimer;
-  Timer? _pendingRunPollTimer;
   bool _disposed = false;
   static const _notifyDelay = Duration(milliseconds: 100);
 
   ExecutionState get state => _state;
-  List<LogEntry> get logs => _logsView;
+  List<LogEntry> get logs {
+    final record = _currentLogRecord();
+    final recordLogs = record?.logs;
+    final end = recordLogs == null
+        ? 0
+        : (_currentLogEnd ?? recordLogs.length).clamp(0, recordLogs.length);
+    final start = _currentLogStart.clamp(0, end);
+    if (_orphanLogs.isEmpty &&
+        recordLogs != null &&
+        start == 0 &&
+        end == recordLogs.length) {
+      return recordLogs;
+    }
+    if (_currentLogsSnapshot != null &&
+        identical(_currentLogsSnapshotSource, recordLogs) &&
+        _currentLogsSnapshotStart == start &&
+        _currentLogsSnapshotEnd == end) {
+      return _currentLogsSnapshot!;
+    }
+    final visible = <LogEntry>[
+      if (recordLogs != null) ...recordLogs.sublist(start, end),
+      ..._orphanLogs,
+    ];
+    _currentLogsSnapshot = List.unmodifiable(visible);
+    _currentLogsSnapshotSource = recordLogs;
+    _currentLogsSnapshotStart = start;
+    _currentLogsSnapshotEnd = end;
+    return _currentLogsSnapshot!;
+  }
+
   int get logVersion => _logVersion;
   String? get currentScriptName => _currentScriptName;
   bool get isRunning =>
@@ -114,7 +154,8 @@ class ExecutionProvider extends ChangeNotifier {
       _state.status == ExecutionStatus.stopping;
   bool get waitingForInput => _waitingForInput;
   String get currentInputPrompt => _currentInputPrompt;
-  List<ScriptLogRecord> get logHistory => _logHistoryView;
+  List<ScriptLogRecord> get logHistory => _logHistorySnapshot ??=
+      List.unmodifiable(List<ScriptLogRecord>.of(_logHistory));
 
   /// Returns the newest recorded run for [scriptName], or null if the script
   /// has never been executed.
@@ -158,33 +199,19 @@ class ExecutionProvider extends ChangeNotifier {
     return null;
   }
 
-  ExecutionProvider(this._bridge, {RuntimeManager? runtimeManager})
-      : _runtimeManager = runtimeManager ??
+  ExecutionProvider(
+    this._bridge, {
+    RuntimeManager? runtimeManager,
+  })  : _runtimeManager = runtimeManager ??
             RuntimeManager.fromPreferredBackend(
               _bridge,
               RuntimeManager.chaquopyBackendId,
             ),
         _runtimeManagerLocked = runtimeManager != null {
-    _loadFloatingBallSetting();
     _listenStreams();
-    syncFloatingBallVisibility();
-    _pollPendingRunScript();
   }
 
   final _logger = AppLogger.instance;
-
-  Future<void> _loadFloatingBallSetting() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-    } catch (e, stackTrace) {
-      _logger.warn(
-        '读取悬浮球设置失败: $e',
-        source: 'Execution',
-        detail: stackTrace.toString(),
-      );
-    }
-  }
 
   void _listenStreams() {
     _logSub?.cancel();
@@ -214,9 +241,8 @@ class ExecutionProvider extends ChangeNotifier {
           return;
         }
 
-        final routedRecord =
-            _historyRecordForExecutionId(entry.executionId) ??
-                _activeHistoryRecord();
+        final routedRecord = _historyRecordForExecutionId(entry.executionId) ??
+            _activeHistoryRecord();
         _appendLiveLog(entry, routedRecord: routedRecord);
         // High-frequency log streams — throttle notifications
         _scheduleNotify();
@@ -246,9 +272,8 @@ class ExecutionProvider extends ChangeNotifier {
         if (isTerminal) {
           _waitingForInput = false;
           _currentInputPrompt = '';
+          _freezeCurrentLogView(_state.executionId);
           unawaited(HttpInspectorStore.instance.flush());
-          // Update floating ball status and hide after delay
-          _updateFloatingBallOnTerminal(_state.status);
         }
         _scheduleNotify();
       }, onError: (e) {
@@ -281,8 +306,6 @@ class ExecutionProvider extends ChangeNotifier {
           _appendLiveLog(entry);
         }
         _waitingForInput = true;
-        // Update floating ball to show waiting state
-        _updateFloatingBallStatus('waiting_input');
         _scheduleNotify();
       }, onError: (e) {
         _logger.error('stdinRequestStream error: $e', source: 'Execution');
@@ -316,8 +339,20 @@ class ExecutionProvider extends ChangeNotifier {
     if (nextManager.activeBackendId == _runtimeManager.activeBackendId) {
       return;
     }
+    final previousManager = _runtimeManager;
     _runtimeManager = nextManager;
+    unawaited(previousManager.dispose());
     _listenStreams();
+  }
+
+  /// Keeps the legacy executor in sync while the rest of the app uses
+  /// Riverpod's runtime invalidation generation.
+  Future<void> onBackendChanged(String backendId) async {
+    if (_state.status == ExecutionStatus.running ||
+        _state.status == ExecutionStatus.stopping) {
+      await _runtimeManager.stopExecution();
+    }
+    _selectRuntimeManager(backendId);
   }
 
   /// Schedule a throttled notifyListeners() call.
@@ -332,7 +367,18 @@ class ExecutionProvider extends ChangeNotifier {
     });
   }
 
+  ScriptLogRecord? _currentLogRecord() {
+    final id = _currentLogRecordId;
+    return id == null ? null : _historyByExecutionId[id];
+  }
+
+  void _invalidateCurrentLogsSnapshot() {
+    _currentLogsSnapshot = null;
+    _currentLogsSnapshotSource = null;
+  }
+
   void _bumpLogVersion() {
+    _invalidateCurrentLogsSnapshot();
     _logVersion++;
   }
 
@@ -343,55 +389,71 @@ class ExecutionProvider extends ChangeNotifier {
 
   void _appendLiveLog(LogEntry entry, {ScriptLogRecord? routedRecord}) {
     final record = routedRecord ?? _activeHistoryRecord();
-    final activeExecutionId = _state.executionId;
-    final shouldAppendLive = record != null &&
-        activeExecutionId != null &&
-        record.executionId == activeExecutionId &&
-        (_state.status == ExecutionStatus.running ||
-            _state.status == ExecutionStatus.stopping);
-    final shouldAppendAnonymousLive =
-        record == null &&
-            (_state.status != ExecutionStatus.running &&
-                _state.status != ExecutionStatus.stopping);
-    if (shouldAppendLive || shouldAppendAnonymousLive) {
-      _logs.add(entry);
-      _trimListToMax(_logs, maxCurrentLogs);
+    final shouldAppendAnonymousLive = record == null &&
+        (_state.status != ExecutionStatus.running &&
+            _state.status != ExecutionStatus.stopping);
+    if (shouldAppendAnonymousLive) {
+      _orphanLogs.add(entry);
+      _trimListToMax(_orphanLogs, maxCurrentLogs);
     }
-    _appendHistoryLog(entry, routedRecord: record);
+    final removed = _appendHistoryLog(entry, routedRecord: record);
+    if (record != null && record.executionId == _currentLogRecordId) {
+      _currentLogStart = (_currentLogStart - removed).clamp(0, record.logCount);
+      if (_currentLogEnd != null) {
+        _currentLogEnd = (_currentLogEnd! - removed).clamp(0, record.logCount);
+      }
+    }
     _bumpLogVersion();
   }
 
-  void _appendHistoryLog(LogEntry entry, {ScriptLogRecord? routedRecord}) {
+  int _appendHistoryLog(LogEntry entry, {ScriptLogRecord? routedRecord}) {
     final record = routedRecord ?? _activeHistoryRecord();
-    if (record == null) return;
-    record.logs.add(entry);
-    _trimListToMax(record.logs, maxLogsPerHistoryRecord);
+    if (record == null) return 0;
+    return record.appendLog(entry, maxItems: maxLogsPerHistoryRecord);
   }
 
   void _replaceLastLiveLog(LogEntry entry) {
-    if (_logs.isEmpty) {
+    final record = _currentLogRecord();
+    if (record == null || _currentLogEnd != null || !record.hasLogs) {
+      if (_orphanLogs.isNotEmpty) {
+        _orphanLogs[_orphanLogs.length - 1] = entry;
+        _bumpLogVersion();
+        return;
+      }
       _appendLiveLog(entry);
       return;
     }
-    _logs[_logs.length - 1] = entry;
-    final record = _activeHistoryRecord();
-    if (record != null && record.logs.isNotEmpty) {
-      record.logs[record.logs.length - 1] = entry;
-    }
+    record.replaceLastLog(entry);
     _bumpLogVersion();
   }
 
   void _clearCurrentLogs() {
-    if (_logs.isEmpty) return;
-    _logs.clear();
+    final record = _currentLogRecord();
+    if (record != null) {
+      _currentLogStart = _currentLogEnd ?? record.logCount;
+    }
+    if (_orphanLogs.isNotEmpty) {
+      _orphanLogs.clear();
+    }
     _bumpLogVersion();
   }
 
+  void _selectCurrentLogRecord(ScriptLogRecord record) {
+    _currentLogRecordId = record.executionId;
+    _currentLogStart = 0;
+    _currentLogEnd = null;
+    _orphanLogs.clear();
+    _invalidateCurrentLogsSnapshot();
+  }
+
+  void _freezeCurrentLogView(String? executionId) {
+    if (executionId == null || executionId != _currentLogRecordId) return;
+    _currentLogEnd = _currentLogRecord()?.logCount ?? 0;
+    _invalidateCurrentLogsSnapshot();
+  }
+
   String _nextExecutionId() {
-    _executionSequence = (_executionSequence + 1) & 0xFFFF;
-    final micros = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
-    final seq = _executionSequence.toRadixString(16).padLeft(4, '0');
-    return '$micros-$seq';
+    return _executionIdGenerator.next();
   }
 
   void _trimHistoryRecords() {
@@ -401,14 +463,23 @@ class ExecutionProvider extends ChangeNotifier {
     }
   }
 
+  void _addHistoryRecord(ScriptLogRecord record) {
+    _logHistory.add(record);
+    _historyByExecutionId[record.executionId] = record;
+    _trimHistoryRecords();
+    _logHistorySnapshot = null;
+    _selectCurrentLogRecord(record);
+  }
+
   Future<_ExecutionPreferences> _loadExecutionPreferences({
     bool includeWorkingDir = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     return _ExecutionPreferences(
-      floatingBallEnabled: prefs.getBool('floating_ball_enabled') ?? false,
       workingDir: includeWorkingDir ? prefs.getString('working_dir') : null,
-      timeoutSeconds: prefs.getInt('execution_timeout'),
+      // Keep execution behavior aligned with the settings UI on a fresh
+      // install. A persisted zero still explicitly means no timeout.
+      timeoutSeconds: prefs.getInt('execution_timeout') ?? 60,
       preferredRuntimeBackendId: RuntimeManager.normalizePreferredBackendId(
         prefs.getString(RuntimeManager.prefsKey),
       ),
@@ -505,9 +576,17 @@ class ExecutionProvider extends ChangeNotifier {
 
   Future<void> executeScript(String name) async {
     final safeName = ScriptNameValidator.normalize(name);
+    // Reserve the new id before awaiting a stop. Terminal events from the old
+    // run are then rejected by [_isCurrentExecutionState] instead of mutating
+    // the freshly started run.
+    final executionId = _nextExecutionId();
     // If a previous execution is still marked as running, clean it up
     if (_state.status == ExecutionStatus.running) {
       final previousRecord = _activeHistoryRecord();
+      _state = ExecutionState(
+        executionId: executionId,
+        status: ExecutionStatus.stopping,
+      );
       try {
         await _runtimeManager.stopExecution();
       } catch (e, stackTrace) {
@@ -523,7 +602,6 @@ class ExecutionProvider extends ChangeNotifier {
       }
     }
 
-    final executionId = _nextExecutionId();
     _currentScriptName = safeName;
     _clearCurrentLogs();
     _waitingForInput = false;
@@ -533,14 +611,13 @@ class ExecutionProvider extends ChangeNotifier {
       status: ExecutionStatus.running,
     );
 
-    // Load working directory, timeout, and floating ball setting
+    // Load working directory, timeout, and runtime preference.
     String? workingDir;
     int? timeoutSeconds;
     String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
     String runtimeBackendId = RuntimeManager.chaquopyBackendId;
     try {
       final prefs = await _loadExecutionPreferences();
-      _floatingBallEnabled = prefs.floatingBallEnabled;
       workingDir = prefs.workingDir;
       timeoutSeconds = prefs.timeoutSeconds;
       preferredRuntimeBackendId = prefs.preferredRuntimeBackendId;
@@ -561,9 +638,7 @@ class ExecutionProvider extends ChangeNotifier {
       scriptName: safeName,
       startTime: DateTime.now(),
     );
-    _logHistory.add(record);
-    _historyByExecutionId[executionId] = record;
-    _trimHistoryRecords();
+    _addHistoryRecord(record);
 
     notifyListeners();
 
@@ -600,8 +675,6 @@ class ExecutionProvider extends ChangeNotifier {
         source: 'Execution',
       );
 
-      // Show floating ball if enabled and permitted
-      _showFloatingBallIfNeeded(safeName);
     } catch (e) {
       _logger.error('脚本启动失败: $safeName, error: $e', source: 'Execution');
       _appendLiveLog(LogEntry(
@@ -634,9 +707,14 @@ class ExecutionProvider extends ChangeNotifier {
     final mainFilePath =
         ProjectPathValidator.validateMainFilePath(group.mainFilePath ?? '');
     final displayName = group.name.trim().isEmpty ? projectKey : group.name;
+    final executionId = _nextExecutionId();
 
     if (_state.status == ExecutionStatus.running) {
       final previousRecord = _activeHistoryRecord();
+      _state = ExecutionState(
+        executionId: executionId,
+        status: ExecutionStatus.stopping,
+      );
       try {
         await _runtimeManager.stopExecution();
       } catch (e, stackTrace) {
@@ -652,7 +730,6 @@ class ExecutionProvider extends ChangeNotifier {
       }
     }
 
-    final executionId = _nextExecutionId();
     _currentScriptName = displayName;
     _clearCurrentLogs();
     _waitingForInput = false;
@@ -666,7 +743,6 @@ class ExecutionProvider extends ChangeNotifier {
     String preferredRuntimeBackendId = RuntimeManager.chaquopyBackendId;
     try {
       final prefs = await _loadExecutionPreferences(includeWorkingDir: false);
-      _floatingBallEnabled = prefs.floatingBallEnabled;
       timeoutSeconds = prefs.timeoutSeconds;
       preferredRuntimeBackendId = prefs.preferredRuntimeBackendId;
     } catch (e, stackTrace) {
@@ -682,9 +758,7 @@ class ExecutionProvider extends ChangeNotifier {
       scriptName: displayName,
       startTime: DateTime.now(),
     );
-    _logHistory.add(record);
-    _historyByExecutionId[executionId] = record;
-    _trimHistoryRecords();
+    _addHistoryRecord(record);
     notifyListeners();
 
     try {
@@ -720,7 +794,6 @@ class ExecutionProvider extends ChangeNotifier {
         '项目开始执行: $displayName (id: $executionId, runtime: linux_like)',
         source: 'Execution',
       );
-      _showFloatingBallIfNeeded(displayName);
     } catch (e) {
       _logger.error('项目启动失败: $displayName, error: $e', source: 'Execution');
       _appendLiveLog(LogEntry(
@@ -748,8 +821,10 @@ class ExecutionProvider extends ChangeNotifier {
       await _runtimeManager.sendStdin(input);
       final prompt = _currentInputPrompt;
       final echoedInput = prompt.isNotEmpty ? '$prompt$input' : '> $input';
-      final mergedPromptLine =
-          prompt.isNotEmpty && _logs.isNotEmpty && _logs.last.content == prompt;
+      final visibleLogs = logs;
+      final mergedPromptLine = prompt.isNotEmpty &&
+          visibleLogs.isNotEmpty &&
+          visibleLogs.last.content == prompt;
       final entry = LogEntry(
         type: mergedPromptLine ? LogType.stdout : LogType.info,
         content: echoedInput,
@@ -794,6 +869,7 @@ class ExecutionProvider extends ChangeNotifier {
   void clearHistory() {
     _logHistory.clear();
     _historyByExecutionId.clear();
+    _logHistorySnapshot = null;
     notifyListeners();
   }
 
@@ -801,12 +877,13 @@ class ExecutionProvider extends ChangeNotifier {
     if (index >= 0 && index < _logHistory.length) {
       final removed = _logHistory.removeAt(index);
       _historyByExecutionId.remove(removed.executionId);
+      _logHistorySnapshot = null;
       notifyListeners();
     }
   }
 
   String getLogsAsText() {
-    return _logs.map((e) => e.content).join('\n');
+    return logs.map((e) => e.content).join('\n');
   }
 
   String getAllHistoryAsText() {
@@ -825,135 +902,11 @@ class ExecutionProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _notifyTimer?.cancel();
-    _pendingRunPollTimer?.cancel();
     _logSub?.cancel();
     _statusSub?.cancel();
     _stdinSub?.cancel();
+    unawaited(_runtimeManager.dispose());
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Floating Ball Helpers
-  // ═══════════════════════════════════════════════════════════
-
-  Future<void> _showFloatingBallIfNeeded(String scriptName) async {
-    if (!_floatingBallEnabled) return;
-    try {
-      final hasPermission = await _bridge.checkOverlayPermission();
-      if (hasPermission) {
-        await _bridge.showFloatingBall(scriptName);
-      }
-    } catch (e, stackTrace) {
-      _logger.error(
-        '悬浮球显示失败: $e',
-        source: 'FloatingBall',
-        detail: stackTrace.toString(),
-      );
-    }
-  }
-
-  Future<void> syncFloatingBallVisibility({bool throwOnError = false}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _floatingBallEnabled = prefs.getBool('floating_ball_enabled') ?? false;
-    } catch (e, stackTrace) {
-      _logger.error(
-        '读取悬浮球设置失败: $e',
-        source: 'FloatingBall',
-        detail: stackTrace.toString(),
-      );
-      if (throwOnError) rethrow;
-    }
-    if (!_floatingBallEnabled) {
-      await _hideFloatingBall();
-      return;
-    }
-    try {
-      final hasPermission = await _bridge.checkOverlayPermission();
-      if (hasPermission) {
-        // Show with empty name → idle state
-        await _bridge
-            .showFloatingBall(isRunning ? (_currentScriptName ?? '') : '');
-      }
-    } catch (e, stackTrace) {
-      _logger.error(
-        '同步悬浮球显示状态失败: $e',
-        source: 'FloatingBall',
-        detail: stackTrace.toString(),
-      );
-      if (throwOnError) rethrow;
-    }
-  }
-
-  bool _pollingPending = false;
-
-  void _pollPendingRunScript() {
-    // Poll every 500ms to check if floating ball triggered a script run
-    _pendingRunPollTimer =
-        Timer.periodic(const Duration(milliseconds: 500), (timer) async {
-      if (_disposed) {
-        timer.cancel();
-        return;
-      }
-      if (isRunning || _pollingPending) return;
-      _pollingPending = true;
-      try {
-        final name = await _bridge.consumePendingRunScript();
-        final safeName =
-            name == null ? null : ScriptNameValidator.tryNormalize(name);
-        if (safeName != null && safeName.isNotEmpty) {
-          executeScript(safeName);
-          if (onNavigateToConsole != null) {
-            onNavigateToConsole!.call(safeName);
-          } else {
-            _pendingNavigateScriptName = safeName;
-          }
-        }
-      } catch (e, stackTrace) {
-        _logger.warn(
-          '轮询悬浮球待运行脚本失败: $e',
-          source: 'FloatingBall',
-          detail: stackTrace.toString(),
-        );
-      } finally {
-        _pollingPending = false;
-      }
-    });
-  }
-
-  Future<void> _hideFloatingBall() async {
-    try {
-      await _bridge.hideFloatingBall();
-    } catch (e, stackTrace) {
-      _logger.warn(
-        '隐藏悬浮球失败: $e',
-        source: 'FloatingBall',
-        detail: stackTrace.toString(),
-      );
-    }
-  }
-
-  Future<void> _updateFloatingBallStatus(String status) async {
-    if (!_floatingBallEnabled) return;
-    try {
-      await _bridge.updateFloatingBallStatus(status);
-    } catch (e, stackTrace) {
-      _logger.warn(
-        '更新悬浮球状态失败: $e',
-        source: 'FloatingBall',
-        detail: stackTrace.toString(),
-      );
-    }
-  }
-
-  Future<void> _updateFloatingBallOnTerminal(ExecutionStatus status) async {
-    if (!_floatingBallEnabled) return;
-    if (status == ExecutionStatus.error) {
-      await _updateFloatingBallStatus('error');
-      // Show error for 3 seconds, then go idle
-      await Future.delayed(const Duration(seconds: 3));
-      if (_disposed) return;
-    }
-    await _updateFloatingBallStatus('idle');
-  }
 }

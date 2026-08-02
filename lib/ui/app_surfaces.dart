@@ -10,6 +10,9 @@ class AppSurface extends StatelessWidget {
   final bool selected;
   final EdgeInsetsGeometry margin;
   final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final String? semanticLabel;
 
   const AppSurface({
     super.key,
@@ -17,6 +20,9 @@ class AppSurface extends StatelessWidget {
     this.selected = false,
     this.margin = const EdgeInsets.symmetric(
         horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+    this.onTap,
+    this.onLongPress,
+    this.semanticLabel,
     required this.child,
   });
 
@@ -46,9 +52,17 @@ class AppSurface extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: child,
+      child: Semantics(
+        button: onTap != null,
+        label: semanticLabel,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: child,
+          ),
+        ),
       ),
     );
   }

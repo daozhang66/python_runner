@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../ui/app_theme_palette.dart';
 import '../widgets/app_dialogs.dart';
+import '../l10n/app_localizations.dart';
 
 // Flutter 3.44.2 deprecated RadioListTile.groupValue/onChanged in favor of
 // RadioGroup; keep using them here until we migrate to RadioGroup ancestor.
@@ -19,7 +20,7 @@ class ThemeSettingsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('主题与配色'),
+        title: Text(AppLocalizations.of(context)!.themeAndColors),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -73,7 +74,7 @@ class ThemeSettingsPage extends ConsumerWidget {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('选择颜色'),
+        title: Text(AppLocalizations.of(ctx)!.selectColor),
         content: SingleChildScrollView(
           child: ColorPicker(
             onColorChanged: (color) => selectedColor = color,
@@ -82,7 +83,7 @@ class ThemeSettingsPage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(ctx)!.cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -91,7 +92,7 @@ class ThemeSettingsPage extends ConsumerWidget {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('添加'),
+            child: Text(AppLocalizations.of(ctx)!.add),
           ),
         ],
       ),
@@ -128,7 +129,7 @@ class _ThemeModeSection extends StatelessWidget {
                     size: 20, color: colors.primary),
                 const SizedBox(width: 10),
                 Text(
-                  '主题模式',
+                  AppLocalizations.of(context)!.themeMode,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -157,7 +158,7 @@ class _ThemeModeSection extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _getModeName(currentMode),
+                        _getModeName(context, currentMode),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -188,14 +189,15 @@ class _ThemeModeSection extends StatelessWidget {
     }
   }
 
-  String _getModeName(ThemeMode mode) {
+  String _getModeName(BuildContext context, ThemeMode mode) {
+    final l10n = AppLocalizations.of(context)!;
     switch (mode) {
       case ThemeMode.light:
-        return '浅色';
+        return l10n.light;
       case ThemeMode.system:
-        return '跟随系统';
+        return l10n.followSystem;
       case ThemeMode.dark:
-        return '深色';
+        return l10n.dark;
     }
   }
 
@@ -214,7 +216,7 @@ class _ThemeModeSection extends StatelessWidget {
           final dialog = AlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
-            title: const Text('选择主题模式'),
+            title: Text(AppLocalizations.of(ctx)!.selectThemeMode),
             contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -222,21 +224,21 @@ class _ThemeModeSection extends StatelessWidget {
                 RadioListTile<ThemeMode>(
                   value: ThemeMode.light,
                   groupValue: current,
-                  title: const Text('浅色'),
+                  title: Text(AppLocalizations.of(ctx)!.light),
                   secondary: const Icon(Icons.light_mode_outlined),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 ),
                 RadioListTile<ThemeMode>(
                   value: ThemeMode.system,
                   groupValue: current,
-                  title: const Text('跟随系统'),
+                  title: Text(AppLocalizations.of(ctx)!.followSystem),
                   secondary: const Icon(Icons.brightness_auto_outlined),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 ),
                 RadioListTile<ThemeMode>(
                   value: ThemeMode.dark,
                   groupValue: current,
-                  title: const Text('深色'),
+                  title: Text(AppLocalizations.of(ctx)!.dark),
                   secondary: const Icon(Icons.dark_mode_outlined),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 ),
@@ -245,7 +247,7 @@ class _ThemeModeSection extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(ctx)!.cancel),
               ),
             ],
           );
@@ -306,11 +308,11 @@ class _MaterialYouSection extends StatelessWidget {
                 enabled ? Icons.auto_awesome : Icons.auto_awesome_outlined,
                 color: enabled ? colors.primary : null,
               ),
-              title: const Text('跟随系统壁纸动态取色'),
+              title: Text(AppLocalizations.of(context)!.materialYouWallpaper),
               subtitle: Text(
                 enabled
-                    ? 'Android 12+ · 已启用，配色方案将跟随壁纸'
-                    : 'Android 12+ · 关闭后可使用下方自定义配色',
+                    ? AppLocalizations.of(context)!.materialYouOn
+                    : AppLocalizations.of(context)!.materialYouOff,
                 style: const TextStyle(fontSize: 12),
               ),
               value: enabled,
@@ -355,7 +357,7 @@ class _PresetThemesSection extends StatelessWidget {
                 Icon(Icons.palette_outlined, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
                 Text(
-                  '预设主题',
+                  AppLocalizations.of(context)!.presetThemes,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -372,7 +374,7 @@ class _PresetThemesSection extends StatelessWidget {
                 final isSelected = selectedPreset == preset;
                 return _ColorCard(
                   color: preset.previewColor,
-                  label: preset.label,
+                  label: _presetLabel(context, preset),
                   selected: isSelected,
                   onTap: () => onPresetSelected(preset),
                 );
@@ -386,6 +388,30 @@ class _PresetThemesSection extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
+String _presetLabel(BuildContext context, AppThemePalette preset) {
+  final l10n = AppLocalizations.of(context)!;
+  switch (preset) {
+    case AppThemePalette.ocean:
+      return l10n.themeOcean;
+    case AppThemePalette.mint:
+      return l10n.themeMint;
+    case AppThemePalette.lilac:
+      return l10n.themeLilac;
+    case AppThemePalette.highContrast:
+      return l10n.themeHighContrast;
+    case AppThemePalette.claude:
+      return 'Claude';
+    case AppThemePalette.codex:
+      return 'Codex';
+    case AppThemePalette.vscode:
+      return 'VS Code';
+    case AppThemePalette.githubDark:
+      return 'GitHub Dark';
+    case AppThemePalette.gruvbox:
+      return 'Gruvbox';
+  }
+}
+
 // FluxDO 经典色
 // ═══════════════════════════════════════════════════════════════
 
@@ -420,7 +446,7 @@ class _FluxdoColorsSection extends StatelessWidget {
                 Icon(Icons.palette, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
                 Text(
-                  '更多颜色',
+                  AppLocalizations.of(context)!.moreColors,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -439,7 +465,7 @@ class _FluxdoColorsSection extends StatelessWidget {
                       currentSeedColor.toARGB32() == color.toARGB32();
                   return _ColorCard(
                     color: color,
-                    label: _colorName(color),
+                    label: _colorName(context, color),
                     selected: isSelected,
                     onTap: () => onColorSelected(color),
                   );
@@ -477,7 +503,7 @@ class _FluxdoColorsSection extends StatelessWidget {
                         Icon(Icons.add, size: 32, color: colors.primary),
                         const SizedBox(height: 4),
                         Text(
-                          '添加',
+                          AppLocalizations.of(context)!.add,
                           style: TextStyle(
                             fontSize: 11,
                             color: colors.primary,
@@ -496,34 +522,34 @@ class _FluxdoColorsSection extends StatelessWidget {
     );
   }
 
-  String _colorName(Color color) {
-    if (color == Colors.blue) return '蓝色';
-    if (color.toARGB32() == 0xFF6750A4) return '紫色';
-    if (color == Colors.green) return '绿色';
-    if (color == Colors.orange) return '橙色';
-    if (color == Colors.pink) return '粉色';
-    if (color == Colors.teal) return '青色';
-    if (color == Colors.red) return '红色';
-    if (color == Colors.indigo) return '靛蓝';
-    if (color == Colors.amber) return '琥珀';
-    if (color == Colors.cyan) return '青色';
-    return '颜色';
+  String _colorName(BuildContext context, Color color) {
+    final l10n = AppLocalizations.of(context)!;
+    if (color == Colors.blue) return l10n.blue;
+    if (color.toARGB32() == 0xFF6750A4) return l10n.purple;
+    if (color == Colors.green) return l10n.green;
+    if (color == Colors.orange) return l10n.orange;
+    if (color == Colors.pink) return l10n.pink;
+    if (color == Colors.teal || color == Colors.cyan) return l10n.teal;
+    if (color == Colors.red) return l10n.red;
+    if (color == Colors.indigo) return l10n.indigo;
+    if (color == Colors.amber) return l10n.amber;
+    return l10n.color;
   }
 
   Future<void> _confirmRemove(BuildContext context, Color color) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除颜色'),
-        content: const Text('确定要删除这个自定义颜色吗？'),
+        title: Text(AppLocalizations.of(ctx)!.deleteColor),
+        content: Text(AppLocalizations.of(ctx)!.deleteColorConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(ctx)!.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(ctx)!.delete),
           ),
         ],
       ),
@@ -677,7 +703,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                 Icon(Icons.tune, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
                 Text(
-                  '高级选项',
+                  AppLocalizations.of(context)!.advancedOptions,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -707,7 +733,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '配色算法',
+                            AppLocalizations.of(context)!.colorSchemeAlgorithm,
                             style: TextStyle(
                               fontSize: 12,
                               color: colors.onSurfaceVariant,
@@ -715,7 +741,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _variantName(schemeVariant),
+                            _variantName(context, schemeVariant),
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -736,12 +762,12 @@ class _AdvancedOptionsSection extends StatelessWidget {
             SwitchListTile(
               value: enableBlurEffect,
               onChanged: onBlurEffectChanged,
-              title: const Text(
-                '毛玻璃效果',
+              title: Text(
+                AppLocalizations.of(context)!.blurEffect,
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
-              subtitle: const Text(
-                '为对话框启用毛玻璃背景模糊效果（需要配色算法支持）',
+              subtitle: Text(
+                AppLocalizations.of(context)!.blurEffectDescription,
                 style: TextStyle(fontSize: 12),
               ),
               contentPadding: EdgeInsets.zero,
@@ -767,7 +793,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '字体',
+                            AppLocalizations.of(context)!.font,
                             style: TextStyle(
                               fontSize: 12,
                               color: colors.onSurfaceVariant,
@@ -775,7 +801,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _fontFamilyName(fontFamily),
+                            _fontFamilyName(context, fontFamily),
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -797,58 +823,61 @@ class _AdvancedOptionsSection extends StatelessWidget {
     );
   }
 
-  String _variantName(DynamicSchemeVariant variant) {
+  String _variantName(BuildContext context, DynamicSchemeVariant variant) {
+    final l10n = AppLocalizations.of(context)!;
     switch (variant) {
       case DynamicSchemeVariant.tonalSpot:
-        return '柔和色调（推荐）';
+        return l10n.variantTonalSpot;
       case DynamicSchemeVariant.fidelity:
-        return '高保真';
+        return l10n.variantFidelity;
       case DynamicSchemeVariant.content:
-        return '内容优先';
+        return l10n.variantContent;
       case DynamicSchemeVariant.monochrome:
-        return '单色';
+        return l10n.variantMonochrome;
       case DynamicSchemeVariant.neutral:
-        return '中性';
+        return l10n.variantNeutral;
       case DynamicSchemeVariant.vibrant:
-        return '鲜艳';
+        return l10n.variantVibrant;
       case DynamicSchemeVariant.expressive:
-        return '表现力';
+        return l10n.variantExpressive;
       case DynamicSchemeVariant.rainbow:
-        return '彩虹';
+        return l10n.variantRainbow;
       case DynamicSchemeVariant.fruitSalad:
-        return '水果沙拉';
+        return l10n.variantFruitSalad;
     }
   }
 
-  String _fontFamilyName(AppFontFamily family) {
+  String _fontFamilyName(BuildContext context, AppFontFamily family) {
     switch (family) {
       case AppFontFamily.system:
-        return '跟随系统';
+        return AppLocalizations.of(context)!.followSystem;
       case AppFontFamily.miSans:
         return 'MiSans';
     }
   }
 
-  String _variantDescription(DynamicSchemeVariant variant) {
+  String _variantDescription(
+      BuildContext context, DynamicSchemeVariant variant) {
+    final l10n = AppLocalizations.of(context)!;
     switch (variant) {
       case DynamicSchemeVariant.tonalSpot:
-        return '平衡的柔和色调，适合大多数场景';
+        return l10n.variantTonalSpotDescription;
       case DynamicSchemeVariant.fidelity:
-        return '高度保真原始颜色，最接近种子色';
+        return l10n.variantFidelityDescription;
       case DynamicSchemeVariant.content:
-        return '强调内容可读性的配色';
+        return l10n.variantContentDescription;
       case DynamicSchemeVariant.monochrome:
-        return '极简单色配色，黑白灰为主';
+        return l10n.variantMonochromeDescription;
       case DynamicSchemeVariant.neutral:
-        return '中性低饱和度配色';
+        return l10n.variantNeutralDescription;
       case DynamicSchemeVariant.vibrant:
-        return '鲜艳高饱和度配色';
+        return l10n.variantVibrantDescription;
       case DynamicSchemeVariant.expressive:
-        return '富有表现力的大胆配色';
+        return l10n.variantExpressiveDescription;
       case DynamicSchemeVariant.rainbow:
-        return '彩虹般的多彩配色';
+        return l10n.variantRainbowDescription;
       case DynamicSchemeVariant.fruitSalad:
-        return '水果沙拉般的丰富配色';
+        return l10n.variantFruitSaladDescription;
     }
   }
 
@@ -867,7 +896,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
           final dialog = AlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
-            title: const Text('选择配色算法'),
+            title: Text(AppLocalizations.of(ctx)!.selectColorSchemeAlgorithm),
             contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
             content: SizedBox(
               width: double.maxFinite,
@@ -877,9 +906,9 @@ class _AdvancedOptionsSection extends StatelessWidget {
                   return RadioListTile<DynamicSchemeVariant>(
                     value: variant,
                     groupValue: current,
-                    title: Text(_variantName(variant)),
+                    title: Text(_variantName(ctx, variant)),
                     subtitle: Text(
-                      _variantDescription(variant),
+                      _variantDescription(ctx, variant),
                       style: const TextStyle(fontSize: 12),
                     ),
                     onChanged: (value) => Navigator.pop(ctx, value),
@@ -890,7 +919,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(ctx)!.cancel),
               ),
             ],
           );
@@ -920,7 +949,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
           final dialog = AlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
-            title: const Text('选择字体'),
+            title: Text(AppLocalizations.of(ctx)!.selectFont),
             contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -928,7 +957,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
                 return RadioListTile<AppFontFamily>(
                   value: family,
                   groupValue: current,
-                  title: Text(_fontFamilyName(family)),
+                  title: Text(_fontFamilyName(ctx, family)),
                   onChanged: (value) => Navigator.pop(ctx, value),
                 );
               }).toList(),
@@ -936,7 +965,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(ctx)!.cancel),
               ),
             ],
           );
@@ -992,7 +1021,7 @@ class _ColorPickerState extends State<ColorPicker> {
         const SizedBox(height: 16),
         // 色相
         _buildSlider(
-          label: '色相',
+          label: AppLocalizations.of(context)!.hue,
           value: _hue,
           max: 360,
           onChanged: (v) {
@@ -1002,7 +1031,7 @@ class _ColorPickerState extends State<ColorPicker> {
         ),
         // 饱和度
         _buildSlider(
-          label: '饱和度',
+          label: AppLocalizations.of(context)!.saturation,
           value: _saturation,
           max: 1,
           onChanged: (v) {
@@ -1012,7 +1041,7 @@ class _ColorPickerState extends State<ColorPicker> {
         ),
         // 亮度
         _buildSlider(
-          label: '亮度',
+          label: AppLocalizations.of(context)!.lightness,
           value: _lightness,
           max: 1,
           onChanged: (v) {

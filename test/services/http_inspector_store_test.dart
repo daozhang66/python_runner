@@ -32,9 +32,15 @@ void main() {
 
     Future<List<dynamic>> readPersistedRecords(Directory dir) async {
       final file = File(
-        '${dir.path}${Platform.pathSeparator}http_inspector_records.json',
+        '${dir.path}${Platform.pathSeparator}http_inspector_records.v2.jsonl',
       );
-      return jsonDecode(await file.readAsString()) as List<dynamic>;
+      final lines = await file
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      return lines.map(jsonDecode).toList();
     }
 
     test('HttpRecord round-trips response body metadata', () {
@@ -62,6 +68,40 @@ void main() {
       expect(restored.responseBodyPreview, '{"items":[1,2]}... (truncated)');
     });
 
+    test(
+        'derived views reuse immutable snapshots until records or filters change',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('http_cache_');
+      try {
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+        await store.ensureLoaded();
+        store.addFromJson(recordJson('first', durationMs: 10));
+
+        final records = store.filteredRecords;
+        final visibleStats = store.visibleStats;
+        final domains = store.domainStats;
+        final stats = store.stats;
+        expect(identical(records, store.filteredRecords), isTrue);
+        expect(identical(visibleStats, store.visibleStats), isTrue);
+        expect(identical(domains, store.domainStats), isTrue);
+        expect(identical(stats, store.stats), isTrue);
+        expect(() => records.add(records.single), throwsUnsupportedError);
+        expect(() => stats['total'] = 0, throwsUnsupportedError);
+
+        store.setFilterMethod('GET');
+        expect(identical(records, store.filteredRecords), isFalse);
+
+        final filtered = store.filteredRecords;
+        store.addFromJson(recordJson('second', method: 'POST', durationMs: 20));
+        expect(identical(filtered, store.filteredRecords), isFalse);
+        expect(store.stats['total'], 2);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
     test('trimRecords keeps newest records within count and body budget', () {
       HttpRecord makeRecord(String id, int chars) => HttpRecord(
             id: id,
@@ -74,14 +114,13 @@ void main() {
             responseBodyBytes: chars,
           );
 
+      final oldest = makeRecord('oldest', 4);
+      final middle = makeRecord('middle', 5);
+      final newest = makeRecord('newest', 6);
       final trimmed = HttpInspectorStore.trimRecords(
-        [
-          makeRecord('oldest', 4),
-          makeRecord('middle', 5),
-          makeRecord('newest', 6),
-        ],
+        [oldest, middle, newest],
         maxRecords: 2,
-        maxCapturedBodyBytes: 11,
+        maxCapturedBodyBytes: middle.storedJsonBytes + newest.storedJsonBytes,
       );
 
       expect(trimmed.map((r) => r.id).toList(), ['middle', 'newest']);
@@ -97,17 +136,219 @@ void main() {
             url: 'https://example.com/image.png',
             requestHeaders: const {},
             responseHeaders: const {'content-type': 'image/png'},
-            responseBodyPreview: 'data:image/png;base64,${'a' * 100}',
+            responseBodyPreview: 'data:image/png;base64,${'a' * 5000}',
             responseBodyBytes: 75,
           ),
         ],
-        maxCapturedBodyBytes: 32,
+        maxCapturedBodyBytes: 1024,
       );
 
       expect(trimmed, hasLength(1));
       expect(trimmed.single.id, 'huge-image');
-      expect(trimmed.single.storedBodyBytes, lessThanOrEqualTo(32));
+      expect(trimmed.single.storedJsonBytes, lessThanOrEqualTo(1024));
       expect(trimmed.single.responseBodyTruncated, isTrue);
+    });
+
+    test('trimRecords evicts the oldest record at the active count limit', () {
+      final records = List.generate(
+        HttpInspectorStore.maxRecords + 1,
+        (index) => HttpRecord(
+          id: 'record-$index',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1710000000000 + index),
+          method: 'GET',
+          url: 'https://example.com/$index',
+          requestHeaders: const {},
+        ),
+      );
+
+      final trimmed = HttpInspectorStore.trimRecords(records);
+
+      expect(trimmed, hasLength(HttpInspectorStore.maxRecords));
+      expect(trimmed.first.id, 'record-1');
+      expect(trimmed.last.id, 'record-${HttpInspectorStore.maxRecords}');
+    });
+
+    test(
+        'new records cap request and response bodies without mutating old data',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_body_cap_');
+      try {
+        final oldPayload =
+            'o' * (HttpInspectorStore.maxBodyBytesPerNewRecord + 1);
+        await File(
+                '${tempDir.path}${Platform.pathSeparator}http_inspector_records.json')
+            .writeAsString(jsonEncode([
+          recordJson('old', url: 'https://example.com/old')
+            ..['response_body_preview'] = oldPayload,
+        ]));
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+        await store.ensureLoaded();
+        expect(store.records.single.responseBodyPreview, isNot(oldPayload));
+        expect(
+          await File(
+            '${tempDir.path}${Platform.pathSeparator}http_inspector_records.legacy.json',
+          ).readAsString(),
+          contains(oldPayload),
+        );
+
+        store.addFromJson({
+          ...recordJson('new'),
+          'request_body': 'r' * HttpInspectorStore.maxBodyBytesPerNewRecord,
+          'response_body_preview':
+              's' * HttpInspectorStore.maxBodyBytesPerNewRecord,
+          'response_body_size': HttpInspectorStore.maxBodyBytesPerNewRecord * 2,
+        });
+        final newest = store.records.last;
+        expect(newest.storedBodyBytes,
+            lessThanOrEqualTo(HttpInspectorStore.maxBodyBytesPerNewRecord));
+        expect(newest.responseBodyTruncated, isTrue);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test(
+        'new records cap headers and all persisted fields to one record budget',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_record_cap_');
+      try {
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+        await store.ensureLoaded();
+        store.addFromJson({
+          ...recordJson(
+            'x' * 20000,
+            url: 'https://example.com/${'u' * 20000}',
+          ),
+          'request_headers': {
+            for (var i = 0; i < 100; i++) 'header-$i': 'v' * 5000,
+          },
+          'response_headers': {
+            for (var i = 0; i < 100; i++) 'response-$i': 'v' * 5000,
+          },
+          'request_body': 'r' * HttpInspectorStore.maxBodyBytesPerNewRecord,
+          'response_body_preview':
+              's' * HttpInspectorStore.maxBodyBytesPerNewRecord,
+          'error_message': 'e' * 20000,
+        });
+
+        final record = store.records.single;
+        expect(record.requestHeaders.length, lessThanOrEqualTo(64));
+        expect(record.responseHeaders!.length, lessThanOrEqualTo(64));
+        expect(record.storedJsonBytes,
+            lessThanOrEqualTo(HttpInspectorStore.maxBodyBytesPerNewRecord));
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('migrates legacy arrays to JSONL and archives the original file',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_legacy_');
+      try {
+        final legacy = File(
+          '${tempDir.path}${Platform.pathSeparator}http_inspector_records.json',
+        );
+        await legacy.writeAsString(jsonEncode([
+          recordJson('old-1'),
+          recordJson('old-2'),
+        ]));
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+
+        await store.ensureLoaded();
+
+        expect(store.records.map((record) => record.id), ['old-1', 'old-2']);
+        expect(await legacy.exists(), isFalse);
+        expect(
+          await File(
+            '${tempDir.path}${Platform.pathSeparator}http_inspector_records.legacy.json',
+          ).exists(),
+          isTrue,
+        );
+        expect((await readPersistedRecords(tempDir)).map((e) => e['id']),
+            ['old-1', 'old-2']);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('archives an interrupted legacy array after recovering valid records',
+        () async {
+      final tempDir = await Directory.systemTemp
+          .createTemp('http_inspector_legacy_partial_');
+      try {
+        final legacy = File(
+          '${tempDir.path}${Platform.pathSeparator}http_inspector_records.json',
+        );
+        final source = '[${jsonEncode(recordJson('valid-legacy'))},{"id":';
+        await legacy.writeAsString(source);
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+
+        await store.ensureLoaded();
+
+        expect(store.records.map((record) => record.id), ['valid-legacy']);
+        final archive = File(
+          '${tempDir.path}${Platform.pathSeparator}http_inspector_records.legacy.json',
+        );
+        expect(await archive.readAsString(), source);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('loads valid JSONL lines when the final line is interrupted',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('http_inspector_partial_');
+      try {
+        final v2 = File(
+          '${tempDir.path}${Platform.pathSeparator}http_inspector_records.v2.jsonl',
+        );
+        await v2.writeAsString('${jsonEncode(recordJson('valid'))}\n{"id":');
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+
+        await store.ensureLoaded();
+
+        expect(store.records.map((record) => record.id), ['valid']);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('removes an interrupted compaction temp file before loading JSONL',
+        () async {
+      final tempDir = await Directory.systemTemp
+          .createTemp('http_inspector_compaction_temp_');
+      try {
+        final v2 = File(
+          '${tempDir.path}${Platform.pathSeparator}http_inspector_records.v2.jsonl',
+        );
+        final temporary = File('${v2.path}.tmp');
+        await v2.writeAsString('${jsonEncode(recordJson('committed'))}\n');
+        await temporary.writeAsString('incomplete replacement');
+        final store = HttpInspectorStore.test(
+          supportDirectoryProvider: () async => tempDir,
+        );
+
+        await store.ensureLoaded();
+
+        expect(store.records.single.id, 'committed');
+        expect(await temporary.exists(), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
     });
 
     test('noise methods are hidden by default and can be shown', () async {
@@ -306,7 +547,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 80));
         await store.flush();
 
-        expect(writes, hasLength(1));
+        expect(writes, hasLength(3));
         final persisted = await readPersistedRecords(tempDir);
         expect(
           persisted.map((e) => (e as Map<String, dynamic>)['id']).toList(),
@@ -351,7 +592,7 @@ void main() {
         releaseFirstWrite.complete();
         await store.flush();
 
-        expect(writes, hasLength(2));
+        expect(writes, hasLength(3));
         final persisted = await readPersistedRecords(tempDir);
         expect(
           persisted.map((e) => (e as Map<String, dynamic>)['id']).toList(),
@@ -516,18 +757,5 @@ void main() {
       }
     });
 
-    test('app provides store and network inspector reads injection point', () {
-      final mainSource = File('lib/main.dart').readAsStringSync();
-      final pageSource =
-          File('lib/pages/network_inspector_page.dart').readAsStringSync();
-
-      expect(
-        mainSource,
-        contains('legacy_provider.ChangeNotifierProvider.value('),
-      );
-      expect(mainSource, contains('value: httpInspectorStore'));
-      expect(pageSource, contains('context.read<HttpInspectorStore?>()'));
-      expect(pageSource, contains('nextStore'));
-    });
   });
 }

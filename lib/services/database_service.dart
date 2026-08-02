@@ -15,35 +15,67 @@ class DatabaseService {
 
   static const int schemaVersion = 5;
   static const String databaseFileName = 'python_runner.db';
+  static const int maxBackupBundles = 5;
 
   Database? _db;
   Future<Database>? _dbFuture;
 
   final String? _databasePath;
 
-  Future<Database> get database {
+  Future<Database> get database async {
     if (_db != null) return Future.value(_db!);
-    _dbFuture ??= _initDb().then((db) {
+    final existing = _dbFuture;
+    if (existing != null) return existing;
+
+    final future = _initDb().then((db) {
       _db = db;
       return db;
     });
-    return _dbFuture!;
+    _dbFuture = future;
+    try {
+      return await future;
+    } catch (_) {
+      // Do not cache an initialization failure forever. A transient storage
+      // error (or a restored database) must be recoverable in this process.
+      if (identical(_dbFuture, future)) {
+        _dbFuture = null;
+      }
+      rethrow;
+    }
   }
 
   Future<Database> _initDb() async {
     final path =
         _databasePath ?? join(await getDatabasesPath(), databaseFileName);
-    await _guardUnsupportedSchema(path);
     try {
-      return await openDatabase(
-        path,
-        version: schemaVersion,
-        onCreate: (db, version) async => _createTables(db),
-        onUpgrade: _onUpgrade,
-        onDowngrade: _onDowngrade,
-      );
+      final futureVersion = await _futureSchemaVersion(path);
+      if (futureVersion != null) {
+        return _archiveAndRebuild(
+          path,
+          reason: 'future_v$futureVersion',
+          cause: UnsupportedDatabaseVersionException(
+            currentVersion: schemaVersion,
+            foundVersion: futureVersion,
+          ),
+        );
+      }
+      return await _openCurrentSchema(path);
     } catch (error) {
-      final backupPath = await _backupDatabase(path, reason: 'open_failed');
+      if (error is _DatabaseDowngradeSignal) {
+        return _archiveAndRebuild(
+          path,
+          reason: 'future_v${error.foundVersion}',
+          cause: error,
+        );
+      }
+      if (await _isRecoverableDatabaseFailure(path, error)) {
+        return _archiveAndRebuild(
+          path,
+          reason: 'corrupt',
+          cause: error,
+        );
+      }
+      final backupPath = await _copyDatabaseBackup(path, reason: 'open_failed');
       throw DatabaseOpenException(
         '无法打开数据库，已保留原数据库${backupPath == null ? '' : '并备份到 $backupPath'}。',
         cause: error,
@@ -52,41 +84,157 @@ class DatabaseService {
     }
   }
 
-  Future<void> _guardUnsupportedSchema(String path) async {
-    if (!await databaseExists(path)) return;
+  Future<Database> _openCurrentSchema(String path) {
+    return openDatabase(
+      path,
+      version: schemaVersion,
+      onCreate: (db, version) async => _createTables(db),
+      onUpgrade: _onUpgrade,
+      onDowngrade: _onDowngrade,
+    );
+  }
+
+  Future<int?> _futureSchemaVersion(String path) async {
+    if (!await databaseExists(path)) return null;
     Database? db;
     try {
       db = await openDatabase(path, readOnly: true, singleInstance: false);
       final version = await db.getVersion();
       if (version > schemaVersion) {
-        final backupPath =
-            await _backupDatabase(path, reason: 'future_v$version');
-        throw UnsupportedDatabaseVersionException(
-          currentVersion: schemaVersion,
-          foundVersion: version,
-          backupPath: backupPath,
-        );
+        return version;
       }
     } finally {
       await db?.close();
     }
+    return null;
   }
 
-  Future<String?> _backupDatabase(String path, {required String reason}) async {
+  Future<Database> _archiveAndRebuild(
+    String path, {
+    required String reason,
+    required Object cause,
+  }) async {
+    final backupPath = await _archiveDatabaseBundle(path, reason: reason);
+    if (backupPath == null) {
+      throw DatabaseOpenException(
+        '数据库恢复前无法归档原数据库。',
+        cause: cause,
+      );
+    }
+    try {
+      await deleteDatabase(path);
+      final database = await _openCurrentSchema(path);
+      debugPrint(
+        'DatabaseService recovered database after $reason; archive: $backupPath',
+      );
+      return database;
+    } catch (error) {
+      throw DatabaseOpenException(
+        '数据库已归档到 $backupPath，但无法重建新的数据库。',
+        cause: error,
+        backupPath: backupPath,
+      );
+    }
+  }
+
+  Future<bool> _isRecoverableDatabaseFailure(
+    String path,
+    Object error,
+  ) async {
+    if (await FileSystemEntity.type(path) != FileSystemEntityType.file) {
+      return false;
+    }
+    final message = error.toString().toLowerCase();
+    return message.contains('malformed') ||
+        message.contains('corrupt') ||
+        message.contains('not a database') ||
+        message.contains('file is encrypted');
+  }
+
+  Future<String?> _copyDatabaseBackup(String path,
+      {required String reason}) async {
     final source = File(path);
     if (!await source.exists()) return null;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final backupPath = '$path.backup.$reason.$timestamp';
     await source.copy(backupPath);
+    await _pruneBackupBundles(path);
     return backupPath;
   }
 
-  Future<void> _onDowngrade(Database db, int oldVersion, int newVersion) async {
-    throw UnsupportedDatabaseVersionException(
-      currentVersion: newVersion,
-      foundVersion: oldVersion,
-      backupPath: null,
-    );
+  Future<String?> _archiveDatabaseBundle(String path,
+      {required String reason}) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final moved = <(File source, File archive)>[];
+    try {
+      // Move WAL/SHM first, then the primary database. If any move fails, put
+      // already moved sidecars back so the source database stays intact.
+      for (final suffix in ['-wal', '-shm', '']) {
+        final source = File('$path$suffix');
+        if (!await source.exists()) continue;
+        final archive = File('$path.backup.$reason.$timestamp$suffix');
+        await source.rename(archive.path);
+        moved.add((source, archive));
+      }
+    } catch (_) {
+      for (final move in moved.reversed) {
+        if (await move.$2.exists() && !await move.$1.exists()) {
+          await move.$2.rename(move.$1.path);
+        }
+      }
+      rethrow;
+    }
+    final primaryArchive = moved
+        .where((move) => move.$1.path == path)
+        .map((move) => move.$2.path)
+        .firstOrNull;
+    if (primaryArchive != null) {
+      await _pruneBackupBundles(path);
+      return primaryArchive;
+    }
+    for (final move in moved.reversed) {
+      if (await move.$2.exists() && !await move.$1.exists()) {
+        await move.$2.rename(move.$1.path);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _pruneBackupBundles(String path) async {
+    try {
+      final databaseFile = File(path);
+      final pattern = RegExp(
+        '^${RegExp.escape(databaseFile.uri.pathSegments.last)}\\.backup\\.[^.]+\\.(\\d+)(?:-(?:wal|shm))?'
+        r'$',
+      );
+      final bundles = <String, List<File>>{};
+      await for (final entity in databaseFile.parent.list()) {
+        if (entity is! File) continue;
+        final match = pattern.firstMatch(entity.uri.pathSegments.last);
+        if (match == null) continue;
+        bundles.putIfAbsent(match.group(1)!, () => <File>[]).add(entity);
+      }
+      final timestamps = bundles.keys.toList()..sort((a, b) => b.compareTo(a));
+      for (final timestamp in timestamps.skip(maxBackupBundles)) {
+        for (final file in bundles[timestamp]!) {
+          try {
+            await file.delete();
+          } catch (error) {
+            debugPrint('DatabaseService backup cleanup failed: $error');
+          }
+        }
+      }
+    } catch (error) {
+      debugPrint('DatabaseService backup scan failed: $error');
+    }
+  }
+
+  Future<void> _onDowngrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    throw _DatabaseDowngradeSignal(oldVersion);
   }
 
   @visibleForTesting
@@ -425,4 +573,10 @@ class UnsupportedDatabaseVersionException implements Exception {
   @override
   String toString() =>
       'UnsupportedDatabaseVersionException: database schema $foundVersion is newer than supported schema $currentVersion';
+}
+
+class _DatabaseDowngradeSignal implements Exception {
+  const _DatabaseDowngradeSignal(this.foundVersion);
+
+  final int foundVersion;
 }

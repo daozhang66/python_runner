@@ -6,6 +6,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
     final timeFmt = DateFormat('yyyy-MM-dd HH:mm:ss.SSS');
 
@@ -19,11 +20,12 @@ class _HttpRecordDetailPage extends StatelessWidget {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: record.toExportText()));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('已复制请求详情'), duration: Duration(seconds: 1)),
+                SnackBar(
+                    content: Text(l10n.requestDetailsCopied),
+                    duration: const Duration(seconds: 1)),
               );
             },
-            tooltip: '复制',
+            tooltip: l10n.copy,
           ),
         ],
       ),
@@ -32,22 +34,23 @@ class _HttpRecordDetailPage extends StatelessWidget {
         children: [
           // --- Overview ---
           AppSectionCard(
-            title: '概览',
+            title: l10n.overview,
             icon: Icons.info_outline,
             children: [
-              _DetailRow('时间', timeFmt.format(record.timestamp)),
-              _DetailRow('方法', record.method),
+              _DetailRow(l10n.timeLabel, timeFmt.format(record.timestamp)),
+              _DetailRow(l10n.method, record.method),
               _DetailRow('URL', record.url),
-              _DetailRow('库', record.library),
-              _DetailRow('耗时', record.durationText),
-              _DetailRow('代理', record.usedProxy ? '是' : '否'),
-              _DetailRow('SSL 校验', record.sslVerify ? '是' : '否'),
+              _DetailRow(l10n.library, record.library),
+              _DetailRow(l10n.duration, record.durationText),
+              _DetailRow(l10n.proxy, record.usedProxy ? l10n.yes : l10n.no),
+              _DetailRow(
+                  l10n.sslVerification, record.sslVerify ? l10n.yes : l10n.no),
             ],
           ),
           const SizedBox(height: 8),
           // --- Request Headers ---
           AppSectionCard(
-            title: '请求头 (${record.requestHeaders.length})',
+            title: l10n.requestHeaders(record.requestHeaders.length),
             icon: Icons.arrow_upward,
             children: record.requestHeaders.entries
                 .map((e) => _DetailRow(e.key, e.value))
@@ -56,7 +59,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
           if (record.requestBody != null && record.requestBody!.isNotEmpty) ...[
             const SizedBox(height: 8),
             AppSectionCard(
-              title: '请求体',
+              title: l10n.requestBody,
               icon: Icons.upload,
               children: [_CodeBlock(record.requestBody!)],
             ),
@@ -64,15 +67,16 @@ class _HttpRecordDetailPage extends StatelessWidget {
           const SizedBox(height: 8),
           // --- Response ---
           AppSectionCard(
-            title: '响应',
+            title: l10n.response,
             icon: Icons.arrow_downward,
             children: [
               if (record.statusCode != null)
-                _DetailRow('状态码', record.statusCode.toString()),
+                _DetailRow(l10n.statusCode, record.statusCode.toString()),
               if (record.errorType != null)
-                _DetailRow('错误类型', record.errorType!, valueColor: colors.error),
+                _DetailRow(l10n.errorType, record.errorType!,
+                    valueColor: colors.error),
               if (record.errorMessage != null)
-                _DetailRow('错误信息', record.errorMessage!,
+                _DetailRow(l10n.errorMessage, record.errorMessage!,
                     valueColor: colors.error),
             ],
           ),
@@ -80,7 +84,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
               record.responseHeaders!.isNotEmpty) ...[
             const SizedBox(height: 8),
             AppSectionCard(
-              title: '响应头 (${record.responseHeaders!.length})',
+              title: l10n.responseHeaders(record.responseHeaders!.length),
               icon: Icons.arrow_downward,
               children: record.responseHeaders!.entries
                   .map((e) => _DetailRow(e.key, e.value))
@@ -92,10 +96,10 @@ class _HttpRecordDetailPage extends StatelessWidget {
             const SizedBox(height: 8),
             AppSectionCard(
               title: record.isImageBody
-                  ? '响应图片'
+                  ? l10n.responseImage
                   : record.isMediaBody
-                      ? '响应媒体'
-                      : '响应体预览',
+                      ? l10n.responseMedia
+                      : l10n.responsePreview,
               icon: record.isImageBody
                   ? Icons.image
                   : record.isMediaBody
@@ -121,8 +125,12 @@ class _HttpRecordDetailPage extends StatelessWidget {
                         Expanded(
                           child: Text(
                             record.responseBodyBytes != null
-                                ? '响应体较大，显示 ${_formatByteSize(record.capturedResponseBodyBytes)} / ${_formatByteSize(record.responseBodyBytes!)}。'
-                                : '响应体较大，当前仅显示已捕获的内容。',
+                                ? l10n.largeResponseCaptured(
+                                    _formatByteSize(
+                                        record.capturedResponseBodyBytes),
+                                    _formatByteSize(record.responseBodyBytes!),
+                                  )
+                                : l10n.largeResponse,
                             style: TextStyle(
                                 fontSize: 11, color: colors.onErrorContainer),
                           ),
@@ -153,7 +161,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
                                   body: record.responseBodyPreview!,
                                   bodyBytes: record.responseBodyBytes,
                                   wasTruncated: record.responseBodyTruncated,
-                                  title: '响应体',
+                                  title: l10n.responseBody,
                                 ),
                         ),
                       ),
@@ -162,7 +170,10 @@ class _HttpRecordDetailPage extends StatelessWidget {
                               ? Icons.zoom_in
                               : Icons.open_in_full,
                           size: 14),
-                      label: Text(record.isImageBody ? '查看原图' : '查看完整内容',
+                      label: Text(
+                          record.isImageBody
+                              ? l10n.viewOriginalImage
+                              : l10n.viewFullContent,
                           style: const TextStyle(fontSize: 12)),
                       style: TextButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -293,10 +304,11 @@ class _MediaInfoCard extends StatelessWidget {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  String _mediaLabel(String type) {
-    if (type.startsWith('audio/')) return '音频';
-    if (type.startsWith('video/')) return '视频';
-    return '媒体';
+  String _mediaLabel(BuildContext context, String type) {
+    final l10n = AppLocalizations.of(context)!;
+    if (type.startsWith('audio/')) return l10n.audio;
+    if (type.startsWith('video/')) return l10n.video;
+    return l10n.media;
   }
 
   IconData _mediaIcon(String type) {
@@ -322,7 +334,7 @@ class _MediaInfoCard extends StatelessWidget {
         children: [
           Icon(_mediaIcon(type), size: 40, color: colors.primary),
           const SizedBox(height: 8),
-          Text(_mediaLabel(type),
+          Text(_mediaLabel(context, type),
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -331,9 +343,13 @@ class _MediaInfoCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _MediaMetaItem(label: '类型', value: type),
+              _MediaMetaItem(
+                  label: AppLocalizations.of(context)!.type, value: type),
               const SizedBox(width: 24),
-              _MediaMetaItem(label: '大小', value: _formatSize(size)),
+              _MediaMetaItem(
+                label: AppLocalizations.of(context)!.size,
+                value: _formatSize(size),
+              ),
             ],
           ),
         ],
@@ -426,6 +442,34 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   }
 
   bool _isTruncated = false;
+  CodeEditorStyle? _cachedEditorStyle;
+  _BodyEditorStyleKey? _editorStyleKey;
+
+  CodeEditorStyle _resolveEditorStyle(ColorScheme colors) {
+    final backgroundColor = AppThemeColors.codeSurface(colors);
+    final key = _BodyEditorStyleKey(
+      fontSize: _fontSize,
+      textColor: colors.onSurface,
+      backgroundColor: backgroundColor,
+      selectionColor: colors.primary.withValues(alpha: 0.24),
+      highlightColor: colors.primaryContainer.withValues(alpha: 0.82),
+      cursorColor: colors.primary,
+    );
+    if (_editorStyleKey == key && _cachedEditorStyle != null) {
+      return _cachedEditorStyle!;
+    }
+    _editorStyleKey = key;
+    return _cachedEditorStyle = CodeEditorStyle(
+      fontFamily: 'monospace',
+      fontSize: key.fontSize,
+      fontHeight: 1.45,
+      textColor: key.textColor,
+      backgroundColor: key.backgroundColor,
+      selectionColor: key.selectionColor,
+      highlightColor: key.highlightColor,
+      cursorColor: key.cursorColor,
+    );
+  }
 
   void _onCodeScrollChanged() {
     if (!_codeScrollController.verticalScroller.hasClients) return;
@@ -695,14 +739,14 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
               onPressed: () {
                 setDialogState(() => tempSize = 12.0);
               },
-              child: const Text('重置'),
+              child: Text(AppLocalizations.of(ctx)!.reset),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 setState(() => _fontSize = tempSize);
               },
-              child: const Text('确定'),
+              child: Text(AppLocalizations.of(ctx)!.confirm),
             ),
           ],
         ),
@@ -761,7 +805,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('已导出: $path'),
+              content: Text(AppLocalizations.of(context)!.exportedTo(path)),
               duration: const Duration(seconds: 3)),
         );
       }
@@ -769,7 +813,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: $e'), duration: const Duration(seconds: 2)),
+            content: Text(AppLocalizations.of(context)!.exportFailed),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     }
@@ -795,8 +841,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 onDismiss();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('已复制'),
+                    SnackBar(
+                      content: Text(AppLocalizations.of(context)!.copied),
                       duration: Duration(seconds: 1),
                     ),
                   );
@@ -830,7 +876,9 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   void _copyFormattedBody() {
     Clipboard.setData(ClipboardData(text: _formatted));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+      SnackBar(
+          content: Text(AppLocalizations.of(context)!.copied),
+          duration: const Duration(seconds: 1)),
     );
   }
 
@@ -863,7 +911,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
           IconButton(
             icon: const Icon(Icons.search, size: 20),
             onPressed: _findController.findMode,
-            tooltip: '搜索',
+            tooltip: AppLocalizations.of(context)!.search,
           ),
           if (isJson)
             IconButton(
@@ -874,43 +922,46 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                   builder: (_) => _JsonTreePage(data: _parsedJson),
                 ),
               ),
-              tooltip: '树形视图',
+              tooltip: AppLocalizations.of(context)!.treeView,
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
-            tooltip: '更多',
+            tooltip: AppLocalizations.of(context)!.more,
             position: PopupMenuPosition.under,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
             itemBuilder: (_) => [
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'font',
                 child: Row(
                   children: [
                     Icon(Icons.format_size, size: 18),
                     SizedBox(width: 8),
-                    Text('字体大小', style: TextStyle(fontSize: 13)),
+                    Text(AppLocalizations.of(context)!.fontSize,
+                        style: const TextStyle(fontSize: 13)),
                   ],
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'copy',
                 child: Row(
                   children: [
                     Icon(Icons.copy, size: 18),
                     SizedBox(width: 8),
-                    Text('复制全部', style: TextStyle(fontSize: 13)),
+                    Text(AppLocalizations.of(context)!.copyAll,
+                        style: const TextStyle(fontSize: 13)),
                   ],
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'export',
                 child: Row(
                   children: [
                     Icon(Icons.file_download_outlined, size: 18),
                     SizedBox(width: 8),
-                    Text('导出 JSON', style: TextStyle(fontSize: 13)),
+                    Text(AppLocalizations.of(context)!.exportJson,
+                        style: const TextStyle(fontSize: 13)),
                   ],
                 ),
               ),
@@ -939,25 +990,29 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                 if (_isTruncated) ...[
                   Icon(Icons.warning_amber, size: 12, color: colors.error),
                   const SizedBox(width: 3),
-                  Text('已截断',
+                  Text(AppLocalizations.of(context)!.truncated,
                       style: TextStyle(fontSize: 10, color: colors.error)),
                   const SizedBox(width: 8),
                 ],
-                Text('$_lineCount 行',
+                Text(AppLocalizations.of(context)!.lineCount(_lineCount),
                     style: TextStyle(
                         fontSize: 10, color: colors.onSurfaceVariant)),
                 if (widget.bodyBytes != null) ...[
                   const SizedBox(width: 8),
                   Text(
                     _isTruncated
-                        ? '已捕获 ${_formatByteSize(utf8.encode(widget.body).length)} / ${_formatByteSize(widget.bodyBytes!)}'
+                        ? AppLocalizations.of(context)!.capturedBytes(
+                            _formatByteSize(utf8.encode(widget.body).length),
+                            _formatByteSize(widget.bodyBytes!))
                         : _formatByteSize(widget.bodyBytes!),
                     style:
                         TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
                   ),
                 ],
                 const Spacer(),
-                Text('${_formatted.length} 字符',
+                Text(
+                    AppLocalizations.of(context)!
+                        .characterCount(_formatted.length),
                     style: TextStyle(
                         fontSize: 10, color: colors.onSurfaceVariant)),
               ],
@@ -988,17 +1043,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.all(12),
                     borderRadius: BorderRadius.circular(8),
-                    style: CodeEditorStyle(
-                      fontFamily: 'monospace',
-                      fontSize: _fontSize,
-                      fontHeight: 1.45,
-                      textColor: colors.onSurface,
-                      backgroundColor: AppThemeColors.codeSurface(colors),
-                      selectionColor: colors.primary.withValues(alpha: 0.24),
-                      highlightColor:
-                          colors.primaryContainer.withValues(alpha: 0.82),
-                      cursorColor: colors.primary,
-                    ),
+                    style: _resolveEditorStyle(colors),
                     indicatorBuilder: (context, editingController,
                         chunkController, notifier) {
                       return Row(
@@ -1072,6 +1117,44 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
   }
 }
 
+class _BodyEditorStyleKey {
+  final double fontSize;
+  final Color textColor;
+  final Color backgroundColor;
+  final Color selectionColor;
+  final Color highlightColor;
+  final Color cursorColor;
+
+  const _BodyEditorStyleKey({
+    required this.fontSize,
+    required this.textColor,
+    required this.backgroundColor,
+    required this.selectionColor,
+    required this.highlightColor,
+    required this.cursorColor,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is _BodyEditorStyleKey &&
+      fontSize == other.fontSize &&
+      textColor == other.textColor &&
+      backgroundColor == other.backgroundColor &&
+      selectionColor == other.selectionColor &&
+      highlightColor == other.highlightColor &&
+      cursorColor == other.cursorColor;
+
+  @override
+  int get hashCode => Object.hash(
+        fontSize,
+        textColor,
+        backgroundColor,
+        selectionColor,
+        highlightColor,
+        cursorColor,
+      );
+}
+
 class _BodyCodeFindPanel extends StatelessWidget
     implements PreferredSizeWidget {
   final CodeFindController controller;
@@ -1092,7 +1175,7 @@ class _BodyCodeFindPanel extends StatelessWidget
     final hasResult =
         result != null && !result.dirty && result.matches.isNotEmpty;
     final resultText = value.searching
-        ? '搜索中'
+        ? AppLocalizations.of(context)!.searching
         : hasResult
             ? '${result.index + 1}/${result.matches.length}'
             : '0/0';
@@ -1110,8 +1193,8 @@ class _BodyCodeFindPanel extends StatelessWidget
               autofocus: true,
               maxLines: 1,
               style: const TextStyle(fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: '搜索内容...',
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context)!.searchContent,
                 border: InputBorder.none,
                 isDense: true,
               ),
@@ -1129,19 +1212,19 @@ class _BodyCodeFindPanel extends StatelessWidget
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_up, size: 18),
             onPressed: hasResult ? controller.previousMatch : null,
-            tooltip: '上一个',
+            tooltip: AppLocalizations.of(context)!.previous,
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_down, size: 18),
             onPressed: hasResult ? controller.nextMatch : null,
-            tooltip: '下一个',
+            tooltip: AppLocalizations.of(context)!.next,
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 16),
             onPressed: controller.close,
-            tooltip: '关闭',
+            tooltip: AppLocalizations.of(context)!.close,
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -1159,7 +1242,8 @@ class _JsonTreePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('JSON 树形查看', style: TextStyle(fontSize: 15)),
+        title: Text(AppLocalizations.of(context)!.jsonTreeView,
+            style: const TextStyle(fontSize: 15)),
       ),
       body: SelectionArea(
         child: SingleChildScrollView(
@@ -1389,11 +1473,11 @@ String _primitiveText(dynamic value) {
 }
 
 Color _primitiveColor(dynamic value) {
-  if (value == null) return const Color(0xFF7B8190);
-  if (value is bool) return const Color(0xFF7A52C7);
-  if (value is num) return const Color(0xFFB26418);
-  if (value is String) return const Color(0xFF1D8A63);
-  return const Color(0xFF7B8190);
+  if (value == null) return AppThemeColors.jsonNull;
+  if (value is bool) return AppThemeColors.jsonBoolean;
+  if (value is num) return AppThemeColors.jsonNumber;
+  if (value is String) return AppThemeColors.jsonString;
+  return AppThemeColors.jsonNull;
 }
 
 // --- Image preview widget ---
@@ -1417,7 +1501,10 @@ class _ImagePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final bytes = _decodeDataUri();
     if (bytes == null) {
-      return const Text('(图片解码失败)', style: TextStyle(fontSize: 12));
+      return Text(
+        AppLocalizations.of(context)!.imageDecodeFailed,
+        style: const TextStyle(fontSize: 12),
+      );
     }
     return Container(
       width: double.infinity,
@@ -1434,8 +1521,10 @@ class _ImagePreview extends StatelessWidget {
           child: Image.memory(
             bytes,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) =>
-                const Text('(图片渲染失败)', style: TextStyle(fontSize: 12)),
+            errorBuilder: (_, __, ___) => Text(
+              AppLocalizations.of(context)!.imageRenderFailed,
+              style: const TextStyle(fontSize: 12),
+            ),
           ),
         ),
       ),
@@ -1466,11 +1555,15 @@ class _ImageFullViewPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.surface,
       appBar: AppBar(
-        title: const Text('图片预览', style: TextStyle(fontSize: 15)),
+        title: Text(
+          AppLocalizations.of(context)!.imagePreview,
+          style: const TextStyle(fontSize: 15),
+        ),
       ),
       body: bytes == null
           ? Center(
-              child: Text('(图片解码失败)', style: TextStyle(color: colors.error)))
+              child: Text(AppLocalizations.of(context)!.imageDecodeFailed,
+                  style: TextStyle(color: colors.error)))
           : InteractiveViewer(
               minScale: 0.2,
               maxScale: 8.0,
@@ -1479,7 +1572,8 @@ class _ImageFullViewPage extends StatelessWidget {
                   bytes,
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => Center(
-                      child: Text('(图片渲染失败)',
+                      child: Text(
+                          AppLocalizations.of(context)!.imageRenderFailed,
                           style: TextStyle(color: colors.error))),
                 ),
               ),

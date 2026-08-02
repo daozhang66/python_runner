@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../services/app_logger.dart';
+import '../l10n/app_localizations.dart';
 
 class AppLogsPage extends StatefulWidget {
   const AppLogsPage({super.key});
@@ -20,14 +21,22 @@ class _AppLogsPageState extends State<AppLogsPage> {
   String? _selectedSource;
   DateRangeFilter _dateRange = DateRangeFilter.all;
   bool _filterExpanded = false;
+  List<AppLogEntry> _filteredLogs = const [];
+  Map<String, dynamic> _statistics = const {};
+  List<String> _sources = const [];
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() => setState(() {}));
+    _searchController.addListener(_onSearchChanged);
+    _refreshLogSnapshot();
   }
 
-  List<AppLogEntry> get _filteredLogs {
+  void _onSearchChanged() {
+    setState(_refreshLogSnapshot);
+  }
+
+  void _refreshLogSnapshot() {
     DateTime? startDate;
     DateTime? endDate = DateTime.now();
 
@@ -44,39 +53,45 @@ class _AppLogsPageState extends State<AppLogsPage> {
         break;
     }
 
-    return _logger.filterLogs(
-      levels: _selectedLevels,
-      source: _selectedSource,
-      startDate: startDate,
-      endDate: endDate,
-      searchQuery: _searchController.text.trim(),
+    _filteredLogs = List<AppLogEntry>.unmodifiable(
+      _logger.filterLogs(
+        levels: _selectedLevels,
+        source: _selectedSource,
+        startDate: startDate,
+        endDate: endDate,
+        searchQuery: _searchController.text.trim(),
+      ),
     );
+    _statistics = Map<String, dynamic>.unmodifiable(_logger.getStatistics());
+    _sources =
+        List<String>.unmodifiable(_logger.getAllSources().toList()..sort());
   }
 
   @override
   Widget build(BuildContext context) {
-    final logs = _filteredLogs.reversed.toList(); // 最新的在前
-    final stats = _logger.getStatistics();
-    final sources = _logger.getAllSources().toList()..sort();
+    final l10n = AppLocalizations.of(context)!;
+    final logs = _filteredLogs;
+    final stats = _statistics;
+    final sources = _sources;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('应用日志'),
+        title: Text(l10n.appLogs),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: '刷新',
-            onPressed: () => setState(() {}),
+            tooltip: l10n.refresh,
+            onPressed: () => setState(_refreshLogSnapshot),
           ),
           PopupMenuButton(
             icon: const Icon(Icons.more_vert),
             itemBuilder: (context) => [
               PopupMenuItem(
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.file_download_outlined, size: 20),
                     SizedBox(width: 12),
-                    Text('导出日志'),
+                    Text(l10n.exportLogs),
                   ],
                 ),
                 onTap: () => _exportLogs(),
@@ -87,9 +102,9 @@ class _AppLogsPageState extends State<AppLogsPage> {
                     Icon(Icons.delete_outline,
                         size: 20, color: Theme.of(context).colorScheme.error),
                     const SizedBox(width: 12),
-                    Text('清空日志',
-                        style:
-                            TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Text(l10n.clearLogs,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
                   ],
                 ),
                 onTap: () => _clearLogs(),
@@ -121,11 +136,11 @@ class _AppLogsPageState extends State<AppLogsPage> {
                           : Icons.filter_list_outlined),
                       onPressed: () =>
                           setState(() => _filterExpanded = !_filterExpanded),
-                      tooltip: '筛选',
+                      tooltip: l10n.filter,
                     ),
                   ],
                 ),
-                hintText: '搜索日志内容',
+                hintText: l10n.searchLogContent,
                 isDense: true,
               ),
             ),
@@ -138,10 +153,18 @@ class _AppLogsPageState extends State<AppLogsPage> {
               selectedSource: _selectedSource,
               dateRange: _dateRange,
               sources: sources,
-              onLevelsChanged: (levels) => setState(() => _selectedLevels = levels),
-              onSourceChanged: (source) =>
-                  setState(() => _selectedSource = source),
-              onDateRangeChanged: (range) => setState(() => _dateRange = range),
+              onLevelsChanged: (levels) => setState(() {
+                _selectedLevels = levels;
+                _refreshLogSnapshot();
+              }),
+              onSourceChanged: (source) => setState(() {
+                _selectedSource = source;
+                _refreshLogSnapshot();
+              }),
+              onDateRangeChanged: (range) => setState(() {
+                _dateRange = range;
+                _refreshLogSnapshot();
+              }),
             ),
 
           // 统计信息
@@ -159,10 +182,13 @@ class _AppLogsPageState extends State<AppLogsPage> {
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                     itemCount: logs.length,
-                    itemBuilder: (context, index) => _LogCard(
-                      entry: logs[index],
-                      onCopy: () => _copyLog(logs[index]),
-                    ),
+                    itemBuilder: (context, index) {
+                      final entry = logs[logs.length - 1 - index];
+                      return _LogCard(
+                        entry: entry,
+                        onCopy: () => _copyLog(entry),
+                      );
+                    },
                   ),
           ),
         ],
@@ -182,7 +208,9 @@ class _AppLogsPageState extends State<AppLogsPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            _searchController.text.isEmpty ? '暂无日志' : '没有匹配的日志',
+            _searchController.text.isEmpty
+                ? AppLocalizations.of(context)!.noLogs
+                : AppLocalizations.of(context)!.noMatchingLogs,
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ],
@@ -194,7 +222,10 @@ class _AppLogsPageState extends State<AppLogsPage> {
     await Clipboard.setData(ClipboardData(text: entry.formatted));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.copied),
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 
@@ -206,8 +237,10 @@ class _AppLogsPageState extends State<AppLogsPage> {
     await Clipboard.setData(ClipboardData(text: content));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('日志已复制到剪贴板'), duration: Duration(seconds: 2)),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.logsCopied),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -215,16 +248,16 @@ class _AppLogsPageState extends State<AppLogsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清空日志'),
-        content: const Text('确定要清空所有日志吗？此操作不可恢复。'),
+        title: Text(AppLocalizations.of(ctx)!.clearLogs),
+        content: Text(AppLocalizations.of(ctx)!.clearLogsConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(ctx)!.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('清空'),
+            child: Text(AppLocalizations.of(ctx)!.clear),
           ),
         ],
       ),
@@ -232,16 +265,17 @@ class _AppLogsPageState extends State<AppLogsPage> {
 
     if (confirmed == true) {
       await _logger.clearAll();
-      if (mounted) setState(() {});
+      if (mounted) setState(_refreshLogSnapshot);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('日志已清空')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.logsCleared)),
       );
     }
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -285,7 +319,8 @@ class _FilterBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 级别筛选
-          Text('级别', style: Theme.of(context).textTheme.labelMedium),
+          Text(AppLocalizations.of(context)!.level,
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -312,13 +347,14 @@ class _FilterBar extends StatelessWidget {
           const SizedBox(height: 12),
 
           // 来源筛选
-          Text('来源', style: Theme.of(context).textTheme.labelMedium),
+          Text(AppLocalizations.of(context)!.source,
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
               FilterChip(
-                label: const Text('全部'),
+                label: Text(AppLocalizations.of(context)!.all),
                 selected: selectedSource == null,
                 onSelected: (selected) => onSourceChanged(null),
               ),
@@ -335,13 +371,14 @@ class _FilterBar extends StatelessWidget {
           const SizedBox(height: 12),
 
           // 时间范围
-          Text('时间', style: Theme.of(context).textTheme.labelMedium),
+          Text(AppLocalizations.of(context)!.time,
+              style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: DateRangeFilter.values.map((range) {
               return ChoiceChip(
-                label: Text(_dateRangeLabel(range)),
+                label: Text(_dateRangeLabel(context, range)),
                 selected: dateRange == range,
                 onSelected: (selected) => onDateRangeChanged(range),
               );
@@ -374,14 +411,15 @@ class _FilterBar extends StatelessWidget {
     return Icon(icon, size: 16, color: isSelected ? color : null);
   }
 
-  String _dateRangeLabel(DateRangeFilter range) {
+  String _dateRangeLabel(BuildContext context, DateRangeFilter range) {
+    final l10n = AppLocalizations.of(context)!;
     switch (range) {
       case DateRangeFilter.today:
-        return '今天';
+        return l10n.today;
       case DateRangeFilter.last7Days:
-        return '最近7天';
+        return l10n.lastSevenDays;
       case DateRangeFilter.all:
-        return '全部';
+        return l10n.all;
     }
   }
 }
@@ -424,7 +462,11 @@ class _StatisticsBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(label: '总计', value: total, color: colors.primary),
+          _StatItem(
+            label: AppLocalizations.of(context)!.total,
+            value: total,
+            color: colors.primary,
+          ),
           _StatItem(label: 'INFO', value: infoCount, color: Colors.green),
           _StatItem(label: 'WARN', value: warnCount, color: Colors.orange),
           _StatItem(label: 'ERROR', value: errorCount, color: Colors.red),
@@ -538,7 +580,7 @@ class _LogCard extends StatelessWidget {
             ],
             const Spacer(),
             Text(
-              _formatTime(entry.timestamp),
+              _formatTime(context, entry.timestamp),
               style: TextStyle(
                 fontSize: 11,
                 color: colors.onSurfaceVariant,
@@ -572,7 +614,7 @@ class _LogCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: onCopy,
                 icon: const Icon(Icons.copy, size: 16),
-                label: const Text('复制'),
+                label: Text(AppLocalizations.of(context)!.copy),
               ),
             ],
           ),
@@ -603,16 +645,17 @@ class _LogCard extends StatelessWidget {
     }
   }
 
-  String _formatTime(DateTime timestamp) {
+  String _formatTime(BuildContext context, DateTime timestamp) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final diff = now.difference(timestamp);
 
     if (diff.inSeconds < 60) {
-      return '刚刚';
+      return l10n.justNow;
     } else if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}分钟前';
+      return l10n.minutesAgo(diff.inMinutes);
     } else if (diff.inHours < 24) {
-      return '${diff.inHours}小时前';
+      return l10n.hoursAgo(diff.inHours);
     } else {
       return DateFormat('MM-dd HH:mm').format(timestamp);
     }

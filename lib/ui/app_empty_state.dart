@@ -64,7 +64,7 @@ class _AppEmptyStateState extends State<AppEmptyState>
     return Center(
       child: TweenAnimationBuilder<double>(
         duration: const Duration(milliseconds: 600),
-        curve: Curves.easeOutBack,
+        curve: Curves.easeOutCubic,
         tween: Tween<double>(begin: 0.0, end: 1.0),
         builder: (context, value, child) {
           return Opacity(

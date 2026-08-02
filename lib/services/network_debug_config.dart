@@ -22,7 +22,8 @@ class NetworkDebugConfig {
   bool get hasProxy =>
       _debugModeEnabled && _proxyHost.isNotEmpty && _proxyPort > 0;
   bool get affectsGlobalHttpClients => allowInsecureCerts || hasProxy;
-  String get proxyAddress => '$_proxyHost:$_proxyPort';
+  String get proxyAddress =>
+      '${_proxyHost.contains(':') ? '[$_proxyHost]' : _proxyHost}:$_proxyPort';
 
   /// Load configuration from SharedPreferences.
   Future<void> load() async {
@@ -32,8 +33,21 @@ class NetworkDebugConfig {
       if (version != _loadVersion) return; // superseded by a newer call
       _debugModeEnabled = prefs.getBool('net_debug_mode') ?? false;
       _allowInsecureCerts = prefs.getBool('net_allow_insecure') ?? false;
-      _proxyHost = prefs.getString('net_proxy_host') ?? '';
-      _proxyPort = prefs.getInt('net_proxy_port') ?? 0;
+      final savedHost = prefs.getString('net_proxy_host') ?? '';
+      final savedPort = prefs.getInt('net_proxy_port') ?? 0;
+      try {
+        _validateProxy(savedHost, savedPort);
+        _proxyHost = _normalizeProxyHost(savedHost);
+        _proxyPort = savedPort;
+      } on FormatException catch (error) {
+        _proxyHost = '';
+        _proxyPort = 0;
+        AppLogger.instance.warn(
+          '已忽略无效的代理配置',
+          source: 'NetworkDebug',
+          detail: error.message,
+        );
+      }
 
       if (_debugModeEnabled) {
         _applyHttpOverrides();
@@ -67,17 +81,65 @@ class NetworkDebugConfig {
   }
 
   Future<void> setProxyHost(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('net_proxy_host', value.trim());
-    _proxyHost = value.trim();
-    await load();
+    await setProxy(value, _proxyPort);
   }
 
   Future<void> setProxyPort(int value) async {
+    await setProxy(_proxyHost, value);
+  }
+
+  /// Save host and port together so validation cannot persist a partial proxy.
+  ///
+  /// An empty host paired with port zero clears the proxy. Otherwise, a valid
+  /// hostname/IP literal and a port in 1..65535 are required.
+  Future<void> setProxy(String host, int port) async {
+    _validateProxy(host, port);
+    final normalizedHost = _normalizeProxyHost(host);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('net_proxy_port', value);
-    _proxyPort = value;
-    await load();
+    await prefs.setString('net_proxy_host', normalizedHost);
+    await prefs.setInt('net_proxy_port', port);
+    _proxyHost = normalizedHost;
+    _proxyPort = port;
+    if (_debugModeEnabled) {
+      _applyHttpOverrides();
+    }
+  }
+
+  static void _validateProxy(String host, int port) {
+    final normalizedHost = _normalizeProxyHost(host);
+    if (normalizedHost.isEmpty && port == 0) return;
+    if (normalizedHost.isEmpty) {
+      throw const FormatException('代理端口需要同时填写代理主机');
+    }
+    if (port < 1 || port > 65535) {
+      throw const FormatException('代理端口必须在 1 到 65535 之间');
+    }
+  }
+
+  static String _normalizeProxyHost(String value) {
+    if (value != value.trim()) {
+      throw const FormatException('代理主机不能包含首尾空白');
+    }
+    final host = value.trim();
+    if (host.isEmpty) return '';
+    if (host.contains(RegExp(r'[\s/@?#\\]')) || host.contains('://')) {
+      throw const FormatException('代理主机必须是主机名、IPv4 或 IPv6 地址');
+    }
+    final unbracketed = host.startsWith('[') && host.endsWith(']')
+        ? host.substring(1, host.length - 1)
+        : host;
+    final address = InternetAddress.tryParse(unbracketed);
+    if (address != null) return address.address;
+    if (host.contains(':')) {
+      throw const FormatException('代理主机不能包含端口');
+    }
+    final hostname = RegExp(
+      r'^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)$',
+    );
+    if (!hostname.hasMatch(host)) {
+      throw const FormatException('代理主机必须是合法主机名或 IP 地址');
+    }
+    return host.toLowerCase();
   }
 
   /// Apply HttpOverrides for debug mode (proxy + insecure certs).

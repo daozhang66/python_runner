@@ -6,7 +6,7 @@ void main() {
   test('large Flutter pages are split into focused part files', () {
     final expectedLineCaps = {
       'lib/pages/network_inspector_page.dart': 500,
-      'lib/pages/script_list_page.dart': 500,
+      'lib/features/scripts/presentation/pages/script_list_page.dart': 520,
       'lib/pages/settings_page.dart': 500,
     };
 
@@ -19,9 +19,18 @@ void main() {
         File('lib/pages/network_inspector_detail.dart').existsSync(), isTrue);
     expect(
         File('lib/pages/network_inspector_widgets.dart').existsSync(), isTrue);
-    expect(File('lib/pages/script_list_actions.dart').existsSync(), isTrue);
-    expect(File('lib/pages/script_list_content.dart').existsSync(), isTrue);
-    expect(File('lib/pages/script_list_widgets.dart').existsSync(), isTrue);
+    expect(
+        File('lib/features/scripts/presentation/pages/script_list_actions.dart')
+            .existsSync(),
+        isTrue);
+    expect(
+        File('lib/features/scripts/presentation/pages/script_list_content.dart')
+            .existsSync(),
+        isTrue);
+    expect(
+        File('lib/features/scripts/presentation/pages/script_list_widgets.dart')
+            .existsSync(),
+        isTrue);
     expect(File('lib/pages/settings_actions.dart').existsSync(), isTrue);
     expect(File('lib/pages/settings_sections.dart').existsSync(), isTrue);
     expect(File('lib/pages/settings_widgets.dart').existsSync(), isTrue);
@@ -36,9 +45,6 @@ void main() {
     ).readAsStringSync();
     final projectStore = File(
       'android/app/src/main/kotlin/com/daozhang/py/ScriptProjectStore.kt',
-    ).readAsStringSync();
-    final floatingBallController = File(
-      'android/app/src/main/kotlin/com/daozhang/py/FloatingBallController.kt',
     ).readAsStringSync();
     final nativeFileOperations = File(
       'android/app/src/main/kotlin/com/daozhang/py/NativeFileOperations.kt',
@@ -63,7 +69,6 @@ void main() {
     expect(mainActivity, contains('ScriptFileStore(filesDir)'));
     expect(mainActivity, contains('ScriptProjectStore(this, filesDir)'));
     expect(mainActivity, contains('NativeFileOperations(filesDir'));
-    expect(mainActivity, contains('FloatingBallController(this, mainHandler)'));
     expect(mainActivity, contains('ChaquopyPackageController(mainHandler'));
     expect(mainActivity, contains('AppUpdateController(this)'));
     expect(mainActivity, contains('RuntimeInfoController('));
@@ -83,9 +88,12 @@ void main() {
     expect(projectStore, contains('class ScriptProjectStore'));
     expect(projectStore, contains('fun safeProjectFile'));
     expect(projectStore, contains('fun importProjectZip'));
-    expect(floatingBallController, contains('class FloatingBallController'));
-    expect(floatingBallController, contains('fun canShowFloatingBall'));
-    expect(floatingBallController, contains('fun showFloatingBall'));
+    expect(
+      File('android/app/src/main/kotlin/com/daozhang/py/FloatingBallController.kt')
+          .existsSync(),
+      isFalse,
+    );
+    expect(mainActivity, isNot(contains('FloatingBall')));
     expect(nativeFileOperations, contains('class NativeFileOperations'));
     expect(nativeFileOperations, contains('fun importScriptFromUri'));
     expect(nativeFileOperations, contains('fun getFilePickerRoots'));
@@ -93,8 +101,8 @@ void main() {
     expect(appUpdateController, contains('DownloadManager(context'));
     expect(appUpdateController, contains('ApkInstaller(context)'));
     expect(appUpdateController, contains('fun startApkDownload'));
-    expect(chaquopyPackageController,
-        contains('class ChaquopyPackageController'));
+    expect(
+        chaquopyPackageController, contains('class ChaquopyPackageController'));
     expect(chaquopyPackageController, contains('val pipResult'));
     expect(chaquopyPackageController, contains('fun uninstallPackage'));
     expect(runtimeInfoController, contains('class RuntimeInfoController'));
@@ -105,11 +113,12 @@ void main() {
     expect(linuxLikePackageController,
         contains('fun installLinuxLikeRequirements'));
     expect(linuxLikePackageController, contains('fun listLinuxLikePackages'));
-    expect(scriptExecutionController,
-        contains('class ScriptExecutionController'));
+    expect(
+        scriptExecutionController, contains('class ScriptExecutionController'));
     expect(scriptExecutionController, contains('fun executeScript'));
     expect(scriptExecutionController, contains('fun executeLinuxLikeScript'));
-    expect(mainActivity, isNot(contains('private data class LinuxLikeDistribution')));
+    expect(mainActivity,
+        isNot(contains('private data class LinuxLikeDistribution')));
     expect(mainActivity, isNot(contains('private fun executeLinuxLikeScript')));
   });
 }

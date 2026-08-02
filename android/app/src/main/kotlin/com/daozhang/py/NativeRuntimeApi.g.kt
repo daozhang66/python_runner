@@ -569,8 +569,6 @@ interface FilePickerHostApi {
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface AppHostApi {
   fun getAppInfo(): NativeAppInfo
-  fun checkOverlayPermission(): Boolean
-  fun consumePendingRunScript(): String?
 
   companion object {
     /** The codec used by AppHostApi. */
@@ -587,36 +585,6 @@ interface AppHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               listOf(api.getAppInfo())
-            } catch (exception: Throwable) {
-              NativeRuntimeApiPigeonUtils.wrapError(exception)
-            }
-            reply.reply(wrapped)
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.AppHostApi.checkOverlayPermission$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { _, reply ->
-            val wrapped: List<Any?> = try {
-              listOf(api.checkOverlayPermission())
-            } catch (exception: Throwable) {
-              NativeRuntimeApiPigeonUtils.wrapError(exception)
-            }
-            reply.reply(wrapped)
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.python_runner.AppHostApi.consumePendingRunScript$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { _, reply ->
-            val wrapped: List<Any?> = try {
-              listOf(api.consumePendingRunScript())
             } catch (exception: Throwable) {
               NativeRuntimeApiPigeonUtils.wrapError(exception)
             }

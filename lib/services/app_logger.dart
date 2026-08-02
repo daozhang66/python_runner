@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -27,23 +28,65 @@ class AppLogEntry {
     final det = detail != null ? '\n  Detail: $detail' : '';
     return '[$ts] $lvl $src$message$det';
   }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'level': level.name,
+        'message': message,
+        'timestamp': timestamp.toIso8601String(),
+        'source': source,
+        'detail': detail,
+      };
+
+  static AppLogEntry? tryFromJson(Object? value) {
+    if (value is! Map) return null;
+    final levelName = value['level'];
+    final message = value['message'];
+    final timestamp = value['timestamp'];
+    if (levelName is! String || message is! String || timestamp is! String) {
+      return null;
+    }
+    final parsedTimestamp = DateTime.tryParse(timestamp);
+    final level = AppLogLevel.values.where((item) => item.name == levelName);
+    if (parsedTimestamp == null || level.isEmpty) return null;
+    final source = value['source'];
+    final detail = value['detail'];
+    if (source != null && source is! String) return null;
+    if (detail != null && detail is! String) return null;
+    return AppLogEntry(
+      level: level.first,
+      message: message,
+      timestamp: parsedTimestamp,
+      source: source as String?,
+      detail: detail as String?,
+    );
+  }
 }
 
 /// Unified app-level logger with in-memory buffer and file persistence.
 /// Uses synchronous file writes for crash/error logs to ensure they survive crashes.
 class AppLogger {
-  AppLogger._();
+  AppLogger._({Directory? testingLogDirectory})
+      : _testingLogDirectory = testingLogDirectory;
   static final AppLogger instance = AppLogger._();
+
+  @visibleForTesting
+  AppLogger.forTesting(Directory logDirectory)
+      : _testingLogDirectory = logDirectory;
 
   static const int _maxMemoryLogs = 500;
   static const String _systemLogFile = 'system.log';
+  static const String _systemLogOldFile = 'system.log.old';
+  static const String _historyLogFile = 'app_history.jsonl';
+  static const String _historyTempFile = 'app_history.jsonl.tmp';
   static const String _crashLogFile = 'crash.log';
   static const String _scriptErrorLogFile = 'script_errors.log';
 
   final List<AppLogEntry> _memoryLogs = [];
+  final Directory? _testingLogDirectory;
   Directory? _logDir;
   bool _initialized = false;
   IOSink? _systemLogSink;
+  Future<void> _fileWriteQueue = Future<void>.value();
   int _systemLogSize = 0;
   static const int _maxSystemLogSize = 2 * 1024 * 1024; // 2MB
 
@@ -62,8 +105,9 @@ class AppLogger {
   Future<void> init() async {
     if (_initialized) return;
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      _logDir = Directory('${appDir.path}/app_logs');
+      final appDir = _testingLogDirectory ??
+          Directory('${(await getApplicationDocumentsDirectory()).path}/app_logs');
+      _logDir = appDir;
       if (!await _logDir!.exists()) {
         await _logDir!.create(recursive: true);
       }
@@ -83,8 +127,7 @@ class AppLogger {
         }
       }
 
-      // Open system log in append mode with immediate flush
-      _systemLogSink = sysFile.openWrite(mode: FileMode.append);
+      await _restoreRecentHistory();
 
       _initialized = true;
       info('AppLogger initialized', source: 'AppLogger');
@@ -120,8 +163,8 @@ class AppLogger {
     final content =
         '=== ${DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now())} ===\n'
         'Script: $scriptName\nError: $errorMessage\n${stackTrace != null ? "StackTrace:\n$stackTrace\n" : ""}\n';
-    _writeSyncToLog(_scriptErrorLogFile, content);
-    _writeSyncToLog(_scriptLogFileName(), content);
+    _enqueueNamedLog(_scriptErrorLogFile, content, flush: true);
+    _enqueueNamedLog(_scriptLogFileName(), content, flush: true);
   }
 
   /// Log an error from an exception/stack trace (crash-level).
@@ -148,8 +191,10 @@ class AppLogger {
 
     // Memory buffer
     _memoryLogs.add(entry);
+    var historyNeedsCompaction = false;
     if (_memoryLogs.length > _maxMemoryLogs) {
       _memoryLogs.removeRange(0, _memoryLogs.length - _maxMemoryLogs);
+      historyNeedsCompaction = true;
     }
 
     // Console output (keep debugPrint)
@@ -157,30 +202,212 @@ class AppLogger {
 
     // File persistence (buffered stream for normal logs)
     _writeToSystemLog(entry);
+    _enqueueHistoryLog(entry, compact: historyNeedsCompaction);
   }
 
   void _writeToSystemLog(AppLogEntry entry) {
     if (_logDir == null) return;
-    try {
-      final line = '${entry.formatted}\n';
-      _systemLogSink ??= File('${_logDir!.path}/$_systemLogFile')
-          .openWrite(mode: FileMode.append);
-      _systemLogSink?.write(line);
-      _writeSyncToLog(_appLogFileName(entry.timestamp), line);
-      _systemLogSize += line.length;
-      // Flush warning/error entries so important breadcrumbs survive process death.
-      if (entry.level == AppLogLevel.warn || entry.level == AppLogLevel.error) {
-        _systemLogSink?.flush();
-      }
-    } catch (_) {
-      // Silently fail to avoid recursion
-    }
+    final line = '${entry.formatted}\n';
+    _enqueueSystemLog(
+      line,
+      timestamp: entry.timestamp,
+      flush: entry.level != AppLogLevel.info,
+    );
   }
 
   Future<void> flush() async {
     try {
+      await _fileWriteQueue;
       await _systemLogSink?.flush();
     } catch (_) {}
+  }
+
+  void _enqueueSystemLog(
+    String line, {
+    required DateTime timestamp,
+    required bool flush,
+  }) {
+    final directory = _logDir;
+    if (directory == null) return;
+    _fileWriteQueue = _fileWriteQueue.catchError((_) {}).then((_) async {
+      final systemFile = File('${directory.path}/$_systemLogFile');
+      final lineBytes = line.length;
+      if (_systemLogSize + lineBytes > _maxSystemLogSize) {
+        await _rotateSystemLog(systemFile);
+      }
+      await systemFile.writeAsString(
+        line,
+        mode: FileMode.append,
+        flush: flush,
+      );
+      await File('${directory.path}/${_appLogFileName(timestamp)}')
+          .writeAsString(
+        line,
+        mode: FileMode.append,
+        flush: flush,
+      );
+      _systemLogSize += lineBytes;
+    });
+  }
+
+  void _enqueueNamedLog(String fileName, String content, {bool flush = false}) {
+    final directory = _logDir;
+    if (directory == null) return;
+    _fileWriteQueue = _fileWriteQueue.catchError((_) {}).then<void>((_) async {
+      await File('${directory.path}/$fileName').writeAsString(
+        content,
+        mode: FileMode.append,
+        flush: flush,
+      );
+    });
+  }
+
+  void _enqueueHistoryLog(AppLogEntry entry, {required bool compact}) {
+    final directory = _logDir;
+    if (directory == null) return;
+    final snapshot = compact ? List<AppLogEntry>.of(_memoryLogs) : null;
+    _fileWriteQueue = _fileWriteQueue.catchError((_) {}).then<void>((_) async {
+      final historyFile = File('${directory.path}/$_historyLogFile');
+      if (snapshot == null) {
+        await historyFile.writeAsString(
+          '${jsonEncode(entry.toJson())}\n',
+          mode: FileMode.append,
+          flush: entry.level != AppLogLevel.info,
+        );
+        return;
+      }
+      await _writeHistorySnapshot(directory, snapshot);
+    });
+  }
+
+  Future<void> _writeHistorySnapshot(
+    Directory directory,
+    List<AppLogEntry> entries,
+  ) async {
+    final tempFile = File('${directory.path}/$_historyTempFile');
+    final historyFile = File('${directory.path}/$_historyLogFile');
+    final content = entries.map((entry) => jsonEncode(entry.toJson())).join('\n');
+    await tempFile.writeAsString(
+      content.isEmpty ? '' : '$content\n',
+      flush: true,
+    );
+    await tempFile.rename(historyFile.path);
+  }
+
+  Future<void> _restoreRecentHistory() async {
+    final directory = _logDir;
+    if (directory == null) return;
+    final historyFile = File('${directory.path}/$_historyLogFile');
+    final tempFile = File('${directory.path}/$_historyTempFile');
+    try {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      if (await historyFile.exists()) {
+        await _readJsonlHistory(historyFile);
+        return;
+      }
+      await _migrateLegacySystemHistory(directory);
+      if (_memoryLogs.isNotEmpty) {
+        await _writeHistorySnapshot(directory, List<AppLogEntry>.of(_memoryLogs));
+      }
+    } catch (error) {
+      debugPrint('AppLogger history restore failed: $error');
+      _memoryLogs.clear();
+    }
+  }
+
+  Future<void> _readJsonlHistory(File file) async {
+    await for (final line in file
+        .openRead()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      if (line.trim().isEmpty) continue;
+      try {
+        final entry = AppLogEntry.tryFromJson(jsonDecode(line));
+        if (entry != null) _appendRestoredEntry(entry);
+      } catch (_) {
+        // An interrupted final line or an old malformed record must not block startup.
+      }
+    }
+  }
+
+  Future<void> _migrateLegacySystemHistory(Directory directory) async {
+    final oldFile = File('${directory.path}/$_systemLogOldFile');
+    final currentFile = File('${directory.path}/$_systemLogFile');
+    for (final file in [oldFile, currentFile]) {
+      if (!await file.exists()) continue;
+      await _readLegacySystemFile(file);
+    }
+  }
+
+  Future<void> _readLegacySystemFile(File file) async {
+    final startPattern = RegExp(
+      r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]\s+(INFO|WARN|ERROR)\s+(?:\[([^\]]+)\]\s+)?(.*)$',
+    );
+    AppLogEntry? current;
+    StringBuffer? detail;
+
+    void commitCurrent() {
+      final entry = current;
+      if (entry == null) return;
+      _appendRestoredEntry(AppLogEntry(
+        level: entry.level,
+        message: entry.message,
+        timestamp: entry.timestamp,
+        source: entry.source,
+        detail: detail?.toString(),
+      ));
+      current = null;
+      detail = null;
+    }
+
+    await for (final line in file
+        .openRead()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      final match = startPattern.firstMatch(line);
+      if (match == null) {
+        if (current == null) continue;
+        const detailPrefix = '  Detail: ';
+        if (line.startsWith(detailPrefix)) {
+          detail = StringBuffer(line.substring(detailPrefix.length));
+        } else if (detail != null) {
+          detail!.writeln(line);
+        }
+        continue;
+      }
+      commitCurrent();
+      final timestamp = DateTime.tryParse(match.group(1)!.replaceFirst(' ', 'T'));
+      final level = AppLogLevel.values
+          .where((item) => item.name.toUpperCase() == match.group(2));
+      if (timestamp == null || level.isEmpty) continue;
+      current = AppLogEntry(
+        level: level.first,
+        message: match.group(4) ?? '',
+        timestamp: timestamp,
+        source: match.group(3),
+      );
+    }
+    commitCurrent();
+  }
+
+  void _appendRestoredEntry(AppLogEntry entry) {
+    _memoryLogs.add(entry);
+    if (_memoryLogs.length > _maxMemoryLogs) {
+      _memoryLogs.removeRange(0, _memoryLogs.length - _maxMemoryLogs);
+    }
+  }
+
+  Future<void> _rotateSystemLog(File systemFile) async {
+    if (await systemFile.exists()) {
+      final oldFile = File('${systemFile.path}.old');
+      if (await oldFile.exists()) {
+        await oldFile.delete();
+      }
+      await systemFile.rename(oldFile.path);
+    }
+    _systemLogSize = 0;
   }
 
   Future<List<FileSystemEntity>> _listLogFiles({
@@ -229,15 +456,6 @@ class AppLogger {
       final datedFile = File('${_logDir!.path}/${_crashLogFileName()}');
       datedFile.writeAsStringSync(buf.toString(),
           mode: FileMode.append, flush: true);
-    } catch (_) {}
-  }
-
-  /// Synchronous write to a named log file.
-  void _writeSyncToLog(String fileName, String content) {
-    if (_logDir == null) return;
-    try {
-      final file = File('${_logDir!.path}/$fileName');
-      file.writeAsStringSync(content, mode: FileMode.append, flush: true);
     } catch (_) {}
   }
 
@@ -332,6 +550,12 @@ class AppLogger {
       _systemLogSize = 0;
       final systemFile = File('${_logDir!.path}/$_systemLogFile');
       if (await systemFile.exists()) await systemFile.delete();
+      final oldSystemFile = File('${_logDir!.path}/$_systemLogOldFile');
+      if (await oldSystemFile.exists()) await oldSystemFile.delete();
+      final historyFile = File('${_logDir!.path}/$_historyLogFile');
+      if (await historyFile.exists()) await historyFile.delete();
+      final historyTempFile = File('${_logDir!.path}/$_historyTempFile');
+      if (await historyTempFile.exists()) await historyTempFile.delete();
       final crashFile = File('${_logDir!.path}/$_crashLogFile');
       if (await crashFile.exists()) await crashFile.delete();
       final scriptErrFile = File('${_logDir!.path}/$_scriptErrorLogFile');
@@ -346,7 +570,6 @@ class AppLogger {
           await File(entity.path).delete();
         }
       }
-      _systemLogSink = systemFile.openWrite(mode: FileMode.append);
     } catch (_) {}
   }
 

@@ -20,7 +20,7 @@ import java.util.zip.GZIPInputStream
 class LinuxLikeRuntimeManager(private val context: Context) {
     companion object {
         const val defaultManifestUrl =
-            "https://raw.githubusercontent.com/daozhang66/python_runner/main/linux-like/debian-python-dev-aarch64.json"
+            "https://raw.githubusercontent.com/daozhang66/python_runner/refs/heads/main/linux-like/debian-python-dev-aarch64.json"
         const val defaultRuntimeFlavor = "debian-python-dev-aarch64"
         const val stdinRequestSentinel = "__PYRUNNER_STDIN_REQUEST__"
         const val defaultScriptWorkingDir = "/storage/emulated/0/Download/PythonRunner"
@@ -267,26 +267,29 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             manifest.url
         }
 
-        progress?.invoke("downloading", "下载 ${manifest.runtimeFlavor}...")
-        downloadFile(downloadUrl, archiveFile, manifest.sizeBytes, progress)
+        return try {
+            progress?.invoke("downloading", "下载 ${manifest.runtimeFlavor}...")
+            downloadFile(downloadUrl, archiveFile, manifest.sizeBytes, progress)
 
-        progress?.invoke("verifying", "校验运行环境包 SHA-256...")
-        verifySha256(archiveFile, manifest.sha256)
+            progress?.invoke("verifying", "校验运行环境包 SHA-256...")
+            verifySha256(archiveFile, manifest.sha256)
 
-        progress?.invoke("extracting", "解压 Debian 开发版运行环境...")
-        extractRuntimeArchive(archiveFile)
+            progress?.invoke("extracting", "解压 Debian 开发版运行环境...")
+            extractRuntimeArchive(archiveFile)
 
-        progress?.invoke("finalizing", "写入运行环境安装标记...")
-        repairCriticalExecutablePermissions()
-        ensureGuestLoaderAliases()
-        configureDnsResolver()
-        validateRuntimePackage(manifest)
-        writeInstalledMarker(manifest, selectedManifestUrl)
-        cleanupDownloadedArchive()
+            progress?.invoke("finalizing", "写入运行环境安装标记...")
+            repairCriticalExecutablePermissions()
+            ensureGuestLoaderAliases()
+            configureDnsResolver()
+            validateRuntimePackage(manifest)
+            writeInstalledMarker(manifest, selectedManifestUrl)
 
-        return getInfo().toMutableMap().apply {
-            this["installedFrom"] = selectedManifestUrl
-            this["message"] = this["message"] ?: "Linux-like runtime installed"
+            getInfo().toMutableMap().apply {
+                this["installedFrom"] = selectedManifestUrl
+                this["message"] = this["message"] ?: "Linux-like runtime installed"
+            }
+        } finally {
+            cleanupDownloadedArchive()
         }
     }
 

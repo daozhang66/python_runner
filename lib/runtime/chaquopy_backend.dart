@@ -137,6 +137,7 @@ class ChaquopyRuntimeSession implements RuntimeSession {
 
   final Completer<int?> _exitCompleter = Completer<int?>();
   StreamSubscription<ExecutionState>? _stateSub;
+  bool _disposed = false;
 
   ChaquopyRuntimeSession({
     required this.backend,
@@ -149,7 +150,7 @@ class ChaquopyRuntimeSession implements RuntimeSession {
       }
       if (isTerminalRuntimeState(state.status) && !_exitCompleter.isCompleted) {
         _exitCompleter.complete(state.exitCode);
-        _stateSub?.cancel();
+        unawaited(dispose());
       }
     });
   }
@@ -189,5 +190,14 @@ class ChaquopyRuntimeSession implements RuntimeSession {
   @override
   Future<int?> waitExit() {
     return _exitCompleter.future;
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    final subscription = _stateSub;
+    _stateSub = null;
+    await subscription?.cancel();
   }
 }

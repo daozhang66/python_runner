@@ -51,6 +51,26 @@ void main() {
     expect(output.executionId, 'run-123');
     expect(output.toLogEntry().executionId, 'run-123');
   });
+
+  test('ChaquopyRuntimeSession disposal cancels its status subscription',
+      () async {
+    final bridge = _ChaquopyBridgeFake();
+    final session = ChaquopyRuntimeSession(
+      backend: ChaquopyBackend(bridge),
+      request: const RuntimeRequest(scriptName: 'demo.py', executionId: 'run'),
+    );
+
+    await session.dispose();
+    bridge.emitStatus(
+      executionId: 'run',
+      status: ExecutionStatus.completed,
+      exitCode: 0,
+    );
+    await expectLater(
+      session.waitExit().timeout(const Duration(milliseconds: 30)),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
 }
 
 class _ChaquopyBridgeFake extends NativeBridge {

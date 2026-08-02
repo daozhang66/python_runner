@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 class ConfirmDialog extends StatelessWidget {
   final String title;
@@ -11,8 +12,8 @@ class ConfirmDialog extends StatelessWidget {
     super.key,
     required this.title,
     required this.content,
-    this.confirmText = '确认',
-    this.cancelText = '取消',
+    this.confirmText = '',
+    this.cancelText = '',
     this.confirmColor,
   });
 
@@ -20,8 +21,8 @@ class ConfirmDialog extends StatelessWidget {
     BuildContext context, {
     required String title,
     required String content,
-    String confirmText = '确认',
-    String cancelText = '取消',
+    String confirmText = '',
+    String cancelText = '',
     Color? confirmColor,
   }) async {
     final result = await showDialog<bool>(
@@ -39,6 +40,7 @@ class ConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(title),
@@ -46,14 +48,14 @@ class ConfirmDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: Text(cancelText),
+          child: Text(cancelText.isEmpty ? l10n.cancel : cancelText),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
           style: confirmColor != null
               ? TextButton.styleFrom(foregroundColor: confirmColor)
               : null,
-          child: Text(confirmText),
+          child: Text(confirmText.isEmpty ? l10n.confirm : confirmText),
         ),
       ],
     );

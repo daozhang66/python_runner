@@ -3,29 +3,33 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../features/packages/application/package_controller.dart';
+import '../features/packages/application/package_state.dart';
 import '../models/package_info.dart';
-import '../providers/package_provider.dart';
 import '../runtime/runtime_package.dart';
 import '../services/native_bridge.dart';
 import '../ui/app_badges.dart';
 import '../ui/app_design_tokens.dart';
 import '../ui/app_empty_state.dart';
+import '../ui/app_state_views.dart';
+import '../ui/app_skeleton.dart';
+import '../l10n/app_localizations.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_toolbars.dart';
 import '../widgets/confirm_dialog.dart';
 import 'app_file_picker_page.dart';
 
-class PackageManagerPage extends StatefulWidget {
+class PackageManagerPage extends ConsumerStatefulWidget {
   const PackageManagerPage({super.key});
 
   @override
-  State<PackageManagerPage> createState() => _PackageManagerPageState();
+  ConsumerState<PackageManagerPage> createState() => _PackageManagerPageState();
 }
 
-class _PackageManagerPageState extends State<PackageManagerPage>
+class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     with SingleTickerProviderStateMixin {
   final _bridge = NativeBridge();
   final _packageController = TextEditingController();
@@ -43,9 +47,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       setState(
           () => _searchQuery = _searchController.text.trim().toLowerCase());
     });
-    final packageProvider = context.read<PackageProvider>();
     Future.microtask(() {
-      packageProvider.ensurePackagesLoaded();
+      ref.read(packageControllerProvider.notifier).ensureLoaded();
       _loadIndexUrl();
     });
   }
@@ -62,7 +65,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     final name = _packageController.text.trim();
     if (name.isEmpty) return;
     final version = _versionController.text.trim();
-    context.read<PackageProvider>().installPackage(
+    ref.read(packageControllerProvider.notifier).install(
           name,
           version: version.isEmpty ? null : version,
           indexUrl: _indexUrl,
@@ -71,14 +74,14 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     _versionController.clear();
   }
 
-  Future<void> _installRequirementsFromFile(PackageProvider provider) async {
-    if (!provider.supportsRequirementsInstall) {
-      _showSnack('requirements.txt 仅支持 Linux-like');
+  Future<void> _installRequirementsFromFile(PackageState state) async {
+    if (!state.supportsRequirementsInstall) {
+      _showSnack(AppLocalizations.of(context)!.requirementsLinuxOnly);
       return;
     }
     final selected = await AppFilePickerPage.pickFile(
       context,
-      title: '安装 requirements.txt',
+      title: AppLocalizations.of(context)!.installRequirements,
       exactFileName: 'requirements.txt',
     );
     if (selected == null) return;
@@ -100,24 +103,28 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       bytes = await _bridge.readFilePickerFile(selected.path);
     }
 
+    if (!mounted) return;
+
     if (fileName.toLowerCase() != 'requirements.txt') {
-      _showSnack('请选择 requirements.txt');
+      _showSnack(AppLocalizations.of(context)!.selectRequirements);
       return;
     }
     if (bytes == null || bytes.isEmpty) {
-      _showSnack('requirements.txt 为空或无法读取');
+      _showSnack(AppLocalizations.of(context)!.emptyRequirements);
       return;
     }
     final content = utf8.decode(bytes, allowMalformed: true);
     if (content.trim().isEmpty) {
-      _showSnack('requirements.txt 为空');
+      _showSnack(AppLocalizations.of(context)!.emptyRequirementsShort);
       return;
     }
-    await provider.installRequirementsFromContent(
-      content: content,
-      displayName: fileName,
-      indexUrl: _indexUrl,
-    );
+    await ref
+        .read(packageControllerProvider.notifier)
+        .installRequirementsFromContent(
+          content: content,
+          displayName: fileName,
+          indexUrl: _indexUrl,
+        );
   }
 
   void _showSnack(String message) {
@@ -130,7 +137,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
   void _copyInstallLog(BuildContext context, List<String> log) {
     Clipboard.setData(ClipboardData(text: log.join('\n')));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制安装日志'), duration: Duration(seconds: 1)),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.installLogCopied),
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 
@@ -156,37 +166,74 @@ class _PackageManagerPageState extends State<PackageManagerPage>
     PackageUninstallResult result,
   ) {
     if (!result.success) {
-      return result.message.isNotEmpty ? result.message : '$packageName 卸载失败';
+      return result.message.isNotEmpty
+          ? result.message
+          : AppLocalizations.of(context)!.packageUninstallFailed(packageName);
     }
     if (result.removedDependencies.isEmpty) {
-      return '$packageName 已卸载';
+      return AppLocalizations.of(context)!.packageUninstalled(packageName);
     }
-    return '$packageName 已卸载，并清理 ${result.removedDependencies.join('、')}';
+    return AppLocalizations.of(context)!.packageUninstalledDependencies(
+      packageName,
+      result.removedDependencies.join('、'),
+    );
   }
 
   Future<void> _repairPackage(
-    PackageProvider provider,
+    WidgetRef ref,
     PackageInfo pkg,
   ) async {
     final confirmed = await ConfirmDialog.show(
       context,
-      title: '修复库',
-      content: '将重新安装 "${pkg.name}"，可能需要网络连接。',
-      confirmText: '修复',
+      title: AppLocalizations.of(context)!.repairPackage,
+      content: AppLocalizations.of(context)!.repairPackageConfirm(pkg.name),
+      confirmText: AppLocalizations.of(context)!.repair,
       confirmColor: Theme.of(context).colorScheme.primary,
     );
     if (!confirmed || !mounted) return;
-    await provider.repairPackage(
-      pkg.name,
-      version: pkg.version,
-      indexUrl: _indexUrl,
-    );
+    await ref.read(packageControllerProvider.notifier).repair(
+          pkg.name,
+          version: pkg.version,
+          indexUrl: _indexUrl,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PackageProvider>();
-    final packages = provider.packages;
+    // 选择性监听：列表/加载/安装/日志分别 select，避免单条日志变化重建整页。
+    final packages = ref.watch(
+      packageControllerProvider.select((s) => s.packages),
+    );
+    final isInitialLoading = ref.watch(
+      packageControllerProvider.select((s) => s.isInitialLoading),
+    );
+    final isRefreshing = ref.watch(
+      packageControllerProvider.select((s) => s.isRefreshing),
+    );
+    final loadError = ref.watch(
+      packageControllerProvider.select((s) => s.loadError),
+    );
+    final isInstalling = ref.watch(
+      packageControllerProvider.select((s) => s.isInstalling),
+    );
+    final installLog = ref.watch(
+      packageControllerProvider.select((s) => s.installLog),
+    );
+    final supportsRequirementsInstall = ref.watch(
+      packageControllerProvider.select((s) => s.supportsRequirementsInstall),
+    );
+
+    final state = PackageState(
+      packages: packages,
+      isInitialLoading: isInitialLoading,
+      isRefreshing: isRefreshing,
+      loadError: loadError,
+      isInstalling: isInstalling,
+      installLog: installLog,
+      supportsRequirementsInstall: supportsRequirementsInstall,
+    );
+
+    final localizations = AppLocalizations.of(context)!;
 
     final userPackages = packages
         .where((p) => p.isUserPackage && _matchesSearch(p.name))
@@ -197,24 +244,25 @@ class _PackageManagerPageState extends State<PackageManagerPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '库管理',
+        title: Text(
+          localizations.packageManager,
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       body: Column(
         children: [
-          _buildInstallPanel(provider),
-          if (provider.loadingPackages)
-            const LinearProgressIndicator(minHeight: 2),
+          _buildInstallPanel(state),
+          if (isRefreshing) const LinearProgressIndicator(minHeight: 2),
           Row(
             children: [
               Expanded(
                 child: TabBar(
                   controller: _tabController,
                   tabs: [
-                    Tab(text: '用户安装 (${userPackages.length})'),
-                    Tab(text: '内置库 (${builtinPackages.length})'),
+                    Tab(text: localizations.userPackages(userPackages.length)),
+                    Tab(
+                        text: localizations
+                            .builtInPackages(builtinPackages.length)),
                   ],
                   labelStyle: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600),
@@ -224,23 +272,33 @@ class _PackageManagerPageState extends State<PackageManagerPage>
             ],
           ),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPackageList(context, userPackages, provider,
-                    canDelete: true),
-                _buildPackageList(context, builtinPackages, provider,
-                    canDelete: false),
-              ],
-            ),
+            child: isInitialLoading
+                ? const AppListSkeleton()
+                : loadError != null && packages.isEmpty
+                    ? AppErrorState(
+                        message: localizations.loadPackagesFailed,
+                        retryLabel: localizations.retry,
+                        onRetry: () => ref
+                            .read(packageControllerProvider.notifier)
+                            .refresh(),
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildPackageList(context, userPackages,
+                              canDelete: true),
+                          _buildPackageList(context, builtinPackages,
+                              canDelete: false),
+                        ],
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInstallPanel(PackageProvider provider) {
-    final result = _getInstallResult(provider.installLog);
+  Widget _buildInstallPanel(PackageState state) {
+    final result = _getInstallResult(state.installLog);
     final colors = Theme.of(context).colorScheme;
 
     return Container(
@@ -256,37 +314,40 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildCompactInstallFields(provider),
-          if (provider.installing)
+          _buildCompactInstallFields(state),
+          if (state.isInstalling)
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-          if (provider.installLog.isNotEmpty)
+          if (state.installLog.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: _buildCompactInstallLog(provider, result),
+              child: _buildCompactInstallLog(state, result),
             ),
           const SizedBox(height: 6),
-          _buildSearchAndRefreshRow(provider),
+          _buildSearchAndRefreshRow(state),
         ],
       ),
     );
   }
 
   Widget _buildCompactInstallLog(
-    PackageProvider provider,
+    PackageState state,
     _InstallResult? result,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
-    final statusBadge = !provider.installing && result != null
+    final statusBadge = !state.isInstalling && result != null
         ? AppStatusBadge(
-            label: result == _InstallResult.success ? '成功' : '失败',
+            label: result == _InstallResult.success
+                ? l10n.installSuccess
+                : l10n.error,
             tone: result == _InstallResult.success
                 ? AppBadgeTone.success
                 : AppBadgeTone.error,
           )
-        : const AppStatusBadge(label: '安装中', tone: AppBadgeTone.info);
+        : AppStatusBadge(label: l10n.installing, tone: AppBadgeTone.info);
 
     return Container(
       constraints: const BoxConstraints(minHeight: 36),
@@ -303,7 +364,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              provider.installLog.last,
+              state.installLog.last,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
@@ -312,21 +373,22 @@ class _PackageManagerPageState extends State<PackageManagerPage>
           IconButton(
             icon: const Icon(Icons.copy, size: 16),
             visualDensity: VisualDensity.compact,
-            onPressed: () => _copyInstallLog(context, provider.installLog),
-            tooltip: '复制日志',
+            onPressed: () => _copyInstallLog(context, state.installLog),
+            tooltip: l10n.copyLog,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchAndRefreshRow(PackageProvider provider) {
+  Widget _buildSearchAndRefreshRow(PackageState state) {
+    final l10n = AppLocalizations.of(context)!;
     return Row(
       children: [
         Expanded(
           child: AppSearchBar(
             controller: _searchController,
-            hintText: '搜索已安装的库...',
+            hintText: l10n.searchInstalledPackages,
             onChanged: (v) =>
                 setState(() => _searchQuery = v.trim().toLowerCase()),
             onClear: () => _searchController.clear(),
@@ -338,21 +400,22 @@ class _PackageManagerPageState extends State<PackageManagerPage>
           height: 40,
           child: IconButton(
             icon: const Icon(Icons.refresh, size: 20),
-            onPressed: provider.loadingPackages
+            onPressed: state.isRefreshing
                 ? null
-                : () => provider.loadPackages(forceRefresh: true),
+                : () => ref.read(packageControllerProvider.notifier).refresh(),
             visualDensity: VisualDensity.compact,
-            tooltip: '刷新',
+            tooltip: l10n.refresh,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCompactInstallFields(PackageProvider provider) {
-    final requirementsTooltip = provider.supportsRequirementsInstall
-        ? '安装 requirements.txt'
-        : 'requirements.txt 仅支持 Linux-like';
+  Widget _buildCompactInstallFields(PackageState state) {
+    final l10n = AppLocalizations.of(context)!;
+    final requirementsTooltip = state.supportsRequirementsInstall
+        ? l10n.installRequirements
+        : l10n.requirementsLinuxOnly;
     return Row(
       children: [
         SizedBox(
@@ -369,8 +432,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               controller: _packageController,
               enableSuggestions: false,
               autocorrect: false,
-              decoration: const InputDecoration(
-                hintText: '包名',
+              decoration: InputDecoration(
+                hintText: l10n.packageName,
                 isDense: true,
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -390,9 +453,9 @@ class _PackageManagerPageState extends State<PackageManagerPage>
             child: IconButton(
               icon: const Icon(Icons.description_outlined, size: 20),
               onPressed:
-                  provider.installing || !provider.supportsRequirementsInstall
+                  state.isInstalling || !state.supportsRequirementsInstall
                       ? null
-                      : () => _installRequirementsFromFile(provider),
+                      : () => _installRequirementsFromFile(state),
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -402,12 +465,12 @@ class _PackageManagerPageState extends State<PackageManagerPage>
           width: 72,
           height: 38,
           child: FilledButton(
-            onPressed: provider.installing ? null : _install,
+            onPressed: state.isInstalling ? null : _install,
             style: FilledButton.styleFrom(
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             ),
-            child: const Text('安装'),
+            child: Text(l10n.install),
           ),
         ),
       ],
@@ -419,8 +482,8 @@ class _PackageManagerPageState extends State<PackageManagerPage>
       controller: _versionController,
       enableSuggestions: false,
       autocorrect: false,
-      decoration: const InputDecoration(
-        hintText: '版本',
+      decoration: InputDecoration(
+        hintText: AppLocalizations.of(context)!.version,
         isDense: true,
         contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
@@ -430,15 +493,18 @@ class _PackageManagerPageState extends State<PackageManagerPage>
 
   Widget _buildPackageList(
     BuildContext context,
-    List<PackageInfo> packages,
-    PackageProvider provider, {
+    List<PackageInfo> packages, {
     required bool canDelete,
   }) {
+    final l10n = AppLocalizations.of(context)!;
     if (packages.isEmpty) {
       return AppEmptyState(
         icon: Icons.inventory_2_outlined,
-        title: _searchQuery.isNotEmpty ? '未找到匹配的库' : '暂无库',
-        subtitle: canDelete ? '可在上方安装 Python 包' : '当前运行环境未返回内置库',
+        title:
+            _searchQuery.isNotEmpty ? l10n.noMatchingPackages : l10n.noPackages,
+        subtitle: canDelete
+            ? l10n.installPythonPackage
+            : l10n.noBuiltinPackagesReturned,
       );
     }
 
@@ -449,7 +515,6 @@ class _PackageManagerPageState extends State<PackageManagerPage>
         return _buildPackageListTile(
           context,
           pkg,
-          provider,
           canDelete: canDelete,
         );
       },
@@ -458,11 +523,13 @@ class _PackageManagerPageState extends State<PackageManagerPage>
 
   Widget _buildPackageListTile(
     BuildContext context,
-    PackageInfo pkg,
-    PackageProvider provider, {
+    PackageInfo pkg, {
     required bool canDelete,
   }) {
     final subtitle = _formatPackageSubtitle(pkg);
+    final isInstalling = ref.watch(
+      packageControllerProvider.select((s) => s.isInstalling),
+    );
 
     return AppSurface(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -476,10 +543,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
             if (pkg.hasBrokenIntegrity) ...[
               Tooltip(
                 message: pkg.integrityMessage.isEmpty
-                    ? '包文件缺失'
+                    ? AppLocalizations.of(context)!.packageMissing
                     : pkg.integrityMessage,
-                child: const AppStatusBadge(
-                  label: '损坏',
+                child: AppStatusBadge(
+                  label: AppLocalizations.of(context)!.damaged,
                   tone: AppBadgeTone.error,
                   icon: Icons.warning_amber_rounded,
                 ),
@@ -487,7 +554,9 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               const SizedBox(width: 4),
             ],
             AppStatusBadge(
-              label: pkg.isUserPackage ? '用户' : '内置',
+              label: pkg.isUserPackage
+                  ? AppLocalizations.of(context)!.user
+                  : AppLocalizations.of(context)!.builtIn,
               tone:
                   pkg.isUserPackage ? AppBadgeTone.info : AppBadgeTone.neutral,
             ),
@@ -496,11 +565,10 @@ class _PackageManagerPageState extends State<PackageManagerPage>
               if (pkg.hasBrokenIntegrity) ...[
                 IconButton(
                   icon: const Icon(Icons.build_outlined, size: 20),
-                  onPressed: provider.installing
-                      ? null
-                      : () => _repairPackage(provider, pkg),
+                  onPressed:
+                      isInstalling ? null : () => _repairPackage(ref, pkg),
                   visualDensity: VisualDensity.compact,
-                  tooltip: '重新安装修复',
+                  tooltip: AppLocalizations.of(context)!.reinstallRepair,
                 ),
                 const SizedBox(width: 2),
               ],
@@ -513,14 +581,17 @@ class _PackageManagerPageState extends State<PackageManagerPage>
                 onPressed: () async {
                   final confirmed = await ConfirmDialog.show(
                     context,
-                    title: '卸载库',
-                    content: '确定要卸载 "${pkg.name}" 吗？',
-                    confirmText: '卸载',
+                    title: AppLocalizations.of(context)!.uninstallPackage,
+                    content: AppLocalizations.of(context)!
+                        .uninstallPackageConfirm(pkg.name),
+                    confirmText: AppLocalizations.of(context)!.uninstall,
                     confirmColor: Theme.of(context).colorScheme.error,
                   );
                   if (!confirmed || !context.mounted) return;
 
-                  final result = await provider.uninstallPackage(pkg.name);
+                  final result = await ref
+                      .read(packageControllerProvider.notifier)
+                      .uninstall(pkg.name);
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -540,7 +611,7 @@ class _PackageManagerPageState extends State<PackageManagerPage>
   String _formatVersionLabel(String version) {
     final value = version.trim();
     if (value.isEmpty || value.toLowerCase() == 'unknown') {
-      return '版本未知';
+      return AppLocalizations.of(context)!.unknownVersion;
     }
     return value;
   }

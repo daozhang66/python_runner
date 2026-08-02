@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/execution_state.dart';
@@ -113,8 +115,22 @@ class RuntimeManager {
       currentBackend.packageInstallProgressStream;
 
   Future<RuntimeSession> startScript(RuntimeRequest request) async {
-    _activeSession = await currentBackend.startScript(request);
-    return _activeSession!;
+    final previous = _activeSession;
+    _activeSession = null;
+    if (previous != null) {
+      await previous.terminate();
+      await previous.dispose();
+    }
+
+    final session = await currentBackend.startScript(request);
+    _activeSession = session;
+    unawaited(session.waitExit().whenComplete(() async {
+      if (identical(_activeSession, session)) {
+        _activeSession = null;
+      }
+      await session.dispose();
+    }));
+    return session;
   }
 
   Future<void> sendStdin(String input) {
@@ -131,6 +147,12 @@ class RuntimeManager {
       return session.terminate();
     }
     return currentBackend.stopExecution();
+  }
+
+  Future<void> dispose() async {
+    final session = _activeSession;
+    _activeSession = null;
+    await session?.dispose();
   }
 
   Future<PackageInstallResult> installPackage(

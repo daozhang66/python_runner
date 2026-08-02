@@ -4,19 +4,20 @@ part of 'settings_page.dart';
 
 extension _SettingsSections on _SettingsPageState {
   Widget _buildRuntimeSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         _SectionCard(
           icon: Icons.memory,
-          title: '运行引擎',
+          title: l10n.runtimeEngine,
           children: [
             ListTile(
               leading: const Icon(Icons.memory),
-              title: const Text('运行引擎'),
+              title: Text(l10n.runtimeEngine),
               subtitle: Text(
                 _runtimeBackend == RuntimeManager.chaquopyBackendId
-                    ? 'Chaquopy（默认）'
-                    : 'Linux-like（实验）',
+                    ? l10n.chaquopyDefault
+                    : l10n.linuxLikeExperimental,
               ),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: _showRuntimeBackendPicker,
@@ -32,28 +33,7 @@ extension _SettingsSections on _SettingsPageState {
               ),
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('管理引擎'),
-              subtitle: Text(
-                _linuxLikeAvailable
-                    ? 'Linux-like 运行引擎已安装'
-                    : '安装 Linux-like 运行引擎',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 18),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RuntimeManagerPage(),
-                  ),
-                );
-              },
-            ),
+            _buildRuntimeInstallPanel(l10n),
             const Divider(height: 1, indent: 16, endIndent: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -62,11 +42,11 @@ extension _SettingsSections on _SettingsPageState {
                 children: [
                   Row(
                     children: [
-                      Text('PyPI 源',
+                      Text(l10n.pypiSource,
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
                       Text(
-                        '留空使用官方源',
+                        l10n.useOfficialSourceWhenEmpty,
                         style: TextStyle(
                           fontSize: 11,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -103,7 +83,7 @@ extension _SettingsSections on _SettingsPageState {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _restoreOfficialMirror,
-                      child: const Text('恢复官方源'),
+                      child: Text(l10n.restoreOfficialSource),
                     ),
                   ),
                 ],
@@ -113,7 +93,7 @@ extension _SettingsSections on _SettingsPageState {
         ),
         _SectionCard(
           icon: Icons.code,
-          title: '脚本',
+          title: l10n.script,
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -122,17 +102,19 @@ extension _SettingsSections on _SettingsPageState {
                 children: [
                   Row(
                     children: [
-                      Text('执行超时时间',
+                      Text(l10n.executionTimeout,
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
                       Text(
                         _timeout == 0
-                            ? '无限制'
+                            ? l10n.unlimited
                             : _timeout >= 3600
-                                ? '${(_timeout / 3600).toStringAsFixed(1)} 小时'
+                                ? l10n
+                                    .hours((_timeout / 3600).toStringAsFixed(1))
                                 : _timeout >= 60
-                                    ? '${(_timeout / 60).toStringAsFixed(0)} 分钟'
-                                    : '$_timeout 秒',
+                                    ? l10n.minutes(
+                                        (_timeout / 60).toStringAsFixed(0))
+                                    : l10n.seconds(_timeout),
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context).colorScheme.primary,
@@ -155,7 +137,7 @@ extension _SettingsSections on _SettingsPageState {
                     max: 150,
                     divisions: 150,
                     label: _timeout == 0
-                        ? '无限制'
+                        ? l10n.unlimited
                         : _timeout >= 3600
                             ? '${(_timeout / 3600).toStringAsFixed(1)}h'
                             : _timeout >= 60
@@ -186,9 +168,9 @@ extension _SettingsSections on _SettingsPageState {
             ),
             ListTile(
               leading: const Icon(Icons.folder_outlined),
-              title: const Text('工作目录'),
+              title: Text(l10n.workingDirectory),
               subtitle: Text(
-                _workingDir ?? '默认：/storage/emulated/0/Download/PythonRunner',
+                _workingDir ?? l10n.defaultWorkingDirectory,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -202,7 +184,7 @@ extension _SettingsSections on _SettingsPageState {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                '脚本运行时的文件读写目录',
+                l10n.scriptWorkingDirectoryDescription,
                 style: TextStyle(
                   fontSize: 11,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -212,9 +194,9 @@ extension _SettingsSections on _SettingsPageState {
             const Divider(height: 1, indent: 16, endIndent: 16),
             ListTile(
               leading: const Icon(Icons.drive_folder_upload_outlined),
-              title: const Text('脚本导出目录'),
+              title: Text(l10n.scriptExportDirectory),
               subtitle: Text(
-                _exportDir ?? '默认：下载目录',
+                _exportDir ?? l10n.defaultDownloadDirectory,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -232,17 +214,18 @@ extension _SettingsSections on _SettingsPageState {
   }
 
   Widget _buildNetworkDebugSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         _SectionCard(
           icon: Icons.http,
-          title: '网络',
+          title: l10n.network,
           children: [
             SwitchListTile(
               secondary: const Icon(Icons.developer_mode),
-              title: const Text('网络调试模式'),
-              subtitle:
-                  const Text('开启后可配置代理和证书选项', style: TextStyle(fontSize: 12)),
+              title: Text(l10n.networkDebugMode),
+              subtitle: Text(l10n.networkDebugModeDescription,
+                  style: const TextStyle(fontSize: 12)),
               value: _netDebugMode,
               onChanged: _toggleNetDebugMode,
             ),
@@ -254,11 +237,11 @@ extension _SettingsSections on _SettingsPageState {
                       ? Theme.of(context).colorScheme.error
                       : null,
                 ),
-                title: const Text('允许不安全证书'),
+                title: Text(l10n.allowInsecureCertificates),
                 subtitle: Text(
                   _netAllowInsecure
-                      ? '已开启 — 将信任自签名/抓包证书（降低安全性）'
-                      : '关闭 — 严格校验SSL证书',
+                      ? l10n.insecureCertificatesOn
+                      : l10n.insecureCertificatesOff,
                   style: TextStyle(
                     fontSize: 12,
                     color: _netAllowInsecure
@@ -275,11 +258,11 @@ extension _SettingsSections on _SettingsPageState {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('代理配置（可选）',
+                    Text(l10n.proxyConfigurationOptional,
                         style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
-                    const Text('填写后网络请求将通过指定代理',
+                    Text(l10n.proxyConfigurationDescription,
                         style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
                     Row(
@@ -290,9 +273,9 @@ extension _SettingsSections on _SettingsPageState {
                             controller: _proxyHostController,
                             enableSuggestions: false,
                             autocorrect: false,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: '192.168.1.100',
-                              labelText: '代理地址',
+                              labelText: l10n.proxyAddress,
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -312,9 +295,9 @@ extension _SettingsSections on _SettingsPageState {
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                             ],
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: '8888',
-                              labelText: '端口',
+                              labelText: l10n.port,
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -337,8 +320,8 @@ extension _SettingsSections on _SettingsPageState {
             const Divider(height: 1, indent: 16, endIndent: 16),
             SwitchListTile(
               secondary: const Icon(Icons.visibility_outlined),
-              title: const Text('记录网络请求'),
-              subtitle: const Text('捕获 HTTP、DNS、socket 与常见网络命令',
+              title: Text(l10n.recordNetworkRequests),
+              subtitle: Text(l10n.recordNetworkRequestsDescription,
                   style: TextStyle(fontSize: 12)),
               value: _recordRequests,
               onChanged: (v) async {
@@ -349,8 +332,8 @@ extension _SettingsSections on _SettingsPageState {
             if (_recordRequests)
               SwitchListTile(
                 secondary: const Icon(Icons.description_outlined),
-                title: const Text('记录响应体预览'),
-                subtitle: const Text('文本前 10 MB，图片最大 30 MB（增加内存占用）',
+                title: Text(l10n.recordResponsePreview),
+                subtitle: Text(l10n.responsePreviewLimit,
                     style: TextStyle(fontSize: 12)),
                 value: _recordResponseBody,
                 onChanged: (v) async {
@@ -366,11 +349,11 @@ extension _SettingsSections on _SettingsPageState {
                     ? Theme.of(context).colorScheme.primary
                     : null,
               ),
-              title: const Text('启用请求覆盖'),
+              title: Text(l10n.enableRequestOverrides),
               subtitle: Text(
                 _overrideEnabled
-                    ? '已开启 — 全局覆盖将应用到所有 Python HTTP 请求'
-                    : '关闭 — 不修改脚本的默认请求行为',
+                    ? l10n.requestOverridesOn
+                    : l10n.requestOverridesOff,
                 style: TextStyle(
                   fontSize: 12,
                   color: _overrideEnabled
@@ -389,20 +372,16 @@ extension _SettingsSections on _SettingsPageState {
                       backgroundColor:
                           Theme.of(ctx).colorScheme.surfaceContainerHigh,
                       surfaceTintColor: Colors.transparent,
-                      title: const Text('启用请求覆盖'),
-                      content: const Text(
-                        '开启后将全局覆盖 Python 脚本中 HTTP 请求的 '
-                        'User-Agent、Headers、Cookie、超时等设置。\n\n'
-                        '这会修改脚本的实际网络行为，仅建议在调试时使用。',
-                      ),
+                      title: Text(l10n.enableRequestOverrides),
+                      content: Text(l10n.requestOverrideWarning),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('取消'),
+                          child: Text(l10n.cancel),
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('确认启用'),
+                          child: Text(l10n.confirmEnable),
                         ),
                       ],
                     ),
@@ -413,6 +392,23 @@ extension _SettingsSections on _SettingsPageState {
                 setState(() => _overrideEnabled = v);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.tune_outlined),
+              title: Text(l10n.requestOverrideSettings),
+              subtitle: Text(
+                _overrideEnabled
+                    ? l10n.requestOverridesOn
+                    : l10n.requestOverridesOff,
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RequestOverrideEditorPage(),
+                ),
+              ),
+            ),
           ],
         ),
       ],
@@ -420,17 +416,18 @@ extension _SettingsSections on _SettingsPageState {
   }
 
   Widget _buildDiagnosticsSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         _SectionCard(
           icon: Icons.build_outlined,
-          title: '系统工具',
+          title: l10n.systemTools,
           children: [
             ListTile(
               leading: const Icon(Icons.article_outlined),
-              title: const Text('应用日志'),
-              subtitle: const Text('查看和筛选系统日志、崩溃日志、脚本错误',
-                  style: TextStyle(fontSize: 12)),
+              title: Text(l10n.appLogs),
+              subtitle:
+                  Text(l10n.appLogsDescription, style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
@@ -442,8 +439,8 @@ extension _SettingsSections on _SettingsPageState {
             ),
             ListTile(
               leading: const Icon(Icons.file_download_outlined),
-              title: const Text('导出完整日志'),
-              subtitle: const Text('导出完整诊断日志到工作目录，未设置则使用默认目录',
+              title: Text(l10n.exportFullLogs),
+              subtitle: Text(l10n.exportFullLogsDescription,
                   style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _exportSystemLogs,
@@ -455,22 +452,13 @@ extension _SettingsSections on _SettingsPageState {
   }
 
   Widget _buildAboutSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         _SectionCard(
           icon: Icons.info_outline,
-          title: '关于',
+          title: l10n.aboutApp,
           children: [
-            ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: const Text('使用手册'),
-              subtitle: const Text('功能说明与操作指南', style: TextStyle(fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const _UserManualPage()),
-              ),
-            ),
             ListTile(
               leading: _checkingUpdate
                   ? const SizedBox(
@@ -479,34 +467,34 @@ extension _SettingsSections on _SettingsPageState {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.system_update_alt),
-              title: const Text('检查更新'),
-              subtitle: const Text('从 GitHub Releases 获取最新 APK',
+              title: Text(l10n.checkForUpdates),
+              subtitle: Text(l10n.checkForUpdatesDescription,
                   style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _checkingUpdate ? null : _checkForUpdates,
             ),
             ListTile(
               leading: const Icon(Icons.history_outlined),
-              title: const Text('更新日志'),
-              subtitle: const Text('查看 GitHub Releases 历史版本',
+              title: Text(l10n.updateLog),
+              subtitle: Text(l10n.updateLogDescription,
                   style: TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: _openUpdateLogPage,
             ),
             SwitchListTile(
               secondary: const Icon(Icons.update_outlined),
-              title: const Text('启动时自动检查更新'),
-              subtitle:
-                  const Text('每次启动应用时自动检查更新', style: TextStyle(fontSize: 12)),
+              title: Text(l10n.autoCheckUpdates),
+              subtitle: Text(l10n.autoCheckUpdatesDescription,
+                  style: const TextStyle(fontSize: 12)),
               value: _autoCheckUpdates,
               onChanged: _setAutoCheckUpdates,
             ),
             ListTile(
               leading: const Icon(Icons.speed_outlined),
-              title: const Text('下载加速镜像'),
+              title: Text(l10n.downloadMirror),
               subtitle: Text(
                 _githubMirrorController.text.isEmpty
-                    ? '未设置（点击配置）'
+                    ? l10n.mirrorNotConfigured
                     : _githubMirrorController.text,
                 style: const TextStyle(fontSize: 12),
                 maxLines: 1,
@@ -517,7 +505,7 @@ extension _SettingsSections on _SettingsPageState {
             ),
             ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('关于应用'),
+              title: Text(l10n.aboutApp),
               trailing: const Icon(Icons.chevron_right),
               onTap: _openAboutPage,
             ),
@@ -528,14 +516,31 @@ extension _SettingsSections on _SettingsPageState {
   }
 
   Widget _buildAppearanceSection() {
+    final l10n = AppLocalizations.of(context)!;
     return _SectionCard(
       icon: Icons.tune,
-      title: '通用',
+      title: l10n.general,
       children: [
+        Consumer(
+          builder: (context, ref, _) {
+            final locale = ref.watch(appLocaleProvider);
+            return ListTile(
+              leading: const Icon(Icons.language_outlined),
+              title: Text(l10n.language),
+              subtitle: Text(
+                locale.languageCode == 'en' ? l10n.english : l10n.chinese,
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showLanguagePicker(locale),
+            );
+          },
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
         ListTile(
           leading: const Icon(Icons.palette_outlined),
-          title: const Text('主题与配色'),
-          subtitle: const Text('主题模式、Material You、配色方案、自定义颜色、字体',
+          title: Text(l10n.themeAndColors),
+          subtitle: Text(l10n.themeAndColorsDescription,
               style: TextStyle(fontSize: 12)),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
@@ -545,15 +550,59 @@ extension _SettingsSections on _SettingsPageState {
             ),
           ),
         ),
-        SwitchListTile(
-          secondary: const Icon(Icons.bubble_chart),
-          title: const Text('悬浮球'),
-          subtitle: const Text('常驻显示运行状态，点击展开面板，长按查看详情',
-              style: TextStyle(fontSize: 12)),
-          value: _floatingBallEnabled,
-          onChanged: _setFloatingBallEnabled,
-        ),
       ],
     );
+  }
+
+  Widget _buildRuntimeInstallPanel(AppLocalizations l10n) {
+    return ListTile(
+      leading: Icon(
+        _linuxLikeAvailable ? Icons.check_circle_outline : Icons.info_outline,
+        color: _linuxLikeAvailable ? Colors.green : null,
+      ),
+      title: Text(l10n.linuxLikeExperimental),
+      subtitle: Text(
+        _linuxLikeAvailable ? l10n.runtimeInstalled : l10n.runtimeNotInstalled,
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: _showRuntimeInstallDialog,
+    );
+  }
+
+  Future<void> _showLanguagePicker(Locale locale) async {
+    final selected = await showModalBottomSheet<Locale>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final labels = AppLocalizations.of(sheetContext)!;
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(locale.languageCode == 'zh'
+                    ? Icons.check_rounded
+                    : Icons.language_outlined),
+                title: Text(labels.chinese),
+                onTap: () => Navigator.pop(sheetContext, const Locale('zh')),
+              ),
+              ListTile(
+                leading: Icon(locale.languageCode == 'en'
+                    ? Icons.check_rounded
+                    : Icons.language_outlined),
+                title: Text(labels.english),
+                onTap: () => Navigator.pop(sheetContext, const Locale('en')),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && selected.languageCode != locale.languageCode) {
+      await ref.read(appLocaleProvider.notifier).setLocale(selected);
+    }
   }
 }
