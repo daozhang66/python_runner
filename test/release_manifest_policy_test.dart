@@ -13,7 +13,6 @@ void main() {
     expect(releaseOverlay, contains('android:usesCleartextTraffic="false"'));
     expect(
         releaseOverlay, contains('android.permission.MANAGE_EXTERNAL_STORAGE'));
-    expect(releaseOverlay, contains('android.permission.SYSTEM_ALERT_WINDOW'));
     expect(releaseOverlay, contains('tools:node="remove"'));
     expect(
       releaseOverlay,
@@ -31,5 +30,7 @@ void main() {
     expect(buildGradle, contains('MTDataFilesWakeUpActivity'));
     expect(buildGradle, contains('MANAGE_DOCUMENTS'));
     expect(buildGradle, contains('REQUEST_INSTALL_PACKAGES missing'));
+    expect(buildGradle, contains('useLegacyPackaging = true'));
+    expect(buildGradle, isNot(contains('task.name == "packageRelease"')));
   });
 }

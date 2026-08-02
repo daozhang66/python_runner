@@ -143,7 +143,7 @@ android {
 
     packagingOptions {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 }
@@ -274,106 +274,5 @@ tasks.whenTaskAdded { task ->
     if (task.name == "assembleRelease") {
         task.dependsOn(tasks.named("verifyReleaseManifestPolicy"))
         task.finalizedBy(tasks.named("reportReleaseApkSize"))
-    }
-}
-
-// Force proot .so files to be stored uncompressed so Android extracts them
-// to nativeLibraryDir with execute permission, then re-sign the APK.
-tasks.whenTaskAdded { task ->
-    if (task.name == "packageRelease") {
-        task.doLast {
-            def apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-            def apk = new File(apkDir, "app-release.apk")
-            if (!apk.exists()) return
-            def targets = ["lib/arm64-v8a/libproot.so", "lib/arm64-v8a/liblinuxlike_loader.so", "lib/arm64-v8a/libtalloc2.so"] as Set
-
-            // Step 1: rewrite zip with target .so entries stored uncompressed
-            def unsignedApk = new File(apkDir, "app-release-unsigned.apk")
-            def zin = new java.util.zip.ZipFile(apk)
-            def zout = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(unsignedApk))
-            zin.entries().each { entry ->
-                def data = zin.getInputStream(entry).bytes
-                if (targets.contains(entry.name)) {
-                    def crc = new java.util.zip.CRC32()
-                    crc.update(data)
-                    def newEntry = new java.util.zip.ZipEntry(entry.name)
-                    newEntry.method = java.util.zip.ZipEntry.STORED
-                    newEntry.size = data.length
-                    newEntry.compressedSize = data.length
-                    newEntry.crc = crc.value
-                    zout.putNextEntry(newEntry)
-                } else {
-                    // skip existing META-INF signature files — apksigner will add new ones
-                    if (entry.name.startsWith("META-INF/") &&
-                        (entry.name.endsWith(".SF") || entry.name.endsWith(".RSA") ||
-                         entry.name.endsWith(".DSA") || entry.name == "META-INF/MANIFEST.MF")) {
-                        return
-                    }
-                    def newEntry = new java.util.zip.ZipEntry(entry.name)
-                    newEntry.method = entry.method
-                    if (entry.method == java.util.zip.ZipEntry.STORED) {
-                        newEntry.size = entry.size
-                        newEntry.compressedSize = entry.compressedSize
-                        newEntry.crc = entry.crc
-                    }
-                    zout.putNextEntry(newEntry)
-                }
-                zout.write(data)
-                zout.closeEntry()
-            }
-            zin.close()
-            zout.close()
-
-            // Step 2: re-sign with apksigner
-            if (!releaseStorePassword || !releaseKeyPassword || !releaseKeyAlias) {
-                throw new GradleException("Release signing config missing. Set android/key.properties or PYRUNNER_RELEASE_* environment variables.")
-            }
-            def keystorePath = rootProject.file(releaseStoreFilePath).absolutePath
-            def apksignerExt = System.getProperty("os.name").toLowerCase().contains("windows") ? ".bat" : ""
-            def buildToolsDir = new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}")
-            def apksignerFile = new File(buildToolsDir, "apksigner${apksignerExt}")
-            if (!apksignerFile.exists()) {
-                def buildToolsRoot = new File(android.sdkDirectory, "build-tools")
-                def candidates = buildToolsRoot.listFiles()
-                    ?.sort { a, b -> b.name <=> a.name }
-                    ?.collect { new File(it, "apksigner${apksignerExt}") }
-                    ?: []
-                apksignerFile = candidates.find { it.exists() } ?: apksignerFile
-            }
-            if (!apksignerFile.exists()) {
-                throw new GradleException("apksigner not found under ${android.sdkDirectory}/build-tools")
-            }
-            exec {
-                commandLine apksignerFile.absolutePath, "sign",
-                    "--ks", keystorePath,
-                    "--ks-pass", "pass:${releaseStorePassword}",
-                    "--key-pass", "pass:${releaseKeyPassword}",
-                    "--ks-key-alias", releaseKeyAlias,
-                    "--v1-signing-enabled", "true",
-                    "--v2-signing-enabled", "true",
-                    "--out", apk.absolutePath,
-                    unsignedApk.absolutePath
-            }
-            unsignedApk.delete()
-
-            // Step 3: verify signature and .so compression
-            exec {
-                commandLine apksignerFile.absolutePath, "verify", "--verbose", "--print-certs", apk.absolutePath
-            }
-            def verifyZip = new java.util.zip.ZipFile(apk)
-            targets.each { target ->
-                def e = verifyZip.getEntry(target)
-                if (e == null) {
-                    verifyZip.close()
-                    throw new GradleException("APK missing expected entry: ${target}")
-                }
-                if (e.method != java.util.zip.ZipEntry.STORED) {
-                    verifyZip.close()
-                    throw new GradleException("${target} is not STORED (uncompressed) in final APK")
-                }
-            }
-            verifyZip.close()
-            println "APK verified: signature valid, .so entries stored uncompressed"
-        }
     }
 }
