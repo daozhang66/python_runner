@@ -8,17 +8,13 @@ import '../ui/app_design_tokens.dart';
 class UpdateDialog extends StatelessWidget {
   final AppUpdateInfo updateInfo;
   final VoidCallback onUpdate;
-  final VoidCallback onCancel;
   final VoidCallback? onIgnore;
-  final VoidCallback? onViewDetails;
 
   const UpdateDialog({
     super.key,
     required this.updateInfo,
     required this.onUpdate,
-    required this.onCancel,
     this.onIgnore,
-    this.onViewDetails,
   });
 
   @override
@@ -267,75 +263,29 @@ class UpdateDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
 
-                      // 次要操作按钮
-                      OverflowBar(
-                        alignment: MainAxisAlignment.spaceBetween,
-                        spacing: 8,
-                        overflowSpacing: 4,
-                        overflowAlignment: OverflowBarAlignment.end,
-                        children: [
-                          // 不再提示按钮
-                          if (onIgnore != null)
-                            TextButton(
-                              onPressed: onIgnore,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                foregroundColor: colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.7),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: Text(
-                                l10n.dontRemind,
-                                style: const TextStyle(
-                                    fontSize: AppTextSize.bodyEmphasis),
-                              ),
-                            ),
-
-                          // 查看详情按钮
-                          if (onViewDetails != null)
-                            TextButton.icon(
-                              onPressed: onViewDetails,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                foregroundColor: colorScheme.primary,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              icon: Icon(Icons.open_in_new, size: 14),
-                              label: Text(
-                                l10n.viewDetails,
-                                style: const TextStyle(
-                                    fontSize: AppTextSize.bodyEmphasis),
-                              ),
-                            ),
-
-                          // 稍后提醒按钮
-                          TextButton(
-                            onPressed: onCancel,
+                      if (onIgnore != null)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: onIgnore,
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: 12,
                                 vertical: 8,
                               ),
-                              foregroundColor: colorScheme.onSurfaceVariant,
+                              foregroundColor: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             child: Text(
-                              l10n.remindLater,
+                              l10n.dontRemind,
                               style: const TextStyle(
-                                  fontSize: AppTextSize.bodyEmphasis),
+                                fontSize: AppTextSize.bodyEmphasis,
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
                 ),

@@ -165,13 +165,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateNow => '立即更新';
 
   @override
-  String get remindLater => '稍后提醒';
-
-  @override
   String get dontRemind => '不再提示';
-
-  @override
-  String get viewDetails => '查看详情';
 
   @override
   String get releaseNotes => '更新日志';
@@ -1818,7 +1812,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidOverrideConfig => '请求覆盖配置无效';
 
   @override
-  String get sponsorProject => '微信扫码赞助';
+  String get sponsorProject => '赞助';
 
   @override
   String get sponsorProjectDescription => '使用微信扫一扫';

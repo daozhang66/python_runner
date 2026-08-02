@@ -1,5 +1,6 @@
 package com.daozhang.py
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
@@ -46,6 +47,7 @@ class ApkInstaller(private val context: Context) {
         )
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(apkUri, "application/vnd.android.package-archive")
+            clipData = ClipData.newRawUri("APK", apkUri)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -55,27 +57,38 @@ class ApkInstaller(private val context: Context) {
 
     private fun ensureShareableApk(apkFile: File): File {
         val canonicalApk = apkFile.canonicalFile
-        val shareRoots = listOf(
-            context.filesDir,
-            context.cacheDir,
-            context.getExternalFilesDir(null)
-        ).filterNotNull().map { it.canonicalFile }
-
-        if (shareRoots.any { canonicalApk.path == it.path || canonicalApk.path.startsWith(it.path + File.separator) }) {
+        val installDir = File(context.filesDir, "apk_install").canonicalFile
+        if (
+            canonicalApk.path == installDir.path ||
+                canonicalApk.path.startsWith(installDir.path + File.separator)
+        ) {
             return canonicalApk
         }
 
-        val installCacheDir = File(context.cacheDir, "apk_install")
-        if (!installCacheDir.exists()) installCacheDir.mkdirs()
-        installCacheDir.listFiles()?.forEach { file ->
-            if (file.isFile && file.name.endsWith(".apk")) file.delete()
+        if (!installDir.exists() && !installDir.mkdirs()) {
+            throw IllegalStateException("无法创建安装APK缓存目录")
         }
 
         val safeName = canonicalApk.name.takeIf { it.endsWith(".apk", ignoreCase = true) }
             ?: "app-update.apk"
-        val cachedApk = File(installCacheDir, safeName)
-        canonicalApk.copyTo(cachedApk, overwrite = true)
-        return cachedApk
+        val uniqueName = "${System.currentTimeMillis()}-$safeName"
+        val privateApk = File(installDir, uniqueName)
+        val temporaryApk = File(installDir, ".$uniqueName.part")
+
+        try {
+            canonicalApk.copyTo(temporaryApk, overwrite = true)
+            if (temporaryApk.length() != canonicalApk.length()) {
+                throw IllegalStateException("安装APK复制不完整")
+            }
+            if (!temporaryApk.renameTo(privateApk)) {
+                throw IllegalStateException("无法准备安装APK")
+            }
+            return privateApk
+        } finally {
+            // The private APK remains until a later application update so an
+            // asynchronous package installer never observes a deleted source.
+            temporaryApk.delete()
+        }
     }
 
     private fun validateApk(apkFile: File) {

@@ -101,7 +101,7 @@ class AppUpdateManager {
   }) async {
     await showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (dialogContext) => UpdateDialog(
         updateInfo: updateInfo,
         onUpdate: () async {
@@ -114,11 +114,6 @@ class AppUpdateManager {
           }
           await _downloadAndInstallUpdate(context, updateInfo);
         },
-        onCancel: () {
-          if (dialogContext.mounted) {
-            Navigator.pop(dialogContext);
-          }
-        },
         onIgnore: rememberDismissal
             ? () async {
                 await _rememberDismissedVersion(updateInfo.latestVersion);
@@ -127,9 +122,6 @@ class AppUpdateManager {
                 }
               }
             : null,
-        onViewDetails: () async {
-          await _bridge.openUrl(updateInfo.htmlUrl);
-        },
       ),
     );
   }

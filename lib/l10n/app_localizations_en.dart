@@ -167,13 +167,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateNow => 'Update now';
 
   @override
-  String get remindLater => 'Remind me later';
-
-  @override
   String get dontRemind => 'Don\'t remind me';
-
-  @override
-  String get viewDetails => 'View details';
 
   @override
   String get releaseNotes => 'Release notes';
@@ -1865,7 +1859,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invalidOverrideConfig => 'Invalid request override configuration';
 
   @override
-  String get sponsorProject => 'WeChat sponsorship';
+  String get sponsorProject => 'Sponsor';
 
   @override
   String get sponsorProjectDescription => 'Scan with WeChat';

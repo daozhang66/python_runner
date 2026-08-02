@@ -410,23 +410,11 @@ abstract class AppLocalizations {
   /// **'Update now'**
   String get updateNow;
 
-  /// No description provided for @remindLater.
-  ///
-  /// In en, this message translates to:
-  /// **'Remind me later'**
-  String get remindLater;
-
   /// No description provided for @dontRemind.
   ///
   /// In en, this message translates to:
   /// **'Don\'t remind me'**
   String get dontRemind;
-
-  /// No description provided for @viewDetails.
-  ///
-  /// In en, this message translates to:
-  /// **'View details'**
-  String get viewDetails;
 
   /// No description provided for @releaseNotes.
   ///
@@ -3432,7 +3420,7 @@ abstract class AppLocalizations {
   /// No description provided for @sponsorProject.
   ///
   /// In en, this message translates to:
-  /// **'WeChat sponsorship'**
+  /// **'Sponsor'**
   String get sponsorProject;
 
   /// No description provided for @sponsorProjectDescription.
