@@ -119,7 +119,9 @@ class RuntimeManager {
     _activeSession = null;
     if (previous != null) {
       await previous.terminate();
-      await previous.dispose();
+      // EventChannel cancellation is best effort and must not prevent a new
+      // execution from starting when the old source never closes.
+      unawaited(previous.dispose());
     }
 
     final session = await currentBackend.startScript(request);

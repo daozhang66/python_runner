@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:python_runner/models/app_file_entry.dart';
+import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/pages/app_file_picker_page.dart';
 import 'package:python_runner/pigeon/native_runtime_api.g.dart' as pigeon;
 
@@ -68,6 +69,9 @@ void main() {
     AppFilePickResult? picked;
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
@@ -127,6 +131,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
@@ -190,6 +197,9 @@ void main() {
     Future<void> openPicker() async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Builder(
             builder: (context) => Scaffold(
               body: ElevatedButton(

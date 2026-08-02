@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/ui/app_responsive.dart';
 import 'package:python_runner/ui/app_state_views.dart';
+import 'package:python_runner/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('responsive layout switches at the tablet breakpoint',
@@ -12,7 +13,10 @@ void main() {
     tester.view.physicalSize = const Size(599, 800);
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppResponsiveLayout(
           compact: Text('compact'),
           tablet: Text('tablet'),
@@ -32,6 +36,9 @@ void main() {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Column(
           children: [
             const Expanded(child: AppLoadingState(label: '正在加载脚本')),

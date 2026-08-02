@@ -122,8 +122,8 @@ void main() {
     );
     expect(interface.existsSync(), isTrue, reason: '缺少网络检查器 Repository 接口');
     final source = interface.readAsStringSync();
-    expect(source,
-        contains('abstract class NetworkInspectorRepository'));
+    expect(source, contains('NetworkInspectorRepository'));
+    expect(source, contains('implements Listenable'));
     expect(source, contains('class HttpInspectorRepository'));
     expect(source, contains('final networkInspectorRepositoryProvider'));
   });

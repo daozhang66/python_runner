@@ -10,6 +10,7 @@ import 'package:re_editor/re_editor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:python_runner/features/scripts/application/script_repository.dart';
+import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/models/log_entry.dart';
 import 'package:python_runner/models/script_file.dart';
 import 'package:python_runner/models/script_group.dart';
@@ -229,6 +230,9 @@ void main() {
 
 Widget _buildTestApp(Widget home) {
   return MaterialApp(
+    locale: const Locale('zh'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     theme: ThemeData(splashFactory: NoSplash.splashFactory),
     home: home,
   );

@@ -268,8 +268,11 @@ class UpdateDialog extends StatelessWidget {
                       const SizedBox(height: 14),
 
                       // 次要操作按钮
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      OverflowBar(
+                        alignment: MainAxisAlignment.spaceBetween,
+                        spacing: 8,
+                        overflowSpacing: 4,
+                        overflowAlignment: OverflowBarAlignment.end,
                         children: [
                           // 不再提示按钮
                           if (onIgnore != null)
@@ -312,8 +315,6 @@ class UpdateDialog extends StatelessWidget {
                                     fontSize: AppTextSize.bodyEmphasis),
                               ),
                             ),
-
-                          const Spacer(),
 
                           // 稍后提醒按钮
                           TextButton(
