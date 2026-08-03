@@ -1812,15 +1812,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidOverrideConfig => '请求覆盖配置无效';
 
   @override
-  String get sponsorProject => '赞助';
-
-  @override
-  String get sponsorProjectDescription => '使用微信扫一扫';
-
-  @override
-  String get sponsorQrHint => '感谢你的支持，请使用微信扫码赞助';
-
-  @override
   String get appSubtitle => '本地 Python 脚本运行环境';
 
   @override

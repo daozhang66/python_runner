@@ -1859,16 +1859,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invalidOverrideConfig => 'Invalid request override configuration';
 
   @override
-  String get sponsorProject => 'Sponsor';
-
-  @override
-  String get sponsorProjectDescription => 'Scan with WeChat';
-
-  @override
-  String get sponsorQrHint =>
-      'Thank you for your support. Scan with WeChat to sponsor.';
-
-  @override
   String get appSubtitle => 'Local Python script runtime';
 
   @override

@@ -3417,24 +3417,6 @@ abstract class AppLocalizations {
   /// **'Invalid request override configuration'**
   String get invalidOverrideConfig;
 
-  /// No description provided for @sponsorProject.
-  ///
-  /// In en, this message translates to:
-  /// **'Sponsor'**
-  String get sponsorProject;
-
-  /// No description provided for @sponsorProjectDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan with WeChat'**
-  String get sponsorProjectDescription;
-
-  /// No description provided for @sponsorQrHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Thank you for your support. Scan with WeChat to sponsor.'**
-  String get sponsorQrHint;
-
   /// No description provided for @appSubtitle.
   ///
   /// In en, this message translates to:

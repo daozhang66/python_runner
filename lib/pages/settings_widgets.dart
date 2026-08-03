@@ -577,11 +577,6 @@ class _AboutPageState extends State<_AboutPage> {
                 onTap: () => _bridge
                     .openUrl('https://github.com/daozhang66/python_runner'),
               ),
-              _AboutItem(
-                label: l10n.sponsorProject,
-                value: l10n.sponsorProjectDescription,
-                onTap: () => _showSponsorDialog(context),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -609,36 +604,6 @@ class _AboutPageState extends State<_AboutPage> {
     );
   }
 
-  void _showSponsorDialog(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.sponsorProject),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l10n.sponsorQrHint, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              Image.asset(
-                'IMG_20260802_014149.png',
-                fit: BoxFit.contain,
-                semanticLabel: l10n.sponsorProject,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.close),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _AboutCard extends StatelessWidget {

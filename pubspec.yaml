@@ -52,7 +52,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/python_hooks/
-    - IMG_20260802_014149.png
 
   fonts:
     - family: MiSans
