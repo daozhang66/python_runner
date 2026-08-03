@@ -3,9 +3,11 @@ buildscript {
     def kotlinGradlePluginVersion = providers.gradleProperty("kotlinGradlePluginVersion").get()
 
     repositories {
-        maven { url "https://maven.aliyun.com/repository/google" }
-        maven { url "https://maven.aliyun.com/repository/central" }
-        maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+        if (System.getenv("CI") != "true") {
+            maven { url "https://maven.aliyun.com/repository/google" }
+            maven { url "https://maven.aliyun.com/repository/central" }
+            maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+        }
         google()
         mavenCentral()
     }
@@ -18,8 +20,10 @@ buildscript {
 
 allprojects {
     repositories {
-        maven { url "https://maven.aliyun.com/repository/google" }
-        maven { url "https://maven.aliyun.com/repository/central" }
+        if (System.getenv("CI") != "true") {
+            maven { url "https://maven.aliyun.com/repository/google" }
+            maven { url "https://maven.aliyun.com/repository/central" }
+        }
         google()
         mavenCentral()
     }
@@ -31,9 +35,11 @@ subprojects {
 
     buildscript {
         repositories {
-            maven { url "https://maven.aliyun.com/repository/google" }
-            maven { url "https://maven.aliyun.com/repository/central" }
-            maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+            if (System.getenv("CI") != "true") {
+                maven { url "https://maven.aliyun.com/repository/google" }
+                maven { url "https://maven.aliyun.com/repository/central" }
+                maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+            }
             google()
             mavenCentral()
         }
