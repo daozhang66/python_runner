@@ -2,6 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String _trackedSource(String root, String path) {
+  final result = Process.runSync(
+    'git',
+    ['show', 'HEAD:$path'],
+    workingDirectory: root,
+  );
+  if (result.exitCode != 0) {
+    throw StateError('Unable to read tracked source: $path');
+  }
+  return result.stdout as String;
+}
+
 void main() {
   test('production sources contain no floating ball implementation', () {
     final root = Directory.current.path;
@@ -45,17 +57,16 @@ void main() {
     );
   });
 
-  test('about page uses localized sponsor content without a manual', () {
+  test('public about page omits private sponsor content and the manual', () {
     final root = Directory.current.path;
-    final source =
-        File('$root/lib/pages/settings_widgets.dart').readAsStringSync();
+    final source = _trackedSource(root, 'lib/pages/settings_widgets.dart');
     final settings =
         File('$root/lib/pages/settings_sections.dart').readAsStringSync();
 
     expect(source, contains('l10n.technicalArchitecture'));
     expect(source, contains('projectHomepage'));
-    expect(source, contains('l10n.sponsorProject'));
-    expect(source, contains('IMG_20260802_014149.png'));
+    expect(source, isNot(contains('sponsorProject')));
+    expect(source, isNot(contains('IMG_20260802_014149.png')));
     expect(source, isNot(contains('_UserManualPage')));
     expect(source, isNot(contains('openSourceLicense')));
     expect(settings, isNot(contains('RuntimeManagerPage')));
