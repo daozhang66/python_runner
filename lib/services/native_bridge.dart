@@ -293,6 +293,52 @@ class NativeBridge {
     );
   }
 
+  /// Creates a directory inside the public-storage directory [path].
+  ///
+  /// Mutations only accept absolute host paths; `content://` targets must be
+  /// rejected in Dart before they ever reach the channel.
+  Future<void> createFileManagerDirectory(String path, String name) async {
+    _validateFileManagerMutationPath(path);
+    if (name.trim().isEmpty || name.contains('/') || name.contains('\\')) {
+      throw ArgumentError.value(name, 'name', 'invalid directory name');
+    }
+    await _invoke('createFileManagerDirectory', {'path': path, 'name': name});
+  }
+
+  /// Renames the entry at absolute [path] to a single [newName] segment.
+  Future<void> renameFileManagerEntry(String path, String newName) async {
+    _validateFileManagerMutationPath(path);
+    if (newName.trim().isEmpty ||
+        newName.contains('/') ||
+        newName.contains('\\')) {
+      throw ArgumentError.value(newName, 'newName', 'invalid entry name');
+    }
+    await _invoke('renameFileManagerEntry', {'path': path, 'newName': newName});
+  }
+
+  /// Deletes the file or empty directory at absolute [path].
+  Future<void> deleteFileManagerEntry(String path) async {
+    _validateFileManagerMutationPath(path);
+    await _invoke('deleteFileManagerEntry', {'path': path});
+  }
+
+  void _validateFileManagerMutationPath(String path) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(path, 'path', 'path must not be empty');
+    }
+    if (trimmed.startsWith('content://')) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'content:// targets cannot be mutated through the file manager',
+      );
+    }
+    if (!trimmed.startsWith('/')) {
+      throw ArgumentError.value(path, 'path', 'path must be absolute');
+    }
+  }
+
   Future<String> createScriptProject(String projectKey) async {
     final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
     final result =

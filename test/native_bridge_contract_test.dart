@@ -81,6 +81,111 @@ void main() {
     );
   });
 
+  test('Dart contract requires path and name for file manager mutations', () {
+    for (final method in [
+      'createFileManagerDirectory',
+      'renameFileManagerEntry',
+      'deleteFileManagerEntry',
+    ]) {
+      expect(
+        () => NativeBridgeContract.validate(method, {}),
+        throwsA(isA<NativeBridgeContractException>()),
+      );
+    }
+
+    expect(
+      () => NativeBridgeContract.validate('createFileManagerDirectory', {
+        'path': '/storage/emulated/0/Download',
+        'name': 'new-dir',
+      }),
+      returnsNormally,
+    );
+    expect(
+      () => NativeBridgeContract.validate('renameFileManagerEntry', {
+        'path': '/storage/emulated/0/Download/old',
+        'newName': 'new-name',
+      }),
+      returnsNormally,
+    );
+    expect(
+      () => NativeBridgeContract.validate('deleteFileManagerEntry', {
+        'path': '/storage/emulated/0/Download/tmp',
+      }),
+      returnsNormally,
+    );
+  });
+
+  test('file manager mutations reject URI targets in Dart', () async {
+    final bridge = NativeBridge();
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(nativeMethodChannel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+
+    await expectLater(
+      bridge.createFileManagerDirectory('content://tree/primary', 'dir'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      bridge.renameFileManagerEntry('content://tree/primary', 'x'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      bridge.deleteFileManagerEntry('content://tree/primary'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      bridge.renameFileManagerEntry('/storage/emulated/0/Download/old', '  '),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(calls, isEmpty);
+  });
+
+  test('file manager mutations invoke channel with validated arguments',
+      () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(nativeMethodChannel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    final bridge = NativeBridge();
+
+    await bridge.createFileManagerDirectory(
+        '/storage/emulated/0/Download', 'new-dir');
+    await bridge.renameFileManagerEntry(
+        '/storage/emulated/0/Download/old', 'new-name');
+    await bridge.deleteFileManagerEntry('/storage/emulated/0/Download/tmp');
+
+    expect(calls.map((c) => c.method), [
+      'createFileManagerDirectory',
+      'renameFileManagerEntry',
+      'deleteFileManagerEntry',
+    ]);
+    expect(calls[0].arguments, {
+      'path': '/storage/emulated/0/Download',
+      'name': 'new-dir',
+    });
+    expect(calls[1].arguments, {
+      'path': '/storage/emulated/0/Download/old',
+      'newName': 'new-name',
+    });
+    expect(calls[2].arguments, {
+      'path': '/storage/emulated/0/Download/tmp',
+    });
+  });
+
+  test('Kotlin native bridge contract mirrors file manager mutation methods',
+      () {
+    final source = File(
+      'android/app/src/main/kotlin/com/daozhang/py/NativeBridgeContract.kt',
+    ).readAsStringSync();
+
+    expect(source, contains('"createFileManagerDirectory"'));
+    expect(source, contains('"renameFileManagerEntry"'));
+    expect(source, contains('"deleteFileManagerEntry"'));
+  });
+
   test('NativeBridge converts contract errors to stable exception code',
       () async {
     final bridge = NativeBridge();

@@ -12,6 +12,13 @@ class NativeFileOperations(
     private val contentResolver: ContentResolver,
     private val scriptFileStore: ScriptFileStore
 ) {
+    private val protectedSystemPrefixes = listOf(
+        "/system",
+        "/proc",
+        "/sys",
+        "/dev",
+    )
+
     fun importScriptFromUri(uriString: String, name: String): Map<String, Any> {
         val uri = Uri.parse(uriString)
         val inputStream = contentResolver.openInputStream(uri)
@@ -122,6 +129,63 @@ class NativeFileOperations(
             require(file.isFile) { "文件不存在: $path" }
             file.readBytes()
         }
+    }
+
+    fun createFileManagerDirectory(path: String, name: String) {
+        val parent = mutableTarget(path)
+        require(name.isNotBlank()) { "目录名为空" }
+        require(!name.contains('/') && !name.contains('\\')) { "目录名不能包含路径分隔符" }
+        val target = File(parent, name)
+        require(!target.exists()) { "目录已存在: ${target.name}" }
+        require(parent.isDirectory && parent.canWrite()) { "父目录不可写" }
+        if (!target.mkdir()) {
+            throw IllegalStateException("创建目录失败: ${target.name}")
+        }
+    }
+
+    fun renameFileManagerEntry(path: String, newName: String) {
+        val target = mutableTarget(path)
+        require(newName.isNotBlank()) { "新名称为空" }
+        require(!newName.contains('/') && !newName.contains('\\')) { "新名称不能包含路径分隔符" }
+        require(target.exists()) { "文件或目录不存在: $path" }
+        val renamed = File(target.parentFile, newName)
+        require(!renamed.exists()) { "目标名称已存在: $newName" }
+        require(target.parentFile?.canWrite() == true) { "父目录不可写" }
+        if (!target.renameTo(renamed)) {
+            throw IllegalStateException("重命名失败: ${target.name}")
+        }
+    }
+
+    fun deleteFileManagerEntry(path: String) {
+        val target = mutableTarget(path)
+        require(target.exists()) { "文件或目录不存在: $path" }
+        if (target.isDirectory) {
+            val children = target.listFiles()
+            require(children == null || children.isEmpty()) { "目录非空，不能删除: ${target.name}" }
+        }
+        if (!target.delete()) {
+            throw IllegalStateException("删除失败: ${target.name}")
+        }
+    }
+
+    /// Resolves a mutation target from an absolute host path and rejects
+    /// anything the file manager must never touch: URIs, the filesystem
+    /// root, and protected system prefixes.
+    private fun mutableTarget(path: String): File {
+        require(path.isNotBlank()) { "路径为空" }
+        require(!path.startsWith("content://")) { "不允许通过 URI 修改文件" }
+        require(path.startsWith("/") && !path.contains("\\")) { "路径必须是绝对路径" }
+        require(!path.contains("\u0000")) { "路径包含非法字符" }
+        val canonical = try {
+            File(path).canonicalPath
+        } catch (_: Exception) {
+            throw IllegalArgumentException("无法解析路径: $path")
+        }
+        require(canonical == "/" || !protectedSystemPrefixes.any { prefix ->
+            canonical == prefix || canonical.startsWith("$prefix/")
+        }) { "不允许修改系统目录: $canonical" }
+        require(canonical != "/") { "不允许修改文件系统根目录" }
+        return File(canonical)
     }
 
     private fun appFileEntryMap(file: File, displayName: String? = null): Map<String, Any> {

@@ -360,6 +360,26 @@ class MainActivity : FlutterActivity() {
                     result
                 )
             },
+            "createFileManagerDirectory" to { call, result ->
+                handleCreateFileManagerDirectory(
+                    call.argument<String>("path") ?: "",
+                    call.argument<String>("name") ?: "",
+                    result
+                )
+            },
+            "renameFileManagerEntry" to { call, result ->
+                handleRenameFileManagerEntry(
+                    call.argument<String>("path") ?: "",
+                    call.argument<String>("newName") ?: "",
+                    result
+                )
+            },
+            "deleteFileManagerEntry" to { call, result ->
+                handleDeleteFileManagerEntry(
+                    call.argument<String>("path") ?: "",
+                    result
+                )
+            },
             "executeScript" to { call, result ->
                 @Suppress("UNCHECKED_CAST")
                 val hookEnv = call.argument<Map<String, String>>("hookEnv")
@@ -676,6 +696,39 @@ class MainActivity : FlutterActivity() {
             result.success(scriptProjectStore.exportProjectZip(projectKey, destDir))
         } catch (e: Exception) {
             result.error("1030", "导出项目ZIP失败: ${e.message}", null)
+        }
+    }
+
+    private fun fileManagerErrorCode(e: Exception): String = when (e) {
+        is SecurityException -> "1043"
+        is IllegalStateException -> "1044"
+        else -> "1040"
+    }
+
+    private fun handleCreateFileManagerDirectory(path: String, name: String, result: MethodChannel.Result) {
+        try {
+            nativeFileOperations.createFileManagerDirectory(path, name)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error(fileManagerErrorCode(e), "创建目录失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleRenameFileManagerEntry(path: String, newName: String, result: MethodChannel.Result) {
+        try {
+            nativeFileOperations.renameFileManagerEntry(path, newName)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error(fileManagerErrorCode(e), "重命名失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleDeleteFileManagerEntry(path: String, result: MethodChannel.Result) {
+        try {
+            nativeFileOperations.deleteFileManagerEntry(path)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error(fileManagerErrorCode(e), "删除失败: ${e.message}", null)
         }
     }
 
