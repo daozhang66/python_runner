@@ -46,6 +46,7 @@ class FileManagerController extends ChangeNotifier {
     required Future<void> Function(String path, String newName) renameEntry,
     required Future<void> Function(String path) deleteEntry,
     Future<void> Function(String path, String content)? writeFile,
+    Future<void> Function(String path)? ensureDirectory,
     required Future<String?> Function() workingDirectoryProvider,
     required Future<bool> Function(String path) isPathAccessible,
     Future<List<AppFileEntry>> Function()? appDataRootsProvider,
@@ -55,6 +56,7 @@ class FileManagerController extends ChangeNotifier {
         _renameEntry = renameEntry,
         _deleteEntry = deleteEntry,
         _writeFile = writeFile,
+        _ensureDirectory = ensureDirectory,
         _workingDirectoryProvider = workingDirectoryProvider,
         _isPathAccessible = isPathAccessible,
         _appDataRootsProvider = appDataRootsProvider;
@@ -72,6 +74,7 @@ class FileManagerController extends ChangeNotifier {
   final Future<void> Function(String path, String newName) _renameEntry;
   final Future<void> Function(String path) _deleteEntry;
   final Future<void> Function(String path, String content)? _writeFile;
+  final Future<void> Function(String path)? _ensureDirectory;
   final Future<String?> Function() _workingDirectoryProvider;
   final Future<bool> Function(String path) _isPathAccessible;
   final Future<List<AppFileEntry>> Function()? _appDataRootsProvider;
@@ -148,9 +151,10 @@ class FileManagerController extends ChangeNotifier {
 
   /// Resolves the effective working directory: the configured path when it
   /// is non-blank, absolute, and the native layer can access it; otherwise
-  /// the default working directory. The default itself may still be
-  /// inaccessible (surfaced as a retryable error), but it is never swapped
-  /// for `/` automatically.
+  /// the default working directory. A missing directory is auto-created
+  /// (the runtime also creates it on execution); if creation fails the
+  /// default is still used so the page shows its retryable error state,
+  /// and `/` is never chosen implicitly.
   Future<String> _resolveWorkingRoot() async {
     final configured = await _workingDirectoryProvider();
     var candidate = resolveWorkingDirectory(
@@ -158,9 +162,26 @@ class FileManagerController extends ChangeNotifier {
       isAccessible: (_) => true,
     );
     if (!await _isPathAccessible(candidate)) {
+      await _ensureDirectoryQuietly(candidate);
+      if (await _isPathAccessible(candidate)) {
+        return candidate;
+      }
       candidate = defaultScriptWorkingDirectory;
+      if (!await _isPathAccessible(candidate)) {
+        await _ensureDirectoryQuietly(candidate);
+      }
     }
     return candidate;
+  }
+
+  Future<void> _ensureDirectoryQuietly(String path) async {
+    final ensure = _ensureDirectory;
+    if (ensure == null) return;
+    try {
+      await ensure(path);
+    } catch (_) {
+      // surfaced by the directory load as a retryable error
+    }
   }
 
   Future<void> enterDirectory(AppFileEntry entry) async {

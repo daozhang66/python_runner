@@ -23,6 +23,7 @@ object NativeBridgeContract {
         "renameFileManagerEntry" to listOf("path", "newName"),
         "deleteFileManagerEntry" to listOf("path"),
         "writeFileManagerFile" to listOf("path", "content"),
+        "ensureFileManagerDirectory" to listOf("path"),
         "createScriptProject" to listOf("projectKey"),
         "deleteScriptProject" to listOf("projectKey"),
         "listProjectFiles" to listOf("projectKey"),

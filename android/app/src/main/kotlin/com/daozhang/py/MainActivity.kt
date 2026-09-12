@@ -393,6 +393,16 @@ class MainActivity : FlutterActivity() {
                     result
                 )
             },
+            "ensureFileManagerDirectory" to { call, result ->
+                try {
+                    nativeFileOperations.ensureFileManagerDirectory(
+                        call.argument<String>("path") ?: ""
+                    )
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error(fileManagerErrorCode(e), "创建目录失败: ${e.message}", null)
+                }
+            },
             "getFileManagerAppDataRoots" to { _, result ->
                 try {
                     result.success(nativeFileOperations.getAppDataRoots())

@@ -52,6 +52,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       renameEntry: bridge.renameFileManagerEntry,
       deleteEntry: bridge.deleteFileManagerEntry,
       writeFile: bridge.writeFileManagerFile,
+      ensureDirectory: bridge.ensureFileManagerDirectory,
       workingDirectoryProvider: () async =>
           (await SharedPreferences.getInstance()).getString('working_dir'),
       isPathAccessible: (path) async {

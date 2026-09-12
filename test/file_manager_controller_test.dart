@@ -39,6 +39,7 @@ class _FakeBridge {
   final renamed = <String>[];
   final Map<String, List<int>> files;
   final Map<String, Completer<List<AppFileEntry>>> pendingList = {};
+  final ensured = <String>[];
 
   _FakeBridge({
     Map<String, List<AppFileEntry>>? directories,
@@ -98,6 +99,7 @@ FileManagerController _controller(
   String? configuredWorkingDir,
   bool workingDirAccessible = true,
   List<AppFileEntry> appDataRoots = const [],
+  bool Function(String path)? ensureCreates,
 }) {
   return FileManagerController(
     listDirectory: bridge.list,
@@ -105,8 +107,15 @@ FileManagerController _controller(
     createDirectory: bridge.createDirectory,
     renameEntry: bridge.rename,
     deleteEntry: bridge.delete,
+    ensureDirectory: (path) async {
+      bridge.ensured.add(path);
+      if (ensureCreates != null && ensureCreates(path)) {
+        bridge.directories[path] = const [];
+      }
+    },
     workingDirectoryProvider: () async => configuredWorkingDir,
-    isPathAccessible: (path) async => workingDirAccessible,
+    isPathAccessible: (path) async =>
+        workingDirAccessible && bridge.directories.containsKey(path),
     appDataRootsProvider: () async => appDataRoots,
   );
 }
@@ -291,6 +300,59 @@ void main() {
     expect(controller.canGoUp, isFalse);
   });
 
+  test('auto-creates missing configured working directory', () async {
+    final bridge = _FakeBridge(directories: {});
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      ensureCreates: (path) => path == '/work',
+    );
+
+    await controller.loadInitial();
+
+    expect(bridge.ensured, contains('/work'));
+    expect(controller.location.path, '/work');
+    expect(controller.state, FileManagerState.empty);
+  });
+
+  test('auto-creates default working directory when nothing exists',
+      () async {
+    final bridge = _FakeBridge(directories: {});
+    const fallback = '/storage/emulated/0/Download/PythonRunner';
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: null,
+      ensureCreates: (path) => path == fallback,
+    );
+
+    await controller.loadInitial();
+
+    expect(bridge.ensured, [fallback]);
+    expect(controller.location.path, fallback);
+    expect(controller.state, FileManagerState.empty);
+  });
+
+  test('keeps default path with error state when creation fails', () async {
+    final bridge = _FakeBridge(directories: {});
+    bridge.listError = const FileManagerError(
+      code: FileManagerErrorCode.permissionDenied,
+      message: '无权限访问此目录',
+    );
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: null,
+      ensureCreates: (_) => false,
+    );
+
+    await controller.loadInitial();
+
+    expect(
+      controller.location.path,
+      '/storage/emulated/0/Download/PythonRunner',
+    );
+    expect(controller.state, FileManagerState.error);
+  });
+
   test('app data entries dedupe against filesystem listing', () async {
     final bridge = _FakeBridge(directories: {
       '/': [_namedDir('/data/user/0/com.daozhang.py', 'data')],
@@ -371,7 +433,9 @@ void main() {
   });
 
   test('list error surfaces retryable error state', () async {
-    final bridge = _FakeBridge();
+    final bridge = _FakeBridge(directories: {
+      '/work': [],
+    });
     bridge.listError = const FileManagerError(
       code: FileManagerErrorCode.permissionDenied,
       message: '无权限访问此目录',

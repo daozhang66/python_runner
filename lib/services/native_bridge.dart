@@ -328,6 +328,13 @@ class NativeBridge {
     await _invoke('writeFileManagerFile', {'path': path, 'content': content});
   }
 
+  /// Creates [path] and missing parents (like `mkdir -p`). Used to
+  /// auto-create the default working directory on first launch.
+  Future<void> ensureFileManagerDirectory(String path) async {
+    _validateFileManagerMutationPath(path);
+    await _invoke('ensureFileManagerDirectory', {'path': path});
+  }
+
   /// App-private data roots (data, user_de_data, android_data, android_obb)
   /// mirroring the MTDataFilesProvider mapping, shown in root mode.
   Future<List<AppFileEntry>> getFileManagerAppDataRoots() async {

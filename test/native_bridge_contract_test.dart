@@ -140,6 +140,10 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
     await expectLater(
+      bridge.ensureFileManagerDirectory('content://tree/primary'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
       bridge.renameFileManagerEntry('/storage/emulated/0/Download/old', '  '),
       throwsA(isA<ArgumentError>()),
     );
@@ -162,12 +166,15 @@ void main() {
     await bridge.deleteFileManagerEntry('/storage/emulated/0/Download/tmp');
     await bridge.writeFileManagerFile(
         '/storage/emulated/0/Download/tmp.txt', '');
+    await bridge.ensureFileManagerDirectory(
+        '/storage/emulated/0/Download/PythonRunner');
 
     expect(calls.map((c) => c.method), [
       'createFileManagerDirectory',
       'renameFileManagerEntry',
       'deleteFileManagerEntry',
       'writeFileManagerFile',
+      'ensureFileManagerDirectory',
     ]);
     expect(calls[0].arguments, {
       'path': '/storage/emulated/0/Download',
@@ -184,6 +191,17 @@ void main() {
       'path': '/storage/emulated/0/Download/tmp.txt',
       'content': '',
     });
+    expect(calls[4].arguments, {
+      'path': '/storage/emulated/0/Download/PythonRunner',
+    });
+  });
+
+  test('Kotlin native bridge contract mirrors ensure directory method', () {
+    final source = File(
+      'android/app/src/main/kotlin/com/daozhang/py/NativeBridgeContract.kt',
+    ).readAsStringSync();
+
+    expect(source, contains('"ensureFileManagerDirectory"'));
   });
 
   test('Dart contract allows empty file manager write content', () {

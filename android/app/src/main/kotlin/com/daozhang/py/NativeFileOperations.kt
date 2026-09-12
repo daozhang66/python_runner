@@ -203,6 +203,31 @@ class NativeFileOperations(
         target.writeText(content)
     }
 
+    /// Creates [path] and missing parents (like `mkdir -p`). Accepts a
+    /// non-existent target, but still rejects protected prefixes so the
+    /// auto-create of the default working directory cannot escape storage.
+    fun ensureFileManagerDirectory(path: String) {
+        require(path.isNotBlank()) { "路径为空" }
+        require(!path.startsWith("content://")) { "不允许通过 URI 创建目录" }
+        require(path.startsWith("/") && !path.contains("\\")) { "路径必须是绝对路径" }
+        require(!path.contains("\u0000")) { "路径包含非法字符" }
+        val canonical = try {
+            File(path).canonicalPath
+        } catch (_: Exception) {
+            throw IllegalArgumentException("无法解析路径: $path")
+        }
+        require(canonical != "/") { "不允许创建文件系统根目录" }
+        require(!protectedSystemPrefixes.any { prefix ->
+            canonical == prefix || canonical.startsWith("$prefix/")
+        }) { "不允许在系统目录下创建: $canonical" }
+        val target = File(canonical)
+        if (target.isDirectory) return
+        require(!target.exists()) { "路径已存在且不是目录: $canonical" }
+        if (!target.mkdirs()) {
+            throw IllegalStateException("创建目录失败: $canonical")
+        }
+    }
+
     /// Resolves a mutation target from an absolute host path and rejects
     /// anything the file manager must never touch: URIs, the filesystem
     /// root, and protected system prefixes.
