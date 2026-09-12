@@ -332,6 +332,29 @@ void main() {
     expect(controller.state, FileManagerState.empty);
   });
 
+  test('retry re-runs working directory creation after a failed attempt',
+      () async {
+    final bridge = _FakeBridge(directories: {});
+    const fallback = '/storage/emulated/0/Download/PythonRunner';
+    var canCreate = false;
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: null,
+      ensureCreates: (_) => canCreate,
+    );
+
+    await controller.loadInitial();
+    expect(controller.location.path, fallback);
+    expect(bridge.ensured, [fallback]);
+
+    canCreate = true;
+    await controller.retry();
+
+    expect(bridge.ensured.length, 2, reason: 'retry must re-run creation');
+    expect(controller.location.path, fallback);
+    expect(controller.state, FileManagerState.empty);
+  });
+
   test('keeps default path with error state when creation fails', () async {
     final bridge = _FakeBridge(directories: {});
     bridge.listError = const FileManagerError(

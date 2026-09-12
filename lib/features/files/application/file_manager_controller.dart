@@ -166,9 +166,11 @@ class FileManagerController extends ChangeNotifier {
       if (await _isPathAccessible(candidate)) {
         return candidate;
       }
-      candidate = defaultScriptWorkingDirectory;
-      if (!await _isPathAccessible(candidate)) {
-        await _ensureDirectoryQuietly(candidate);
+      if (candidate != defaultScriptWorkingDirectory) {
+        candidate = defaultScriptWorkingDirectory;
+        if (!await _isPathAccessible(candidate)) {
+          await _ensureDirectoryQuietly(candidate);
+        }
       }
     }
     return candidate;
@@ -206,7 +208,18 @@ class FileManagerController extends ChangeNotifier {
     await _load(_location, generation: ++_generation);
   }
 
-  Future<void> retry() => refresh();
+  /// Retries the current view. At the working-directory root this re-runs
+  /// the full resolution (including auto-creating a missing directory), so
+  /// a failed first attempt — e.g. storage permission granted later —
+  /// recovers without leaving the page.
+  Future<void> retry() async {
+    if (_location.mode == FileManagerLocationMode.workingDirectory &&
+        _location.path == (_workingRoot ?? _location.path)) {
+      await loadInitial();
+      return;
+    }
+    await refresh();
+  }
 
   /// Switches between modes. Switching resets the path stack to the target
   /// mode's top-level directory; the working directory is re-resolved so a

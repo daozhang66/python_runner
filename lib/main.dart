@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'services/native_bridge.dart';
+import 'features/files/domain/file_manager_location.dart'
+    show defaultScriptWorkingDirectory;
 import 'services/app_logger.dart';
 import 'services/app_update_manager.dart';
 import 'services/http_inspector_store.dart';
@@ -51,6 +53,14 @@ void main() async {
 
   // Load SharedPreferences for Riverpod
   final prefs = await SharedPreferences.getInstance();
+
+  // Ensure the default script working directory exists from app start.
+  // Failures (e.g. storage permission not granted yet) are non-fatal: the
+  // file manager and the script runtime create it again when needed.
+  try {
+    await NativeBridge()
+        .ensureFileManagerDirectory(defaultScriptWorkingDirectory);
+  } catch (_) {}
 
   // Global Flutter framework error handler
   FlutterError.onError = (details) {
