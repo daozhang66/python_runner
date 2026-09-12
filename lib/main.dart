@@ -76,34 +76,24 @@ void main() async {
 
   final bridge = NativeBridge();
 
-  // runZonedGuarded to catch all async errors
-  runZonedGuarded(
-    () {
-      runApp(
-        ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(prefs),
-          ],
-          child: legacy_provider.MultiProvider(
-            providers: [
-              legacy_provider.ChangeNotifierProvider(
-                  create: (_) => ExecutionProvider(bridge)),
-              legacy_provider.ChangeNotifierProvider.value(
-                  value: httpInspectorStore),
-            ],
-            child: const PythonRunnerApp(),
-          ),
-        ),
-      );
-    },
-    (error, stackTrace) {
-      logger.crash(
-        'Uncaught async error: $error',
-        exception: error,
-        stackTrace: stackTrace,
-        source: 'runZonedGuarded',
-      );
-    },
+  // runApp must run in the same zone as WidgetsFlutterBinding.ensureInitialized()
+  // (the root zone); uncaught async errors are already reported through
+  // PlatformDispatcher.instance.onError above.
+  runApp(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: legacy_provider.MultiProvider(
+        providers: [
+          legacy_provider.ChangeNotifierProvider(
+              create: (_) => ExecutionProvider(bridge)),
+          legacy_provider.ChangeNotifierProvider.value(
+              value: httpInspectorStore),
+        ],
+        child: const PythonRunnerApp(),
+      ),
+    ),
   );
 }
 

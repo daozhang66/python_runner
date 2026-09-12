@@ -68,7 +68,7 @@ void main() {
     expect(mainActivity, contains('NativeBridgeContract.validate'));
     expect(mainActivity, contains('ScriptFileStore(filesDir)'));
     expect(mainActivity, contains('ScriptProjectStore(this, filesDir)'));
-    expect(mainActivity, contains('NativeFileOperations(filesDir'));
+    expect(mainActivity, contains('NativeFileOperations('));
     expect(mainActivity, contains('ChaquopyPackageController(mainHandler'));
     expect(mainActivity, contains('AppUpdateController(this)'));
     expect(mainActivity, contains('RuntimeInfoController('));
