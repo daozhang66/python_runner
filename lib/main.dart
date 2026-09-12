@@ -593,10 +593,29 @@ class _SplashGateState extends State<SplashGate>
                 onTimeout: () => PermissionStatus.denied),
           );
         }
+
+        // The default working directory should exist as soon as the app
+        // opens. Storage permissions are now (best-effort) granted, so the
+        // creation can succeed even on the very first launch.
+        await _ensureDefaultWorkingDirectory();
       }
     } catch (e) {
       AppLogger.instance
           .warn('Permission request error: $e', source: 'SplashGate');
+    }
+  }
+
+  Future<void> _ensureDefaultWorkingDirectory() async {
+    try {
+      await NativeBridge()
+          .ensureFileManagerDirectory(defaultScriptWorkingDirectory);
+    } catch (e) {
+      // Non-fatal: the file manager and the script runtime retry creation
+      // when they need the directory.
+      AppLogger.instance.warn(
+        'Default working directory creation failed: $e',
+        source: 'SplashGate',
+      );
     }
   }
 
