@@ -231,6 +231,66 @@ void main() {
     expect(controller.canMutate(appDataEntry), isFalse);
   });
 
+  test('root mode with empty filesystem still shows app data entries',
+      () async {
+    final bridge = _FakeBridge(directories: {
+      '/': [],
+    });
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      appDataRoots: [
+        _namedDir('/data/user/0/com.daozhang.py', 'data'),
+        _namedDir('/storage/emulated/0/Android/data/com.daozhang.py',
+            'android_data'),
+        _namedDir('/storage/emulated/0/Android/obb/com.daozhang.py',
+            'android_obb'),
+      ],
+    );
+
+    await controller.loadInitial();
+    await controller.switchMode(FileManagerLocationMode.root);
+
+    expect(controller.state, FileManagerState.ready);
+    expect(controller.visibleEntries.map((e) => e.name), [
+      'android_data',
+      'android_obb',
+      'data',
+    ]);
+  });
+
+  test('navigating into app data keeps root mode and back returns to /',
+      () async {
+    final bridge = _FakeBridge(directories: {
+      '/data/user/0/com.daozhang.py': [_dir('/data/user/0/com.daozhang.py/files')],
+    });
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      appDataRoots: [_namedDir('/data/user/0/com.daozhang.py', 'data')],
+    );
+
+    await controller.loadInitial();
+    await controller.switchMode(FileManagerLocationMode.root);
+    await controller.enterDirectory(controller.visibleEntries.single);
+
+    expect(controller.location.mode, FileManagerLocationMode.root);
+    expect(controller.location.path, '/data/user/0/com.daozhang.py');
+    expect(controller.location.isRoot, isTrue);
+    expect(controller.canGoUp, isTrue);
+
+    await controller.goUp();
+    expect(controller.location.path, '/data/user/0');
+    expect(controller.location.mode, FileManagerLocationMode.root);
+
+    // Walk back up to /; there goUp is a no-op and the back gesture exits.
+    for (var i = 0; i < 5 && controller.canGoUp; i++) {
+      await controller.goUp();
+    }
+    expect(controller.location.path, '/');
+    expect(controller.canGoUp, isFalse);
+  });
+
   test('app data entries dedupe against filesystem listing', () async {
     final bridge = _FakeBridge(directories: {
       '/': [_namedDir('/data/user/0/com.daozhang.py', 'data')],

@@ -163,7 +163,7 @@ class FileManagerController extends ChangeNotifier {
   Future<void> enterDirectory(AppFileEntry entry) async {
     if (!entry.isDirectory) return;
     await _load(
-      FileManagerLocation.workingDirectory(entry.path),
+      FileManagerLocation.inMode(_location.mode, entry.path),
       generation: ++_generation,
     );
   }
@@ -173,7 +173,7 @@ class FileManagerController extends ChangeNotifier {
     final parent = _parentPath(_location.path);
     if (parent == null) return;
     await _load(
-      FileManagerLocation.workingDirectory(parent),
+      FileManagerLocation.inMode(_location.mode, parent),
       generation: ++_generation,
     );
   }
@@ -278,11 +278,13 @@ class FileManagerController extends ChangeNotifier {
     _errorCode = null;
     notifyListeners();
     try {
-      final entries = await _listDirectory(target.path);
+      var entries = await _listDirectory(target.path);
       if (_disposed || generation != _generation) return;
-      _entries = target.isRoot
-          ? await _mergeAppDataRoots(entries)
-          : entries;
+      if (target.path == '/') {
+        entries = await _mergeAppDataRoots(entries);
+        if (_disposed || generation != _generation) return;
+      }
+      _entries = entries;
       _state = entries.isEmpty && _query.isEmpty
           ? FileManagerState.empty
           : FileManagerState.ready;

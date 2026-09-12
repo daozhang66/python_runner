@@ -26,6 +26,13 @@ class FileManagerLocation {
   const FileManagerLocation.workingDirectory(this.path)
       : mode = FileManagerLocationMode.workingDirectory;
 
+  /// A location in [mode] at an arbitrary [path].
+  ///
+  /// Navigation keeps the mode it started in: a directory entered from root
+  /// mode stays in root mode (so back navigation can return to `/`), and a
+  /// directory entered from working-directory mode stays in that mode.
+  const FileManagerLocation.inMode(this.mode, this.path);
+
   bool get isRoot => mode == FileManagerLocationMode.root;
 
   String get displayName => isRoot ? '/' : _baseName(path);
