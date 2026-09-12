@@ -46,7 +46,7 @@ class FileManagerController extends ChangeNotifier {
     required Future<void> Function(String path, String newName) renameEntry,
     required Future<void> Function(String path) deleteEntry,
     required Future<String?> Function() workingDirectoryProvider,
-    required bool Function(String path) isPathAccessible,
+    required Future<bool> Function(String path) isPathAccessible,
   })  : _listDirectory = listDirectory,
         _readFile = readFile,
         _createDirectory = createDirectory,
@@ -68,7 +68,7 @@ class FileManagerController extends ChangeNotifier {
   final Future<void> Function(String path, String newName) _renameEntry;
   final Future<void> Function(String path) _deleteEntry;
   final Future<String?> Function() _workingDirectoryProvider;
-  final bool Function(String path) _isPathAccessible;
+  final Future<bool> Function(String path) _isPathAccessible;
 
   FileManagerLocation _location =
       FileManagerLocation.workingDirectory(defaultScriptWorkingDirectory);
@@ -76,6 +76,7 @@ class FileManagerController extends ChangeNotifier {
   List<AppFileEntry> _entries = const [];
   FileManagerState _state = FileManagerState.loading;
   String? _errorMessage;
+  FileManagerErrorCode? _errorCode;
   String _query = '';
   int _generation = 0;
   bool _disposed = false;
@@ -85,6 +86,9 @@ class FileManagerController extends ChangeNotifier {
   FileManagerState get state => _state;
 
   String? get errorMessage => _errorMessage;
+
+  /// Stable error category of the last failed load, for UI localization.
+  FileManagerErrorCode? get errorCode => _errorCode;
 
   /// Top-level path of the current mode: `/` in root mode, or the resolved
   /// working directory in working-directory mode.
@@ -117,16 +121,29 @@ class FileManagerController extends ChangeNotifier {
   }
 
   Future<void> loadInitial() async {
-    final configured = await _workingDirectoryProvider();
-    final resolved = resolveWorkingDirectory(
-      configuredPath: configured,
-      isAccessible: _isPathAccessible,
-    );
+    final resolved = await _resolveWorkingRoot();
     _workingRoot = resolved;
     await _load(
       FileManagerLocation.workingDirectory(resolved),
       generation: ++_generation,
     );
+  }
+
+  /// Resolves the effective working directory: the configured path when it
+  /// is non-blank, absolute, and the native layer can access it; otherwise
+  /// the default working directory. The default itself may still be
+  /// inaccessible (surfaced as a retryable error), but it is never swapped
+  /// for `/` automatically.
+  Future<String> _resolveWorkingRoot() async {
+    final configured = await _workingDirectoryProvider();
+    var candidate = resolveWorkingDirectory(
+      configuredPath: configured,
+      isAccessible: (_) => true,
+    );
+    if (!await _isPathAccessible(candidate)) {
+      candidate = defaultScriptWorkingDirectory;
+    }
+    return candidate;
   }
 
   Future<void> enterDirectory(AppFileEntry entry) async {
@@ -162,11 +179,7 @@ class FileManagerController extends ChangeNotifier {
       await _load(FileManagerLocation.root, generation: generation);
       return;
     }
-    final configured = await _workingDirectoryProvider();
-    final resolved = resolveWorkingDirectory(
-      configuredPath: configured,
-      isAccessible: _isPathAccessible,
-    );
+    final resolved = await _resolveWorkingRoot();
     _workingRoot = resolved;
     await _load(
       FileManagerLocation.workingDirectory(resolved),
@@ -224,6 +237,7 @@ class FileManagerController extends ChangeNotifier {
     _location = target;
     _state = FileManagerState.loading;
     _errorMessage = null;
+    _errorCode = null;
     notifyListeners();
     try {
       final entries = await _listDirectory(target.path);
@@ -238,6 +252,7 @@ class FileManagerController extends ChangeNotifier {
       final error = _mapError(e);
       _state = FileManagerState.error;
       _errorMessage = error.message;
+      _errorCode = error.code;
       notifyListeners();
     }
   }

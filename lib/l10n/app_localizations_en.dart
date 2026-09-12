@@ -517,6 +517,53 @@ class AppLocalizationsEn extends AppLocalizations {
       'Go up one level or return to internal storage.';
 
   @override
+  String get fileManager => 'File manager';
+
+  @override
+  String get workDirectory => 'Working directory';
+
+  @override
+  String get rootDirectory => 'Root directory';
+
+  @override
+  String get switchToRoot => 'Switch to root directory';
+
+  @override
+  String get switchToWorkingDirectory => 'Switch to working directory';
+
+  @override
+  String get newFolder => 'New folder';
+
+  @override
+  String get folderName => 'Folder name';
+
+  @override
+  String get newName => 'New name';
+
+  @override
+  String deleteItemConfirm(Object name) {
+    return 'Delete \"$name\"? Directories must be empty to delete.';
+  }
+
+  @override
+  String get noPermissionDirectory => 'No permission to access this directory';
+
+  @override
+  String get loadDirectoryFailed => 'Failed to load directory';
+
+  @override
+  String get emptyDirectory => 'This directory is empty';
+
+  @override
+  String get searchCurrentDirectory => 'Search current directory';
+
+  @override
+  String get filePreview => 'File preview';
+
+  @override
+  String get cannotReadFile => 'Unable to read this file';
+
+  @override
   String get runtimeEngine => 'Runtime engine';
 
   @override

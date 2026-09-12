@@ -1046,6 +1046,96 @@ abstract class AppLocalizations {
   /// **'Go up one level or return to internal storage.'**
   String get goUpOrInternalStorageHint;
 
+  /// No description provided for @fileManager.
+  ///
+  /// In en, this message translates to:
+  /// **'File manager'**
+  String get fileManager;
+
+  /// No description provided for @workDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Working directory'**
+  String get workDirectory;
+
+  /// No description provided for @rootDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Root directory'**
+  String get rootDirectory;
+
+  /// No description provided for @switchToRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to root directory'**
+  String get switchToRoot;
+
+  /// No description provided for @switchToWorkingDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to working directory'**
+  String get switchToWorkingDirectory;
+
+  /// No description provided for @newFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'New folder'**
+  String get newFolder;
+
+  /// No description provided for @folderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder name'**
+  String get folderName;
+
+  /// No description provided for @newName.
+  ///
+  /// In en, this message translates to:
+  /// **'New name'**
+  String get newName;
+
+  /// No description provided for @deleteItemConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete \"{name}\"? Directories must be empty to delete.'**
+  String deleteItemConfirm(Object name);
+
+  /// No description provided for @noPermissionDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'No permission to access this directory'**
+  String get noPermissionDirectory;
+
+  /// No description provided for @loadDirectoryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load directory'**
+  String get loadDirectoryFailed;
+
+  /// No description provided for @emptyDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'This directory is empty'**
+  String get emptyDirectory;
+
+  /// No description provided for @searchCurrentDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Search current directory'**
+  String get searchCurrentDirectory;
+
+  /// No description provided for @filePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'File preview'**
+  String get filePreview;
+
+  /// No description provided for @cannotReadFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read this file'**
+  String get cannotReadFile;
+
   /// No description provided for @runtimeEngine.
   ///
   /// In en, this message translates to:

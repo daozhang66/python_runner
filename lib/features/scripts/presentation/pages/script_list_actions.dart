@@ -286,6 +286,9 @@ extension _ScriptListActions on _ScriptListPageState {
       case 'search':
         setState(() => _searchMode = true);
         break;
+      case 'open_file_manager':
+        _openFileManager();
+        break;
       case 'toggle_view':
         _setViewMode(!_isGridView);
         break;
@@ -726,6 +729,13 @@ extension _ScriptListActions on _ScriptListPageState {
     Navigator.push(
       context,
       AppPageTransitions.fadeThrough(RunConsolePage(scriptName: name)),
+    );
+  }
+
+  void _openFileManager() {
+    Navigator.push(
+      context,
+      AppPageTransitions.sharedAxisLeftRight(const FileManagerPage()),
     );
   }
 

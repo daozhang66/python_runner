@@ -513,6 +513,53 @@ class AppLocalizationsZh extends AppLocalizations {
   String get goUpOrInternalStorageHint => '可以返回上一级目录，或回到内部存储。';
 
   @override
+  String get fileManager => '文件管理';
+
+  @override
+  String get workDirectory => '工作目录';
+
+  @override
+  String get rootDirectory => '根目录';
+
+  @override
+  String get switchToRoot => '切换到根目录';
+
+  @override
+  String get switchToWorkingDirectory => '切换到工作目录';
+
+  @override
+  String get newFolder => '新建文件夹';
+
+  @override
+  String get folderName => '文件夹名称';
+
+  @override
+  String get newName => '新名称';
+
+  @override
+  String deleteItemConfirm(Object name) {
+    return '确定删除“$name”吗？目录必须为空才能删除。';
+  }
+
+  @override
+  String get noPermissionDirectory => '无权限访问此目录';
+
+  @override
+  String get loadDirectoryFailed => '加载目录失败';
+
+  @override
+  String get emptyDirectory => '此目录为空';
+
+  @override
+  String get searchCurrentDirectory => '搜索当前目录';
+
+  @override
+  String get filePreview => '文件预览';
+
+  @override
+  String get cannotReadFile => '无法读取此文件';
+
+  @override
   String get runtimeEngine => '运行引擎';
 
   @override

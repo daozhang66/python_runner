@@ -25,6 +25,7 @@ import '../../../../widgets/confirm_dialog.dart';
 import 'script_project_page.dart';
 import 'script_editor_page.dart';
 import '../../../console/presentation/pages/run_console_page.dart';
+import '../../../files/presentation/pages/file_manager_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../pages/app_file_picker_page.dart';
@@ -206,6 +207,14 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
           child: ListTile(
             leading: const Icon(Icons.search),
             title: Text(l10n.searchScripts),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'open_file_manager',
+          child: ListTile(
+            leading: const Icon(Icons.folder_special_outlined),
+            title: Text(l10n.fileManager),
             contentPadding: EdgeInsets.zero,
           ),
         ),

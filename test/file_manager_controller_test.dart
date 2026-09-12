@@ -97,7 +97,7 @@ FileManagerController _controller(
     renameEntry: bridge.rename,
     deleteEntry: bridge.delete,
     workingDirectoryProvider: () async => configuredWorkingDir,
-    isPathAccessible: (path) => workingDirAccessible,
+    isPathAccessible: (path) async => workingDirAccessible,
   );
 }
 
