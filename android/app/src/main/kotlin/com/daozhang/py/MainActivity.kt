@@ -386,6 +386,13 @@ class MainActivity : FlutterActivity() {
                     result
                 )
             },
+            "writeFileManagerFile" to { call, result ->
+                handleWriteFileManagerFile(
+                    call.argument<String>("path") ?: "",
+                    call.argument<String>("content") ?: "",
+                    result
+                )
+            },
             "getFileManagerAppDataRoots" to { _, result ->
                 try {
                     result.success(nativeFileOperations.getAppDataRoots())
@@ -742,6 +749,15 @@ class MainActivity : FlutterActivity() {
             result.success(true)
         } catch (e: Exception) {
             result.error(fileManagerErrorCode(e), "删除失败: ${e.message}", null)
+        }
+    }
+
+    private fun handleWriteFileManagerFile(path: String, content: String, result: MethodChannel.Result) {
+        try {
+            nativeFileOperations.writeFileManagerFile(path, content)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error(fileManagerErrorCode(e), "写入文件失败: ${e.message}", null)
         }
     }
 

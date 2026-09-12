@@ -188,6 +188,8 @@
   "searchCurrentDirectory": "搜索当前目录",
   "filePreview": "文件预览",
   "cannotReadFile": "无法读取此文件",
+  "unsupportedBinaryFile": "二进制文件，暂不支持查看",
+
 
   "runtimeEngine": "运行引擎",
   "chaquopyDefault": "Chaquopy（默认）",

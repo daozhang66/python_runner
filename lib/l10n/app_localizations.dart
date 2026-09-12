@@ -1136,6 +1136,12 @@ abstract class AppLocalizations {
   /// **'Unable to read this file'**
   String get cannotReadFile;
 
+  /// No description provided for @unsupportedBinaryFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Binary file, preview is not supported'**
+  String get unsupportedBinaryFile;
+
   /// No description provided for @runtimeEngine.
   ///
   /// In en, this message translates to:

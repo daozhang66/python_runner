@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/app_file_entry.dart';
 import '../../../../services/native_bridge.dart';
+import '../../../../utils/app_page_transitions.dart';
+import 'file_manager_file_viewer_page.dart';
 import '../../application/file_manager_controller.dart';
 import '../../domain/file_manager_location.dart';
 import '../widgets/file_manager_entry_tile.dart';
@@ -49,6 +51,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       createDirectory: bridge.createFileManagerDirectory,
       renameEntry: bridge.renameFileManagerEntry,
       deleteEntry: bridge.deleteFileManagerEntry,
+      writeFile: bridge.writeFileManagerFile,
       workingDirectoryProvider: () async =>
           (await SharedPreferences.getInstance()).getString('working_dir'),
       isPathAccessible: (path) async {
@@ -189,58 +192,14 @@ class _FileManagerPageState extends State<FileManagerPage> {
     }
   }
 
-  Future<void> _openPreview(AppFileEntry entry) async {
-    final l10n = AppLocalizations.of(context)!;
-    String? content;
-    Object? error;
-    try {
-      content = await _controller.readTextPreview(entry);
-    } catch (e) {
-      error = e;
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.filePreview),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.path,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: error != null
-                      ? Text(
-                          '${l10n.cannotReadFile}\n$error',
-                          style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                        )
-                      : SelectableText(
-                          content ?? '',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
+  void _openFile(AppFileEntry entry) {
+    Navigator.push(
+      context,
+      AppPageTransitions.sharedAxisLeftRight(
+        FileManagerFileViewerPage(
+          entry: entry,
+          controller: _controller,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.close),
-          ),
-        ],
       ),
     );
   }
@@ -472,7 +431,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           entry: entry,
           canMutate: canMutate,
           onOpen: () => _controller.enterDirectory(entry),
-          onPreview: () => _openPreview(entry),
+          onPreview: () => _openFile(entry),
           onMenuSelected: (action) {
             if (action == 'rename') _showRenameDialog(entry);
             if (action == 'delete') _confirmDelete(entry);

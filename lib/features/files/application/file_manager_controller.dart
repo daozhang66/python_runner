@@ -45,6 +45,7 @@ class FileManagerController extends ChangeNotifier {
     required Future<void> Function(String parent, String name) createDirectory,
     required Future<void> Function(String path, String newName) renameEntry,
     required Future<void> Function(String path) deleteEntry,
+    Future<void> Function(String path, String content)? writeFile,
     required Future<String?> Function() workingDirectoryProvider,
     required Future<bool> Function(String path) isPathAccessible,
     Future<List<AppFileEntry>> Function()? appDataRootsProvider,
@@ -53,6 +54,7 @@ class FileManagerController extends ChangeNotifier {
         _createDirectory = createDirectory,
         _renameEntry = renameEntry,
         _deleteEntry = deleteEntry,
+        _writeFile = writeFile,
         _workingDirectoryProvider = workingDirectoryProvider,
         _isPathAccessible = isPathAccessible,
         _appDataRootsProvider = appDataRootsProvider;
@@ -69,6 +71,7 @@ class FileManagerController extends ChangeNotifier {
   final Future<void> Function(String parent, String name) _createDirectory;
   final Future<void> Function(String path, String newName) _renameEntry;
   final Future<void> Function(String path) _deleteEntry;
+  final Future<void> Function(String path, String content)? _writeFile;
   final Future<String?> Function() _workingDirectoryProvider;
   final Future<bool> Function(String path) _isPathAccessible;
   final Future<List<AppFileEntry>> Function()? _appDataRootsProvider;
@@ -228,6 +231,31 @@ class FileManagerController extends ChangeNotifier {
     }
     final bytes = await _readFile(entry.path);
     return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  /// Raw bytes of a file entry, used to detect binary content before
+  /// opening the code viewer.
+  Future<List<int>> readFileBytes(AppFileEntry entry) {
+    if (entry.isDirectory) {
+      throw const FileManagerError(
+        code: FileManagerErrorCode.invalidPath,
+        message: '目录不支持打开',
+      );
+    }
+    return _readFile(entry.path);
+  }
+
+  /// Overwrites the file entry with [content]. Requires the injected write
+  /// callback (the file manager page provides the native bridge one).
+  Future<void> writeFile(AppFileEntry entry, String content) async {
+    final write = _writeFile;
+    if (write == null) {
+      throw const FileManagerError(
+        code: FileManagerErrorCode.ioError,
+        message: '当前不支持写入',
+      );
+    }
+    await _guard(() => write(entry.path, content));
   }
 
   Future<void> _guard(Future<void> Function() action) async {

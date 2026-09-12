@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/features/files/application/file_manager_controller.dart';
 import 'package:python_runner/features/files/presentation/pages/file_manager_page.dart';
 import 'package:python_runner/l10n/app_localizations.dart';
+import 'package:re_editor/re_editor.dart';
 import 'package:python_runner/models/app_file_entry.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,6 +33,8 @@ class _FakeBridge {
   Object? listError;
   final created = <String>[];
   final deleted = <String>[];
+  Map<String, List<int>> files = {};
+  final written = <String, String>{};
 
   _FakeBridge(this.directories);
 
@@ -40,7 +43,7 @@ class _FakeBridge {
     return directories[path] ?? const [];
   }
 
-  Future<List<int>> readFile(String path) async => const [];
+  Future<List<int>> readFile(String path) async => files[path] ?? const [];
 
   Future<void> createDirectory(String parent, String name) async {
     created.add('$parent/$name');
@@ -50,6 +53,10 @@ class _FakeBridge {
 
   Future<void> delete(String path) async {
     deleted.add(path);
+  }
+
+  Future<void> writeFile(String path, String content) async {
+    written[path] = content;
   }
 }
 
@@ -87,6 +94,7 @@ Future<FileManagerController> _pumpManager(
 
 void main() {
   menuTests();
+  viewerTests();
 
   testWidgets('file manager starts in work mode and offers root switch',
       (tester) async {
@@ -194,6 +202,47 @@ Future<void> _openScriptMenu(WidgetTester tester) async {
   await tester.tap(find.byType(PopupMenuButton<String>).first);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
+}
+
+void viewerTests() {
+  testWidgets('tapping a file opens the code viewer', (tester) async {
+    final bridge = _FakeBridge({
+      '/work': [_file('/work/main.py')],
+    });
+    bridge.files['/work/main.py'] = 'print("hi")'.codeUnits;
+
+    final controller = FileManagerController(
+      listDirectory: bridge.list,
+      readFile: bridge.readFile,
+      createDirectory: bridge.createDirectory,
+      renameEntry: bridge.rename,
+      deleteEntry: bridge.delete,
+      writeFile: bridge.writeFile,
+      workingDirectoryProvider: () async => '/work',
+      isPathAccessible: (_) async => true,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('zh'),
+        home: FileManagerPage(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('main.py'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('main.py'), findsWidgets);
+    expect(find.byType(CodeEditor), findsOneWidget);
+  });
 }
 
 void menuTests() {

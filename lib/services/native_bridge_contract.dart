@@ -23,6 +23,7 @@ class NativeBridgeContract {
     'createFileManagerDirectory': ['path', 'name'],
     'renameFileManagerEntry': ['path', 'newName'],
     'deleteFileManagerEntry': ['path'],
+    'writeFileManagerFile': ['path', 'content'],
     'createScriptProject': ['projectKey'],
     'deleteScriptProject': ['projectKey'],
     'listProjectFiles': ['projectKey'],
@@ -78,6 +79,7 @@ class NativeBridgeContract {
     'saveProjectFile.content',
     'sendStdin.input',
     'sendLinuxLikeStdin.input',
+    'writeFileManagerFile.content',
   };
 
   static const Set<String> knownMethods = {
@@ -113,6 +115,7 @@ class NativeBridgeContract {
     'createFileManagerDirectory',
     'renameFileManagerEntry',
     'deleteFileManagerEntry',
+    'writeFileManagerFile',
     'getFileManagerAppDataRoots',
     'openUrl',
     'downloadAndInstallApk',

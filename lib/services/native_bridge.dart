@@ -322,6 +322,12 @@ class NativeBridge {
     await _invoke('deleteFileManagerEntry', {'path': path});
   }
 
+  /// Overwrites the existing regular file at absolute [path] with [content].
+  Future<void> writeFileManagerFile(String path, String content) async {
+    _validateFileManagerMutationPath(path);
+    await _invoke('writeFileManagerFile', {'path': path, 'content': content});
+  }
+
   /// App-private data roots (data, user_de_data, android_data, android_obb)
   /// mirroring the MTDataFilesProvider mapping, shown in root mode.
   Future<List<AppFileEntry>> getFileManagerAppDataRoots() async {

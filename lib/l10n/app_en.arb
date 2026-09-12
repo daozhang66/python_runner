@@ -188,6 +188,8 @@
   "searchCurrentDirectory": "Search current directory",
   "filePreview": "File preview",
   "cannotReadFile": "Unable to read this file",
+  "unsupportedBinaryFile": "Binary file, preview is not supported",
+
 
   "runtimeEngine": "Runtime engine",
   "chaquopyDefault": "Chaquopy (default)",

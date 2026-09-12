@@ -560,6 +560,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cannotReadFile => '无法读取此文件';
 
   @override
+  String get unsupportedBinaryFile => '二进制文件，暂不支持查看';
+
+  @override
   String get runtimeEngine => '运行引擎';
 
   @override

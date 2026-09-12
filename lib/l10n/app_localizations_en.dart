@@ -564,6 +564,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cannotReadFile => 'Unable to read this file';
 
   @override
+  String get unsupportedBinaryFile => 'Binary file, preview is not supported';
+
+  @override
   String get runtimeEngine => 'Runtime engine';
 
   @override

@@ -22,6 +22,7 @@ object NativeBridgeContract {
         "createFileManagerDirectory" to listOf("path", "name"),
         "renameFileManagerEntry" to listOf("path", "newName"),
         "deleteFileManagerEntry" to listOf("path"),
+        "writeFileManagerFile" to listOf("path", "content"),
         "createScriptProject" to listOf("projectKey"),
         "deleteScriptProject" to listOf("projectKey"),
         "listProjectFiles" to listOf("projectKey"),
@@ -72,6 +73,7 @@ object NativeBridgeContract {
         "saveProjectFile.content",
         "sendStdin.input",
         "sendLinuxLikeStdin.input",
+        "writeFileManagerFile.content",
     )
 
     fun validate(method: String, arguments: Any?): String? {

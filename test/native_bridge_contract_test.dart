@@ -136,6 +136,10 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
     await expectLater(
+      bridge.writeFileManagerFile('content://tree/primary', 'text'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
       bridge.renameFileManagerEntry('/storage/emulated/0/Download/old', '  '),
       throwsA(isA<ArgumentError>()),
     );
@@ -156,11 +160,14 @@ void main() {
     await bridge.renameFileManagerEntry(
         '/storage/emulated/0/Download/old', 'new-name');
     await bridge.deleteFileManagerEntry('/storage/emulated/0/Download/tmp');
+    await bridge.writeFileManagerFile(
+        '/storage/emulated/0/Download/tmp.txt', '');
 
     expect(calls.map((c) => c.method), [
       'createFileManagerDirectory',
       'renameFileManagerEntry',
       'deleteFileManagerEntry',
+      'writeFileManagerFile',
     ]);
     expect(calls[0].arguments, {
       'path': '/storage/emulated/0/Download',
@@ -173,6 +180,20 @@ void main() {
     expect(calls[2].arguments, {
       'path': '/storage/emulated/0/Download/tmp',
     });
+    expect(calls[3].arguments, {
+      'path': '/storage/emulated/0/Download/tmp.txt',
+      'content': '',
+    });
+  });
+
+  test('Dart contract allows empty file manager write content', () {
+    expect(
+      () => NativeBridgeContract.validate('writeFileManagerFile', {
+        'path': '/work/a.txt',
+        'content': '',
+      }),
+      returnsNormally,
+    );
   });
 
   test('Kotlin native bridge contract mirrors file manager mutation methods',

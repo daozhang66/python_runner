@@ -196,6 +196,13 @@ class NativeFileOperations(
         }
     }
 
+    fun writeFileManagerFile(path: String, content: String) {
+        val target = mutableTarget(path)
+        require(target.exists()) { "文件不存在: $path" }
+        require(target.isFile) { "只能写入普通文件" }
+        target.writeText(content)
+    }
+
     /// Resolves a mutation target from an absolute host path and rejects
     /// anything the file manager must never touch: URIs, the filesystem
     /// root, and protected system prefixes.
