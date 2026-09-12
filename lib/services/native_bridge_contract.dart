@@ -113,6 +113,7 @@ class NativeBridgeContract {
     'createFileManagerDirectory',
     'renameFileManagerEntry',
     'deleteFileManagerEntry',
+    'getFileManagerAppDataRoots',
     'openUrl',
     'downloadAndInstallApk',
     'startApkDownload',

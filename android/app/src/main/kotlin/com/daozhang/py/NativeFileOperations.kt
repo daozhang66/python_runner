@@ -10,7 +10,9 @@ import java.io.InputStreamReader
 class NativeFileOperations(
     private val filesDir: File,
     private val contentResolver: ContentResolver,
-    private val scriptFileStore: ScriptFileStore
+    private val scriptFileStore: ScriptFileStore,
+    private val externalFilesDir: File? = null,
+    private val obbDir: File? = null
 ) {
     private val protectedSystemPrefixes = listOf(
         "/system",
@@ -116,6 +118,32 @@ class NativeFileOperations(
 
     fun listFilePickerDirectoryForPigeon(path: String): List<NativeAppFileEntry> {
         return listFilePickerDirectory(path).map { it.toNativeAppFileEntry() }
+    }
+
+    /// App-private data roots mirroring the MTDataFilesProvider mapping:
+    /// data, user_de_data, android_data, android_obb. Surfaced by the file
+    /// manager in root mode so the user can browse the same tree MT sees.
+    fun getAppDataRoots(): List<Map<String, Any>> {
+        val roots = linkedMapOf<String, Map<String, Any>>()
+        fun addRoot(name: String, file: File?) {
+            if (file == null) return
+            val path = try {
+                file.canonicalPath
+            } catch (_: Exception) {
+                file.absolutePath
+            }
+            if (path.isBlank()) return
+            roots[path] = appFileEntryMap(file, name)
+        }
+
+        val dataDir = filesDir.parentFile
+        addRoot("data", dataDir)
+        if (dataDir?.path?.startsWith("/data/user/") == true) {
+            addRoot("user_de_data", File("/data/user_de/${dataDir.path.substring(11)}"))
+        }
+        addRoot("android_data", externalFilesDir?.parentFile)
+        addRoot("android_obb", obbDir)
+        return roots.values.toList()
     }
 
     fun readFilePickerFile(path: String): ByteArray {

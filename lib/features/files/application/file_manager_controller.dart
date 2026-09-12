@@ -47,13 +47,15 @@ class FileManagerController extends ChangeNotifier {
     required Future<void> Function(String path) deleteEntry,
     required Future<String?> Function() workingDirectoryProvider,
     required Future<bool> Function(String path) isPathAccessible,
+    Future<List<AppFileEntry>> Function()? appDataRootsProvider,
   })  : _listDirectory = listDirectory,
         _readFile = readFile,
         _createDirectory = createDirectory,
         _renameEntry = renameEntry,
         _deleteEntry = deleteEntry,
         _workingDirectoryProvider = workingDirectoryProvider,
-        _isPathAccessible = isPathAccessible;
+        _isPathAccessible = isPathAccessible,
+        _appDataRootsProvider = appDataRootsProvider;
 
   static const _protectedSystemPrefixes = [
     '/system',
@@ -69,6 +71,11 @@ class FileManagerController extends ChangeNotifier {
   final Future<void> Function(String path) _deleteEntry;
   final Future<String?> Function() _workingDirectoryProvider;
   final Future<bool> Function(String path) _isPathAccessible;
+  final Future<List<AppFileEntry>> Function()? _appDataRootsProvider;
+
+  /// Paths of the app-private data roots (data, android_data, android_obb,
+  /// user_de_data) surfaced in root mode, mirroring the MT provider mapping.
+  final Set<String> _appDataRootPaths = {};
 
   FileManagerLocation _location =
       FileManagerLocation.workingDirectory(defaultScriptWorkingDirectory);
@@ -96,15 +103,21 @@ class FileManagerController extends ChangeNotifier {
 
   bool get canGoUp => _location.path != modeRootPath;
 
-  /// Entries sorted directories-first with case-insensitive names, filtered
-  /// by the current search query.
+  /// Entries sorted app-data roots first, then directories before files with
+  /// case-insensitive names, filtered by the current search query.
   List<AppFileEntry> get visibleEntries {
+    int rank(AppFileEntry entry) {
+      if (_appDataRootPaths.contains(entry.path)) return 0;
+      return entry.isDirectory ? 1 : 2;
+    }
+
     final filtered = _entries.where((entry) {
       if (_query.isEmpty) return true;
       return entry.name.toLowerCase().contains(_query);
     }).toList()
       ..sort((a, b) {
-        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+        final rankDiff = rank(a) - rank(b);
+        if (rankDiff != 0) return rankDiff;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     return filtered;
@@ -114,6 +127,7 @@ class FileManagerController extends ChangeNotifier {
   /// does not protect. `content://` targets are never mutable here.
   bool canMutate(AppFileEntry entry) {
     final path = entry.path.trim();
+    if (_appDataRootPaths.contains(path)) return false;
     if (!path.startsWith('/') || path.contains('\\"')) return false;
     if (path == '/') return false;
     return !_protectedSystemPrefixes.any((prefix) =>
@@ -227,6 +241,30 @@ class FileManagerController extends ChangeNotifier {
     await refresh();
   }
 
+  /// Pins the app-private data roots (mirroring the MT provider mapping) at
+  /// the top of the root listing. Failures degrade to the plain filesystem
+  /// listing.
+  Future<List<AppFileEntry>> _mergeAppDataRoots(
+    List<AppFileEntry> entries,
+  ) async {
+    final provider = _appDataRootsProvider;
+    if (provider == null) {
+      _appDataRootPaths.clear();
+      return entries;
+    }
+    try {
+      final roots = await provider();
+      _appDataRootPaths
+        ..clear()
+        ..addAll(roots.map((e) => e.path));
+      final listedPaths = entries.map((e) => e.path).toSet();
+      return [...roots.where((e) => !listedPaths.contains(e.path)), ...entries];
+    } catch (_) {
+      _appDataRootPaths.clear();
+      return entries;
+    }
+  }
+
   Future<void> _load(
     FileManagerLocation target, {
     required int generation,
@@ -242,7 +280,9 @@ class FileManagerController extends ChangeNotifier {
     try {
       final entries = await _listDirectory(target.path);
       if (_disposed || generation != _generation) return;
-      _entries = entries;
+      _entries = target.isRoot
+          ? await _mergeAppDataRoots(entries)
+          : entries;
       _state = entries.isEmpty && _query.isEmpty
           ? FileManagerState.empty
           : FileManagerState.ready;

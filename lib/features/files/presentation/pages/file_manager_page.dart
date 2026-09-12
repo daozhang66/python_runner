@@ -59,6 +59,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           return false;
         }
       },
+      appDataRootsProvider: bridge.getFileManagerAppDataRoots,
     );
   }
 

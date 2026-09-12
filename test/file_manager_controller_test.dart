@@ -14,6 +14,14 @@ AppFileEntry _dir(String path) => AppFileEntry(
       modifiedAt: DateTime.fromMillisecondsSinceEpoch(0),
     );
 
+AppFileEntry _namedDir(String path, String name) => AppFileEntry(
+      path: path,
+      name: name,
+      isDirectory: true,
+      size: 0,
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+
 AppFileEntry _file(String path, {int size = 10}) => AppFileEntry(
       path: path,
       name: path.split('/').last,
@@ -89,6 +97,7 @@ FileManagerController _controller(
   _FakeBridge bridge, {
   String? configuredWorkingDir,
   bool workingDirAccessible = true,
+  List<AppFileEntry> appDataRoots = const [],
 }) {
   return FileManagerController(
     listDirectory: bridge.list,
@@ -98,6 +107,7 @@ FileManagerController _controller(
     deleteEntry: bridge.delete,
     workingDirectoryProvider: () async => configuredWorkingDir,
     isPathAccessible: (path) async => workingDirAccessible,
+    appDataRootsProvider: () async => appDataRoots,
   );
 }
 
@@ -170,7 +180,17 @@ void main() {
       '/work/src': [],
       '/': [_dir('/system'), _dir('/storage')],
     });
-    final controller = _controller(bridge, configuredWorkingDir: '/work');
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      appDataRoots: [
+        _namedDir('/data/user/0/com.daozhang.py', 'data'),
+        _namedDir(
+          '/storage/emulated/0/Android/data/com.daozhang.py',
+          'android_data',
+        ),
+      ],
+    );
 
     await controller.loadInitial();
     await controller.enterDirectory(_dir('/work/src'));
@@ -178,7 +198,11 @@ void main() {
     await controller.switchMode(FileManagerLocationMode.root);
     expect(controller.location.path, '/');
     expect(controller.location.mode, FileManagerLocationMode.root);
+    // App data entries are pinned to the top (alphabetical within the rank),
+    // then filesystem directories.
     expect(controller.visibleEntries.map((e) => e.name), [
+      'android_data',
+      'data',
       'storage',
       'system',
     ]);
@@ -186,6 +210,41 @@ void main() {
     await controller.switchMode(FileManagerLocationMode.workingDirectory);
     expect(controller.location.path, '/work');
     expect(controller.location.mode, FileManagerLocationMode.workingDirectory);
+  });
+
+  test('app data root entries are not mutable from the root listing',
+      () async {
+    final bridge = _FakeBridge(directories: {
+      '/': [],
+    });
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      appDataRoots: [_namedDir('/data/user/0/com.daozhang.py', 'data')],
+    );
+
+    await controller.loadInitial();
+    await controller.switchMode(FileManagerLocationMode.root);
+
+    final appDataEntry = controller.visibleEntries.single;
+    expect(appDataEntry.name, 'data');
+    expect(controller.canMutate(appDataEntry), isFalse);
+  });
+
+  test('app data entries dedupe against filesystem listing', () async {
+    final bridge = _FakeBridge(directories: {
+      '/': [_namedDir('/data/user/0/com.daozhang.py', 'data')],
+    });
+    final controller = _controller(
+      bridge,
+      configuredWorkingDir: '/work',
+      appDataRoots: [_namedDir('/data/user/0/com.daozhang.py', 'data')],
+    );
+
+    await controller.loadInitial();
+    await controller.switchMode(FileManagerLocationMode.root);
+
+    expect(controller.visibleEntries, hasLength(1));
   });
 
   test('search filters visible entries by name only', () async {

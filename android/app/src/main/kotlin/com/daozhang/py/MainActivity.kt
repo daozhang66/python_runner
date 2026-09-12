@@ -37,7 +37,13 @@ class MainActivity : FlutterActivity() {
     private val scriptFileStore by lazy { ScriptFileStore(filesDir) }
     private val scriptProjectStore by lazy { ScriptProjectStore(this, filesDir) }
     private val nativeFileOperations by lazy {
-        NativeFileOperations(filesDir, contentResolver, scriptFileStore)
+        NativeFileOperations(
+            filesDir,
+            contentResolver,
+            scriptFileStore,
+            externalFilesDir = getExternalFilesDir(null),
+            obbDir = obbDir
+        )
     }
     private val chaquopyPackageController by lazy {
         ChaquopyPackageController(mainHandler, ::sendInstallProgress)
@@ -379,6 +385,13 @@ class MainActivity : FlutterActivity() {
                     call.argument<String>("path") ?: "",
                     result
                 )
+            },
+            "getFileManagerAppDataRoots" to { _, result ->
+                try {
+                    result.success(nativeFileOperations.getAppDataRoots())
+                } catch (e: Exception) {
+                    result.error("1045", "获取应用数据目录失败: ${e.message}", null)
+                }
             },
             "executeScript" to { call, result ->
                 @Suppress("UNCHECKED_CAST")

@@ -322,6 +322,15 @@ class NativeBridge {
     await _invoke('deleteFileManagerEntry', {'path': path});
   }
 
+  /// App-private data roots (data, user_de_data, android_data, android_obb)
+  /// mirroring the MTDataFilesProvider mapping, shown in root mode.
+  Future<List<AppFileEntry>> getFileManagerAppDataRoots() async {
+    final result = await _invoke('getFileManagerAppDataRoots', {});
+    return _asList(result)
+        .map((item) => AppFileEntry.fromMap(_asMap(item)))
+        .toList();
+  }
+
   void _validateFileManagerMutationPath(String path) {
     final trimmed = path.trim();
     if (trimmed.isEmpty) {
