@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,7 +6,7 @@ import 'package:python_runner/features/files/application/file_manager_controller
 import 'package:python_runner/features/files/presentation/pages/file_manager_page.dart';
 import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/models/app_file_entry.dart';
-import 'package:python_runner/models/script_file.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/script_workspace_harness.dart';

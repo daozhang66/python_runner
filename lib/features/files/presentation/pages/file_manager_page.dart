@@ -291,6 +291,18 @@ class _FileManagerPageState extends State<FileManagerPage> {
               tooltip: switchLabel,
               onPressed: _switchMode,
             ),
+            IconButton(
+              icon: Icon(
+                _searchVisible ? Icons.search_off : Icons.search,
+              ),
+              tooltip: l10n.search,
+              onPressed: () {
+                setState(() {
+                  _searchVisible = !_searchVisible;
+                  if (!_searchVisible) _searchController.clear();
+                });
+              },
+            ),
             PopupMenuButton<String>(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),

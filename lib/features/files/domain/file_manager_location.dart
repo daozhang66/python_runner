@@ -23,9 +23,8 @@ class FileManagerLocation {
       FileManagerLocation._(FileManagerLocationMode.root, '/');
 
   /// A working-directory location at [path].
-  const FileManagerLocation.workingDirectory(String path)
-      : mode = FileManagerLocationMode.workingDirectory,
-        path = path;
+  const FileManagerLocation.workingDirectory(this.path)
+      : mode = FileManagerLocationMode.workingDirectory;
 
   bool get isRoot => mode == FileManagerLocationMode.root;
 
