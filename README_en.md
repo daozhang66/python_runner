@@ -23,14 +23,16 @@
 
 ## ✨ Features at a Glance
 
-- 📝 **Script management** — Create / edit / group / pin / batch actions, list &amp; grid views
-- 📁 **File manager** — Browse app and project directories, view, edit and save code with highlighting
-- 🖥️ **Full-screen terminal** — Live stdout / stderr, `input()` interaction, log search and error filtering
-- 📚 **Package manager** — pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup
-- ⚙️ **Dual runtime** — Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility
-- 🌐 **Network inspector** — Automatically records Python HTTP requests with global request overrides
-- 🤖 **MCP server** — External AI clients operate your scripts remotely through MCP
-- 🩺 **Logs &amp; diagnostics** — App logs persist across restarts, crash and script error reports, one-tap export
+| | Feature | Description |
+|---|---|---|
+| 📝 | **Script management** | Create / edit / group / pin / batch actions, list & grid views |
+| 📁 | **File manager** | Browse app and project directories, view, edit and save code with highlighting |
+| 🖥️ | **Full-screen terminal** | Live stdout / stderr, `input()` interaction, log search and error filtering |
+| 📚 | **Package manager** | pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup |
+| ⚙️ | **Dual runtime** | Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility |
+| 🌐 | **Network inspector** | Automatically records Python HTTP requests with global request overrides |
+| 🤖 | **MCP server** | External AI clients operate your scripts remotely through MCP |
+| 🩺 | **Logs & diagnostics** | App logs persist across restarts, crash and script error reports, one-tap export |
 
 ## 🤖 MCP Setup
 
@@ -67,8 +69,12 @@ Enable the server in **Settings → MCP**, then add the following to your AI cli
 
 ## ⚙️ Dual Runtime
 
-- ⚡ **Chaquopy** — Bundled in the APK, works out of the box, fast startup; best for regular scripts and common pure-Python packages
-- 🐧 **Linux-like** — Debian rootfs + proot, stronger compatibility: more system dependencies and pip packages, project script groups with in-project file browsing; first-time environment install required in Settings
+| | Chaquopy | Linux-like |
+|---|---|---|
+| Environment | Bundled in the APK, works out of the box | Debian rootfs + proot |
+| Startup speed | ⚡ Fast | Slower, first-time environment install required |
+| pip packages | Best for common pure-Python packages | Stronger compatibility, more system dependencies |
+| Project script groups | — | ✅ In-project file browsing and module imports |
 
 ## 🌐 Network Inspector
 
