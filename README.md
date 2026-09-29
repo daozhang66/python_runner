@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="96" alt="Python Runner"/>
+<img src=".github/assets/logo.png" width="96" alt="Python Runner"/>
 
 # Python Runner
 
