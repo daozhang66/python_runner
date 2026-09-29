@@ -1,149 +1,98 @@
-[中文](./README.md) | [English](./README_en.md)
+<div align="center">
+
+<img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="96" alt="Python Runner"/>
 
 # Python Runner
 
-> Developed with **Claude Code/Codex** (AI coding assistant)
+**Python script runner for Android — write, run, manage dependencies, and connect AI**
 
-Python Runner is a Flutter-based Android app for running Python scripts with script management, full-screen terminal output, package management, network request inspection, and dual runtime support.
+[![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=release)](https://github.com/daozhang66/python_runner/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/daozhang66/python_runner/ci.yml?branch=main&label=CI)](https://github.com/daozhang66/python_runner/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://www.android.com)
+[![Stars](https://img.shields.io/github/stars/daozhang66/python_runner?style=social)](https://github.com/daozhang66/python_runner/stargazers)
 
-## Features
+简体中文 | [English](./README_en.md)
 
-- **Script management**
-  - Create, edit, rename, copy, import, export, and delete scripts
-  - List / grid view
-  - Long-press actions and multi-select batch operations
-  - Pinned scripts support
-  - Regular groups and Linux-like project groups
+**[⬇️ Download latest](https://github.com/daozhang66/python_runner/releases/latest)** · [🤖 MCP setup](#-mcp-setup) · [🛠 Build from source](#-build-from-source)
 
-- **Project script groups**
-  - Available only with the Linux-like runtime
-  - Create an empty project with a default `main.py`
-  - Import projects from ZIP files and let the user confirm or choose the main file
-  - Browse, edit, rename, and delete files or folders inside a project
-  - Run with the project root as the working directory, making project-local modules and resources easy to import
+</div>
 
-- **Code editor**
-  - Syntax highlighting
-  - Search and match navigation
-  - Read-only / edit mode toggle
-  - Font size adjustment
-  - Save and run directly
+---
 
-- **Full-screen terminal**
-  - Real-time stdout / stderr
-  - `input()` support
-  - Log search, error-only filter, copy, clear
-  - Execution timeout control
+## ✨ Features at a Glance
 
-- **Package manager**
-  - Install / uninstall Python packages
-  - Optional version pinning
-  - Custom PyPI index support, leave empty to use the official source
-  - Separate user-installed and built-in package lists
-  - User-installed list shows top-level packages only
-  - Uninstall can clean orphan dependencies
+| | Feature | Description |
+|---|---|---|
+| 📝 | **Script management** | Create / edit / group / pin / batch actions, list & grid views |
+| 📁 | **File manager** | Browse app and project directories, view, edit and save code with highlighting |
+| 🖥️ | **Full-screen terminal** | Live stdout / stderr, `input()` interaction, log search and error filtering |
+| 📚 | **Package manager** | pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup |
+| ⚙️ | **Dual runtime** | Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility |
+| 🌐 | **Network inspector** | Automatically records Python HTTP requests with global request overrides |
+| 🤖 | **MCP server** | External AI clients operate your scripts remotely through MCP |
+| 🩺 | **Logs & diagnostics** | App logs persist across restarts, crash and script error reports, one-tap export |
 
-- **Dual runtime**
-  - **Chaquopy**
-    - Lightweight and stable
-    - Good for standard Python scripts
-  - **Linux-like**
-    - Debian + proot environment
-    - Better compatibility with packages needing system dependencies
-    - Runtime installation required before first use
+## 🤖 MCP Setup
 
-- **Network debugging**
-  - Python HTTP request viewer
-  - URL / domain search
-  - Domain / method / status filtering
-  - Request detail and JSON tree viewer
-  - Global UA / header / cookie / timeout / redirect overrides
+Python Runner ships with a built-in MCP (Model Context Protocol) server, so external AI clients such as Claude Desktop or Cursor can operate the app through the standard MCP protocol:
 
-- **Logs and diagnostics**
-  - App logs retain the latest 500 entries across restarts and support viewing, export, and clear
-  - Cleared app logs cannot be recovered
-  - Crash log and script error log capture
-  - Diagnostic export
+- 📖 **Read & write scripts**: create scripts, read and modify code, save files
+- ▶️ **Run**: execute scripts or project groups with interactive `input()` support
+- 📦 **Packages**: query and install Python packages
+- 🌐 **Network records**: inspect network requests made by your scripts
 
-## Runtime notes
+Safety by design: **token authentication**, **confirmation for sensitive operations**, **sensitive data redaction**, and **full audit logging** — you stay in control of every step.
 
-### Chaquopy
+Enable the server in **Settings → MCP**, then add the following to your AI client configuration:
 
-- Bundled inside the APK
-- Best for lightweight scripts and common Python packages
-- Some native-extension or system-level packages may not be supported
-
-### Linux-like
-
-- Based on Debian rootfs + proot
-- Supports regular scripts and project script groups
-- Project execution adds the project root and the main file directory to Python's search path, so project-local modules can be imported directly
-- ZIP imports scan `.py` files and recommend main-file candidates, but the final main file must be confirmed or selected by the user
-- Runtime files are installed under:
-
-```text
-/data/user/0/com.daozhang.py/files/linux_like/
+```json
+{
+  "mcpServers": {
+    "python-runner": {
+      "type": "http",
+      "url": "http://<phone-ip>:37891/mcp",
+      "headers": {
+        "Authorization": "Bearer <token generated on the MCP settings page>"
+      }
+    }
+  }
+}
 ```
 
-- User-installed package directory:
+## 🚀 Getting Started
 
-```text
-/data/user/0/com.daozhang.py/files/linux_like/user_site_packages
+1. Download and install the latest APK from [Releases](https://github.com/daozhang66/python_runner/releases/latest)
+2. Create a script and run it with the **Chaquopy** runtime — no setup required
+3. Need heavier dependencies? Install the Linux-like environment (Debian + proot) under **Settings → Runtime**
+
+## ⚙️ Dual Runtime
+
+| | Chaquopy | Linux-like |
+|---|---|---|
+| Environment | Bundled in the APK, works out of the box | Debian rootfs + proot |
+| Startup speed | ⚡ Fast | Slower, first-time environment install required |
+| pip packages | Best for common pure-Python packages | Stronger compatibility, more system dependencies |
+| Project script groups | — | ✅ In-project file browsing and module imports |
+
+## 🌐 Network Inspector
+
+Automatically records HTTP requests made through `requests`, `httpx`, `urllib`, `aiohttp`, `socket` and more, with URL / host search, request details, JSON tree views and summary statistics. Global overrides for UA / Cookie / Headers / timeout / redirect policy can be applied to your scripts.
+
+## 🛠 Build from Source
+
+```bash
+git clone https://github.com/daozhang66/python_runner.git
+cd python_runner
+flutter pub get
+flutter build apk --release
 ```
 
-- The package manager only shows top-level user packages there, not auto-installed dependencies such as `certifi` or `urllib3`
+> Requires Flutter stable and the Android SDK. The APK is output to `build/app/outputs/flutter-apk/`.
 
-## Package management
+## 📄 License
 
-- **PyPI source**
-  - You can set a custom pip index URL
-  - Leave it empty to use the official source
-  - The settings page can restore the official source with one tap
+[MIT](./LICENSE) © 2025 daozhang66
 
-- **Install**
-  - Install by package name
-  - Optional version pinning
-  - Chaquopy and Linux-like package environments are isolated from each other
-
-- **Uninstall**
-  - Removing a top-level package can also remove orphaned dependencies
-
-## Network debugging
-
-The request inspector automatically records common Python HTTP libraries:
-
-- `requests`
-- `httpx`
-- `urllib` / `urllib3`
-- `aiohttp`
-- `socket` (DNS and connect)
-- `subprocess` (command recording only, not interception)
-
-It supports:
-
-- Request summary
-- URL search
-- Request detail view
-- JSON tree viewer
-- Request override configuration
-- Response body limits: images up to 30 MB, text / JSON defaults to 10 MB, audio / video records metadata only
-
-Request overrides apply to scripts started after the configuration is saved. They support global User-Agent, Cookie, JSON Headers, a default timeout, redirect handling, and the configured network-debug proxy. Domain rules accept `example.com` and `*.example.com`; rules are evaluated in list order and the first match overrides global fields with the same name. Configurations can be copied for export or pasted for import.
-
-## Project structure
-
-```text
-lib/
-├─ main.dart
-├─ models/
-├─ pages/
-├─ providers/
-├─ runtime/
-├─ services/
-├─ utils/
-└─ widgets/
-
-android/
-assets/
-test/
-```
+> Developed with **Claude Code / Codex** (AI coding assistant)

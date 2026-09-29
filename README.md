@@ -1,149 +1,98 @@
-[English](./README_en.md) | [中文](./README.md)
+<div align="center">
+
+<img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="96" alt="Python Runner"/>
 
 # Python Runner
 
-> 本项目由 **Claude Code/Codex**辅助开发
+**Android 端 Python 脚本运行器 —— 写脚本、跑脚本、管依赖、连 AI**
 
-一个基于 Flutter 的 Android Python 脚本运行器，提供脚本管理、全屏终端、库管理、网络请求调试，以及双运行时切换能力。
+[![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/daozhang66/python_runner/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/daozhang66/python_runner/ci.yml?branch=main&label=CI)](https://github.com/daozhang66/python_runner/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://www.android.com)
+[![Stars](https://img.shields.io/github/stars/daozhang66/python_runner?style=social)](https://github.com/daozhang66/python_runner/stargazers)
 
-## 主要功能
+[English](./README_en.md) | 简体中文
 
-- **脚本管理**
-  - 新建、编辑、重命名、复制、导入、导出、删除
-  - 列表/宫格双视图
-  - 长按菜单与多选批量操作
-  - 支持脚本置顶
-  - 支持普通分组与 Linux-like 项目型脚本组
+**[⬇️ 下载最新版](https://github.com/daozhang66/python_runner/releases/latest)** · [🤖 MCP 接入](#-mcp-接入) · [🛠 从源码构建](#-从源码构建)
 
-- **项目型脚本组**
-  - 仅 Linux-like 引擎可用
-  - 支持新建空项目，默认创建 `main.py`
-  - 支持从 ZIP 导入项目，并由用户确认或选择主程序
-  - 支持项目内文件/目录浏览、编辑、重命名、删除
-  - 运行时项目根目录作为工作目录，方便脚本引用项目内模块和资源
+</div>
 
-- **代码编辑器**
-  - 语法高亮
-  - 搜索与跳转
-  - 只读/编辑切换
-  - 字号调节
-  - 保存后直接运行
+---
 
-- **全屏终端**
-  - 实时 stdout / stderr 输出
-  - `input()` 交互输入
-  - 日志搜索、错误过滤、复制、清空
-  - 运行超时控制
+## ✨ 功能一览
 
-- **库管理**
-  - 安装 / 卸载 Python 包
-  - 支持指定版本
-  - 支持自定义 PyPI 源，留空使用官方源
-  - 用户安装 / 内置库分开展示
-  - 用户安装列表只显示顶层包，不显示自动依赖
-  - 卸载时支持清理孤儿依赖
+| | 功能 | 说明 |
+|---|---|---|
+| 📝 | **脚本管理** | 新建 / 编辑 / 分组 / 置顶 / 批量操作，列表与宫格双视图 |
+| 📁 | **文件管理** | 浏览应用与项目目录，高亮查看、编辑并保存代码文件 |
+| 🖥️ | **全屏终端** | 实时 stdout / stderr，`input()` 交互，日志搜索与错误过滤 |
+| 📚 | **库管理** | pip 安装 / 卸载、指定版本、自定义 PyPI 源、孤儿依赖清理 |
+| ⚙️ | **双运行时** | Chaquopy 轻量快速；Linux-like（Debian + proot）兼容性更强 |
+| 🌐 | **网络调试** | 自动记录 Python HTTP 请求，支持详情查看与全局请求覆盖 |
+| 🤖 | **MCP 服务** | 外部 AI 通过 MCP 协议远程操作脚本，本机全程可控 |
+| 🩺 | **日志诊断** | 应用日志跨重启保留，崩溃与脚本错误记录，一键导出 |
 
-- **双运行时**
-  - **Chaquopy**
-    - 轻量、稳定、启动快
-    - 适合常规 Python 脚本
-  - **Linux-like**
-    - Debian + proot 环境
-    - 支持更多系统依赖与 pip 包
-    - 首次使用需在设置页安装运行环境
+## 🤖 MCP 接入
 
-- **网络调试**
-  - 底部「网络」页查看 Python HTTP 请求
-  - 支持 URL / 域名搜索
-  - 支持域名、方法、状态码筛选
-  - 支持请求详情、JSON 树查看
-  - 支持全局 UA / Header / Cookie / Timeout / Redirect 覆盖
+Python Runner 内置 MCP（Model Context Protocol）服务器，Claude Desktop、Cursor 等外部 AI 客户端可以通过标准 MCP 协议直接操作 App：
 
-- **日志与诊断**
-  - 应用日志跨重启保留最近 500 条，支持查看、导出、清空
-  - 清空应用日志后不可恢复
-  - 崩溃日志与脚本错误日志记录
-  - 诊断信息导出
+- 📖 **读写脚本**：创建脚本、读取与修改代码、保存文件
+- ▶️ **运行**：运行脚本或项目型脚本组，支持交互式 `input()`
+- 📦 **装库**：查询与安装 Python 包
+- 🌐 **网络记录**：查看脚本的网络请求记录
 
-## 运行时说明
+安全机制：**令牌鉴权**、**敏感操作二次确认**、**敏感信息脱敏**、**全程审计日志**，每一步都在你的掌控之中。
 
-### Chaquopy
+在应用的 **设置 → MCP** 中开启服务后，将以下配置加入你的 AI 客户端：
 
-- 内置到 APK 中
-- 适合轻量脚本与常用 Python 库
-- 某些需要原生编译扩展或系统依赖的包可能无法安装
-
-### Linux-like
-
-- 基于 Debian rootfs + proot
-- 支持普通脚本和项目型脚本组
-- 项目运行时会把项目根目录和主程序所在目录加入 Python 搜索路径，项目内模块可直接按包/模块方式导入
-- 导入 ZIP 项目时会扫描 `.py` 文件并推荐候选主程序，但最终主程序必须由用户确认或手动选择
-- 运行环境首次安装后会解压到：
-
-```text
-/data/user/0/com.daozhang.py/files/linux_like/
+```json
+{
+  "mcpServers": {
+    "python-runner": {
+      "type": "http",
+      "url": "http://<手机IP>:37891/mcp",
+      "headers": {
+        "Authorization": "Bearer <在 MCP 设置页生成的访问令牌>"
+      }
+    }
+  }
+}
 ```
 
-- 用户安装包目录：
+## 🚀 快速开始
 
-```text
-/data/user/0/com.daozhang.py/files/linux_like/user_site_packages
+1. 从 [Releases](https://github.com/daozhang66/python_runner/releases/latest) 下载并安装 APK
+2. 新建一个脚本，选择 **Chaquopy** 运行时，开箱即跑
+3. 需要更复杂的依赖？到 **设置 → 运行环境** 安装 Linux-like 环境（Debian + proot）
+
+## ⚙️ 双运行时
+
+| | Chaquopy | Linux-like |
+|---|---|---|
+| 环境 | 内置于 APK，开箱即用 | Debian rootfs + proot |
+| 启动速度 | ⚡ 快 | 稍慢，首次需安装环境 |
+| pip 包 | 常用纯 Python 包为主 | 兼容性更强，支持更多系统依赖 |
+| 项目型脚本组 | — | ✅ 支持项目内文件浏览与模块导入 |
+
+## 🌐 网络调试
+
+自动记录 `requests`、`httpx`、`urllib`、`aiohttp`、`socket` 等常见 Python HTTP 请求，支持 URL / 域名搜索、请求详情、JSON 树查看与统计摘要，还可为脚本配置全局 UA / Cookie / Header / 超时 / 重定向覆盖。
+
+## 🛠 从源码构建
+
+```bash
+git clone https://github.com/daozhang66/python_runner.git
+cd python_runner
+flutter pub get
+flutter build apk --release
 ```
 
-- 库管理页中的“用户安装”只显示顶层安装包，不显示 `certifi`、`urllib3` 这类自动依赖
+> 需要 Flutter stable 与 Android SDK，APK 输出在 `build/app/outputs/flutter-apk/`。
 
-## 库管理说明
+## 📄 许可证
 
-- **PyPI 源**
-  - 可手动设置 pip 索引地址
-  - 留空时使用官方源
-  - 设置页支持一键恢复官方源
+[MIT](./LICENSE) © 2025 daozhang66
 
-- **安装**
-  - 可输入包名
-  - 可选指定版本
-  - Linux-like 与 Chaquopy 的包互相独立
-
-- **卸载**
-  - 卸载顶层包时，会尝试清理当前已无人依赖的孤儿依赖
-
-## 网络调试说明
-
-自动记录以下常见 Python HTTP 库请求：
-
-- `requests`
-- `httpx`
-- `urllib` / `urllib3`
-- `aiohttp`
-- `socket` (DNS 和 connect)
-- `subprocess` (仅记录命令，不拦截)
-
-支持：
-
-- 统计摘要
-- URL 搜索
-- 请求详情
-- JSON 树状查看
-- 请求覆盖配置
-- 响应体大小限制（图片最大 30MB，文本/JSON 等默认 10MB，音视频仅记录 metadata）
-
-请求覆盖可为后续启动的脚本设置全局 User-Agent、Cookie、JSON Headers、默认超时和重定向策略，也可使用网络调试代理。域名规则支持 `example.com` 和 `*.example.com`，按列表顺序匹配，第一条匹配规则覆盖同名全局字段。配置可复制导出或粘贴导入；不会影响已经运行的脚本。
-
-## 项目结构
-
-```text
-lib/
-├─ main.dart
-├─ models/
-├─ pages/
-├─ providers/
-├─ runtime/
-├─ services/
-├─ utils/
-└─ widgets/
-
-android/
-assets/
-test/
-```
+> 本项目由 **Claude Code / Codex** 辅助开发
