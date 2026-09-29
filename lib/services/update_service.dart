@@ -211,7 +211,7 @@ class UpdateService {
         body: body,
         currentVersion: currentVersion,
       );
-      return _resolveChecksumAsset(
+      return await _resolveChecksumAsset(
         client: client,
         updateInfo: updateInfo,
         currentVersion: currentVersion,

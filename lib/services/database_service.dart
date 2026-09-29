@@ -50,7 +50,7 @@ class DatabaseService {
     try {
       final futureVersion = await _futureSchemaVersion(path);
       if (futureVersion != null) {
-        return _archiveAndRebuild(
+        return await _archiveAndRebuild(
           path,
           reason: 'future_v$futureVersion',
           cause: UnsupportedDatabaseVersionException(
