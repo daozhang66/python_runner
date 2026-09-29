@@ -23,16 +23,53 @@
 
 ## ✨ 功能一览
 
-| | 功能 | 说明 |
-|---|---|---|
-| 📝 | **脚本管理** | 新建 / 编辑 / 分组 / 置顶 / 批量操作，列表与宫格双视图 |
-| 📁 | **文件管理** | 浏览应用与项目目录，高亮查看、编辑并保存代码文件 |
-| 🖥️ | **全屏终端** | 实时 stdout / stderr，`input()` 交互，日志搜索与错误过滤 |
-| 📚 | **库管理** | pip 安装 / 卸载、指定版本、自定义 PyPI 源、孤儿依赖清理 |
-| ⚙️ | **双运行时** | Chaquopy 轻量快速；Linux-like（Debian + proot）兼容性更强 |
-| 🌐 | **网络调试** | 自动记录 Python HTTP 请求，支持详情查看与全局请求覆盖 |
-| 🤖 | **MCP 服务** | 外部 AI 通过 MCP 协议远程操作脚本，本机全程可控 |
-| 🩺 | **日志诊断** | 应用日志跨重启保留，崩溃与脚本错误记录，一键导出 |
+<table width="100%">
+  <tr>
+    <th width="48" align="center"></th>
+    <th width="150" align="left">功能</th>
+    <th align="left">说明</th>
+  </tr>
+  <tr>
+    <td align="center">📝</td>
+    <td align="left"><strong>脚本管理</strong></td>
+    <td align="left">新建 / 编辑 / 分组 / 置顶 / 批量操作，列表与宫格双视图</td>
+  </tr>
+  <tr>
+    <td align="center">📁</td>
+    <td align="left"><strong>文件管理</strong></td>
+    <td align="left">浏览应用与项目目录，高亮查看、编辑并保存代码文件</td>
+  </tr>
+  <tr>
+    <td align="center">🖥️</td>
+    <td align="left"><strong>全屏终端</strong></td>
+    <td align="left">实时 stdout / stderr，<code>input()</code> 交互，日志搜索与错误过滤</td>
+  </tr>
+  <tr>
+    <td align="center">📚</td>
+    <td align="left"><strong>库管理</strong></td>
+    <td align="left">pip 安装 / 卸载、指定版本、自定义 PyPI 源、孤儿依赖清理</td>
+  </tr>
+  <tr>
+    <td align="center">⚙️</td>
+    <td align="left"><strong>双运行时</strong></td>
+    <td align="left">Chaquopy 轻量快速；Linux-like（Debian + proot）兼容性更强</td>
+  </tr>
+  <tr>
+    <td align="center">🌐</td>
+    <td align="left"><strong>网络调试</strong></td>
+    <td align="left">自动记录 Python HTTP 请求，支持详情查看与全局请求覆盖</td>
+  </tr>
+  <tr>
+    <td align="center">🤖</td>
+    <td align="left"><strong>MCP 服务</strong></td>
+    <td align="left">外部 AI 通过 MCP 协议远程操作脚本，本机全程可控</td>
+  </tr>
+  <tr>
+    <td align="center">🩺</td>
+    <td align="left"><strong>日志诊断</strong></td>
+    <td align="left">应用日志跨重启保留，崩溃与脚本错误记录，一键导出</td>
+  </tr>
+</table>
 
 ## 🤖 MCP 接入
 
@@ -69,12 +106,33 @@ Python Runner 内置 MCP（Model Context Protocol）服务器，Claude Desktop�
 
 ## ⚙️ 双运行时
 
-| | Chaquopy | Linux-like |
-|---|---|---|
-| 环境 | 内置于 APK，开箱即用 | Debian rootfs + proot |
-| 启动速度 | ⚡ 快 | 稍慢，首次需安装环境 |
-| pip 包 | 常用纯 Python 包为主 | 兼容性更强，支持更多系统依赖 |
-| 项目型脚本组 | — | ✅ 支持项目内文件浏览与模块导入 |
+<table width="100%">
+  <tr>
+    <th width="160" align="left"></th>
+    <th align="left">Chaquopy</th>
+    <th align="left">Linux-like</th>
+  </tr>
+  <tr>
+    <td align="left"><strong>环境</strong></td>
+    <td align="left">内置于 APK，开箱即用</td>
+    <td align="left">Debian rootfs + proot</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>启动速度</strong></td>
+    <td align="left">⚡ 快</td>
+    <td align="left">稍慢，首次需安装环境</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>pip 包</strong></td>
+    <td align="left">常用纯 Python 包为主</td>
+    <td align="left">兼容性更强，支持更多系统依赖</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>项目型脚本组</strong></td>
+    <td align="left">—</td>
+    <td align="left">✅ 支持项目内文件浏览与模块导入</td>
+  </tr>
+</table>
 
 ## 🌐 网络调试
 

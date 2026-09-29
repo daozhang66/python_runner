@@ -23,16 +23,53 @@
 
 ## ✨ Features at a Glance
 
-| | Feature | Description |
-|---|---|---|
-| 📝 | **Script management** | Create / edit / group / pin / batch actions, list & grid views |
-| 📁 | **File manager** | Browse app and project directories, view, edit and save code with highlighting |
-| 🖥️ | **Full-screen terminal** | Live stdout / stderr, `input()` interaction, log search and error filtering |
-| 📚 | **Package manager** | pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup |
-| ⚙️ | **Dual runtime** | Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility |
-| 🌐 | **Network inspector** | Automatically records Python HTTP requests with global request overrides |
-| 🤖 | **MCP server** | External AI clients operate your scripts remotely through MCP |
-| 🩺 | **Logs & diagnostics** | App logs persist across restarts, crash and script error reports, one-tap export |
+<table width="100%">
+  <tr>
+    <th width="48" align="center"></th>
+    <th width="170" align="left">Feature</th>
+    <th align="left">Description</th>
+  </tr>
+  <tr>
+    <td align="center">📝</td>
+    <td align="left"><strong>Script management</strong></td>
+    <td align="left">Create / edit / group / pin / batch actions, list &amp; grid views</td>
+  </tr>
+  <tr>
+    <td align="center">📁</td>
+    <td align="left"><strong>File manager</strong></td>
+    <td align="left">Browse app and project directories, view, edit and save code with highlighting</td>
+  </tr>
+  <tr>
+    <td align="center">🖥️</td>
+    <td align="left"><strong>Full-screen terminal</strong></td>
+    <td align="left">Live stdout / stderr, <code>input()</code> interaction, log search and error filtering</td>
+  </tr>
+  <tr>
+    <td align="center">📚</td>
+    <td align="left"><strong>Package manager</strong></td>
+    <td align="left">pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup</td>
+  </tr>
+  <tr>
+    <td align="center">⚙️</td>
+    <td align="left"><strong>Dual runtime</strong></td>
+    <td align="left">Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility</td>
+  </tr>
+  <tr>
+    <td align="center">🌐</td>
+    <td align="left"><strong>Network inspector</strong></td>
+    <td align="left">Automatically records Python HTTP requests with global request overrides</td>
+  </tr>
+  <tr>
+    <td align="center">🤖</td>
+    <td align="left"><strong>MCP server</strong></td>
+    <td align="left">External AI clients operate your scripts remotely through MCP</td>
+  </tr>
+  <tr>
+    <td align="center">🩺</td>
+    <td align="left"><strong>Logs &amp; diagnostics</strong></td>
+    <td align="left">App logs persist across restarts, crash and script error reports, one-tap export</td>
+  </tr>
+</table>
 
 ## 🤖 MCP Setup
 
@@ -69,12 +106,33 @@ Enable the server in **Settings → MCP**, then add the following to your AI cli
 
 ## ⚙️ Dual Runtime
 
-| | Chaquopy | Linux-like |
-|---|---|---|
-| Environment | Bundled in the APK, works out of the box | Debian rootfs + proot |
-| Startup speed | ⚡ Fast | Slower, first-time environment install required |
-| pip packages | Best for common pure-Python packages | Stronger compatibility, more system dependencies |
-| Project script groups | — | ✅ In-project file browsing and module imports |
+<table width="100%">
+  <tr>
+    <th width="180" align="left"></th>
+    <th align="left">Chaquopy</th>
+    <th align="left">Linux-like</th>
+  </tr>
+  <tr>
+    <td align="left"><strong>Environment</strong></td>
+    <td align="left">Bundled in the APK, works out of the box</td>
+    <td align="left">Debian rootfs + proot</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>Startup speed</strong></td>
+    <td align="left">⚡ Fast</td>
+    <td align="left">Slower, first-time environment install required</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>pip packages</strong></td>
+    <td align="left">Best for common pure-Python packages</td>
+    <td align="left">Stronger compatibility, more system dependencies</td>
+  </tr>
+  <tr>
+    <td align="left"><strong>Project script groups</strong></td>
+    <td align="left">—</td>
+    <td align="left">✅ In-project file browsing and module imports</td>
+  </tr>
+</table>
 
 ## 🌐 Network Inspector
 
