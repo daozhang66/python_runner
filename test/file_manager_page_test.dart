@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +34,7 @@ class _FakeBridge {
   final deleted = <String>[];
   Map<String, List<int>> files = {};
   final written = <String, String>{};
+  final transfers = <String>[];
 
   _FakeBridge(this.directories);
 
@@ -71,6 +71,9 @@ Future<FileManagerController> _pumpManager(
     createDirectory: bridge.createDirectory,
     renameEntry: bridge.rename,
     deleteEntry: bridge.delete,
+    transferEntry: (path, destination, move) async {
+      bridge.transfers.add('$path->$destination:$move');
+    },
     workingDirectoryProvider: () async => configuredWorkingDir,
     isPathAccessible: (_) async => true,
   );
@@ -95,6 +98,85 @@ Future<FileManagerController> _pumpManager(
 void main() {
   menuTests();
   viewerTests();
+
+  testWidgets('compact toolbar keeps title visible at 320px and menus work', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final bridge = _FakeBridge({'/work': [_file('/work/a.txt')]});
+    await _pumpManager(tester, bridge);
+    final title = find.text('文件管理');
+    expect(title, findsOneWidget);
+    final titleSize = tester.getSize(title);
+    final text = tester.widget<Text>(title);
+    final style = DefaultTextStyle.of(tester.element(title)).style.merge(text.style);
+    final painter = TextPainter(text: TextSpan(text: '文件管理', style: style),
+      textDirection: TextDirection.ltr)..layout();
+    expect(titleSize.width, greaterThanOrEqualTo(painter.width));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey('file-manager-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('刷新'), findsOneWidget);
+    expect(find.text('搜索'), findsOneWidget);
+    await tester.tap(find.text('搜索'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('long press offers file tools and paste follows destination',
+      (tester) async {
+    final bridge = _FakeBridge({
+      '/work': [_file('/work/a.txt'), _dir('/work/target')],
+      '/work/target': [],
+    });
+    await _pumpManager(tester, bridge);
+    await tester.longPress(find.text('a.txt'));
+    await tester.pumpAndSettle();
+    for (final label in ['复制', '剪切', '复制路径', '属性', '重命名', '删除']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    await tester.tap(find.text('复制'));
+    await tester.pumpAndSettle();
+    expect(find.text('粘贴'), findsOneWidget);
+    await tester.tap(find.text('target'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('粘贴'));
+    await tester.pumpAndSettle();
+    expect(bridge.transfers, ['/work/a.txt->/work/target:false']);
+    expect(find.text('粘贴'), findsNothing);
+  });
+
+  testWidgets('root up button and back navigate one level at a time',
+      (tester) async {
+    const root = '/data/user/0/com.daozhang.py';
+    final bridge = _FakeBridge({
+      '/work': [],
+      '/': [_dir(root)],
+      root: [_dir('$root/files')],
+      '$root/files': [_dir('$root/files/projects')],
+      '$root/files/projects': [],
+    });
+    final controller = await _pumpManager(tester, bridge);
+    await tester.tap(find.byTooltip('切换到根目录'));
+    await tester.pumpAndSettle();
+    for (final name in ['com.daozhang.py', 'files', 'projects']) {
+      await tester.tap(find.text(name));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byTooltip('上一级'));
+    await tester.pumpAndSettle();
+    expect(controller.location.path, '$root/files');
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    expect(controller.location.path, root);
+    await tester.tap(find.byTooltip('上一级'));
+    await tester.pumpAndSettle();
+    expect(controller.location.path, '/');
+    final up = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.arrow_upward));
+    expect(up.onPressed, isNull);
+  });
 
   testWidgets('file manager starts in work mode and offers root switch',
       (tester) async {

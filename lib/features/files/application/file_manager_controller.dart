@@ -46,6 +46,8 @@ class FileManagerController extends ChangeNotifier {
     required Future<void> Function(String path, String newName) renameEntry,
     required Future<void> Function(String path) deleteEntry,
     Future<void> Function(String path, String content)? writeFile,
+    Future<void> Function(String path, String destination, bool move)?
+        transferEntry,
     Future<void> Function(String path)? ensureDirectory,
     required Future<String?> Function() workingDirectoryProvider,
     required Future<bool> Function(String path) isPathAccessible,
@@ -56,6 +58,7 @@ class FileManagerController extends ChangeNotifier {
         _renameEntry = renameEntry,
         _deleteEntry = deleteEntry,
         _writeFile = writeFile,
+        _transferEntry = transferEntry,
         _ensureDirectory = ensureDirectory,
         _workingDirectoryProvider = workingDirectoryProvider,
         _isPathAccessible = isPathAccessible,
@@ -74,6 +77,50 @@ class FileManagerController extends ChangeNotifier {
   final Future<void> Function(String path, String newName) _renameEntry;
   final Future<void> Function(String path) _deleteEntry;
   final Future<void> Function(String path, String content)? _writeFile;
+  final Future<void> Function(String path, String destination, bool move)?
+      _transferEntry;
+  AppFileEntry? _clipboardEntry;
+  bool _clipboardMove = false;
+  bool _transferring = false;
+  AppFileEntry? get clipboardEntry => _clipboardEntry;
+  bool get clipboardMove => _clipboardMove;
+  bool get transferring => _transferring;
+  bool get canPaste =>
+      _clipboardEntry != null &&
+      !_transferring &&
+      _transferEntry != null &&
+      _location.path != '/' &&
+      (_state == FileManagerState.ready || _state == FileManagerState.empty);
+
+  void stageTransfer(AppFileEntry entry, {required bool move}) {
+    if (_transferring || !canMutate(entry)) return;
+    _clipboardEntry = entry;
+    _clipboardMove = move;
+    notifyListeners();
+  }
+
+  void clearTransfer() {
+    if (_transferring) return;
+    _clipboardEntry = null;
+    notifyListeners();
+  }
+
+  Future<void> paste() async {
+    if (!canPaste) return;
+    final source = _clipboardEntry!;
+    final destination = _location.path;
+    _transferring = true;
+    notifyListeners();
+    try {
+      await _transferEntry!(source.path, destination, _clipboardMove);
+      _clipboardEntry = null;
+      if (!_disposed) await refresh();
+    } finally {
+      _transferring = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
   final Future<void> Function(String path)? _ensureDirectory;
   final Future<String?> Function() _workingDirectoryProvider;
   final Future<bool> Function(String path) _isPathAccessible;
@@ -103,9 +150,19 @@ class FileManagerController extends ChangeNotifier {
   /// Stable error category of the last failed load, for UI localization.
   FileManagerErrorCode? get errorCode => _errorCode;
 
-  /// Top-level path of the current mode: `/` in root mode, or the resolved
-  /// working directory in working-directory mode.
-  String get modeRootPath => _location.isRoot ? '/' : (_workingRoot ?? '/');
+  /// Navigation boundary of the current mode.
+  ///
+  /// Root mode is an app-data view whose virtual top is `/`; it never asks
+  /// Android to enumerate the host filesystem root. Working-directory mode
+  /// can browse up to shared storage's `/storage/emulated/0`, but no higher.
+  String get modeRootPath {
+    if (_location.isRoot) return '/';
+    final working = _workingRoot ?? defaultScriptWorkingDirectory;
+    return working == '/storage/emulated/0' ||
+            working.startsWith('/storage/emulated/0/')
+        ? '/storage/emulated/0'
+        : working;
+  }
 
   bool get canGoUp => _location.path != modeRootPath;
 
@@ -136,8 +193,8 @@ class FileManagerController extends ChangeNotifier {
     if (_appDataRootPaths.contains(path)) return false;
     if (!path.startsWith('/') || path.contains('\\"')) return false;
     if (path == '/') return false;
-    return !_protectedSystemPrefixes.any((prefix) =>
-        path == prefix || path.startsWith('$prefix/'));
+    return !_protectedSystemPrefixes
+        .any((prefix) => path == prefix || path.startsWith('$prefix/'));
   }
 
   Future<void> loadInitial() async {
@@ -197,7 +254,25 @@ class FileManagerController extends ChangeNotifier {
   Future<void> goUp() async {
     if (!canGoUp) return;
     final parent = _parentPath(_location.path);
+    // Only cross to the virtual entry page at an app-data boundary. Inside
+    // the app tree, move one directory at a time without escaping that tree.
+    if (_location.mode == FileManagerLocationMode.root) {
+      final withinAppRoot = parent != null &&
+          _appDataRootPaths
+              .any((root) => parent == root || parent.startsWith('$root/'));
+      await _load(
+        withinAppRoot
+            ? FileManagerLocation.inMode(_location.mode, parent)
+            : FileManagerLocation.root,
+        generation: ++_generation,
+      );
+      return;
+    }
     if (parent == null) return;
+    if (_location.mode == FileManagerLocationMode.workingDirectory &&
+        !_isWithinWorkingStorage(parent)) {
+      return;
+    }
     await _load(
       FileManagerLocation.inMode(_location.mode, parent),
       generation: ++_generation,
@@ -303,30 +378,6 @@ class FileManagerController extends ChangeNotifier {
     await refresh();
   }
 
-  /// Pins the app-private data roots (mirroring the MT provider mapping) at
-  /// the top of the root listing. Failures degrade to the plain filesystem
-  /// listing.
-  Future<List<AppFileEntry>> _mergeAppDataRoots(
-    List<AppFileEntry> entries,
-  ) async {
-    final provider = _appDataRootsProvider;
-    if (provider == null) {
-      _appDataRootPaths.clear();
-      return entries;
-    }
-    try {
-      final roots = await provider();
-      _appDataRootPaths
-        ..clear()
-        ..addAll(roots.map((e) => e.path));
-      final listedPaths = entries.map((e) => e.path).toSet();
-      return [...roots.where((e) => !listedPaths.contains(e.path)), ...entries];
-    } catch (_) {
-      _appDataRootPaths.clear();
-      return entries;
-    }
-  }
-
   Future<void> _load(
     FileManagerLocation target, {
     required int generation,
@@ -340,11 +391,14 @@ class FileManagerController extends ChangeNotifier {
     _errorCode = null;
     notifyListeners();
     try {
-      var entries = await _listDirectory(target.path);
+      var entries = target.path == '/' && _appDataRootsProvider != null
+          ? await _appDataRootsProvider()
+          : await _listDirectory(target.path);
       if (_disposed || generation != _generation) return;
       if (target.path == '/') {
-        entries = await _mergeAppDataRoots(entries);
-        if (_disposed || generation != _generation) return;
+        _appDataRootPaths
+          ..clear()
+          ..addAll(entries.map((entry) => entry.path));
       }
       _entries = entries;
       _state = entries.isEmpty && _query.isEmpty
@@ -404,6 +458,11 @@ class FileManagerController extends ChangeNotifier {
     final index = normalized.lastIndexOf('/');
     if (index < 0) return '/';
     return index == 0 ? '/' : normalized.substring(0, index);
+  }
+
+  bool _isWithinWorkingStorage(String path) {
+    final boundary = modeRootPath;
+    return path == boundary || path.startsWith('$boundary/');
   }
 
   @override

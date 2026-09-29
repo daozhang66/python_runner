@@ -1,0 +1,5 @@
+<resources>
+    <string name="mcp_notification_channel">MCP 服务</string>
+    <string name="mcp_notification_text">MCP 服务运行中</string>
+    <string name="mcp_overlay_content_description">MCP 悬浮球，点击打开应用，拖动移动，长按隐藏</string>
+</resources>

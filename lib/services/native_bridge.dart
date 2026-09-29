@@ -82,6 +82,27 @@ class NativeBridge {
   Stream<Map<dynamic, dynamic>> get stdinRequestStream =>
       _stdinRequestEvents.stream;
 
+  Future<bool> startMcpKeepAlive({bool requestPermission = false, bool showOverlay = false}) async =>
+      _asBool(await _invoke('startMcpKeepAlive', {
+        'requestPermission': requestPermission, 'showOverlay': showOverlay,
+      }));
+
+  Future<void> stopMcpKeepAlive() async {
+    await _invoke('stopMcpKeepAlive', {});
+  }
+
+  Future<void> hideMcpOverlay() async {
+    await _invoke('hideMcpOverlay', {});
+  }
+
+  Future<void> setMcpOverlayStyle({required int surface, required int foreground,
+      required int primary, required int outline}) async {
+    await _invoke('setMcpOverlayStyle', {
+      'surface': surface, 'foreground': foreground,
+      'primary': primary, 'outline': outline,
+    });
+  }
+
   /// Rebinds native event sources without invalidating existing Dart listeners.
   ///
   /// This is a recovery hook for a controlled host after its native event
@@ -293,6 +314,22 @@ class NativeBridge {
     );
   }
 
+  /// Native bounded read; never falls back to the unbounded picker API.
+  Future<List<int>> readFileBounded(String path, {required int maxBytes}) async {
+    _validateFileManagerMutationPath(path);
+    if (maxBytes < 1 || maxBytes > 4 * 1024 * 1024) {
+      throw ArgumentError.value(maxBytes, 'maxBytes');
+    }
+    final result = await _invoke('readFileBounded', {
+      'path': path,
+      'maxBytes': maxBytes,
+    });
+    if (result is! List || result.length > maxBytes || result.any((v) => v is! int || v < 0 || v > 255)) {
+      throw const FormatException('Invalid bounded file response');
+    }
+    return result.cast<int>();
+  }
+
   /// Creates a directory inside the public-storage directory [path].
   ///
   /// Mutations only accept absolute host paths; `content://` targets must be
@@ -303,6 +340,14 @@ class NativeBridge {
       throw ArgumentError.value(name, 'name', 'invalid directory name');
     }
     await _invoke('createFileManagerDirectory', {'path': path, 'name': name});
+  }
+
+  Future<void> transferFileManagerEntry(String path, String destination, bool move) async {
+    _validateFileManagerMutationPath(path);
+    _validateFileManagerMutationPath(destination);
+    await _invoke('transferFileManagerEntry', {
+      'path': path, 'destination': destination, 'move': move,
+    });
   }
 
   /// Renames the entry at absolute [path] to a single [newName] segment.
@@ -397,12 +442,13 @@ class NativeBridge {
   }
 
   Future<bool> saveProjectFile(
-      String projectKey, String path, String content) async {
+      String projectKey, String path, String content, {int? expectedModifiedAt}) async {
     final safeKey = ProjectPathValidator.normalizeProjectKey(projectKey);
     final safePath = ProjectPathValidator.normalizeRelativePath(path);
     final result = await _invoke(
       'saveProjectFile',
-      {'projectKey': safeKey, 'path': safePath, 'content': content},
+      {'projectKey': safeKey, 'path': safePath, 'content': content,
+        if (expectedModifiedAt != null) 'expectedModifiedAt': expectedModifiedAt},
     );
     return _asBool(result);
   }

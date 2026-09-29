@@ -26,6 +26,7 @@ class ScriptLogRecord {
   List<LogEntry>? _logsSnapshot;
   ExecutionStatus status;
   int? exitCode;
+  int droppedLogCount = 0;
 
   ScriptLogRecord({
     required this.executionId,
@@ -46,6 +47,7 @@ class ScriptLogRecord {
     if (_logs.length > maxItems) {
       removed = _logs.length - maxItems;
       _logs.removeRange(0, removed);
+      droppedLogCount += removed;
     }
     _logsSnapshot = null;
     return removed;
@@ -104,6 +106,8 @@ class ExecutionProvider extends ChangeNotifier {
   String? _currentScriptName;
   bool _waitingForInput = false;
   String _currentInputPrompt = '';
+  int _inputRequestRevision = 0;
+  bool _sendingInput = false;
   int _logVersion = 0;
 
   /// History of all script execution logs
@@ -154,6 +158,7 @@ class ExecutionProvider extends ChangeNotifier {
       _state.status == ExecutionStatus.stopping;
   bool get waitingForInput => _waitingForInput;
   String get currentInputPrompt => _currentInputPrompt;
+  int get inputRequestRevision => _inputRequestRevision;
   List<ScriptLogRecord> get logHistory => _logHistorySnapshot ??=
       List.unmodifiable(List<ScriptLogRecord>.of(_logHistory));
 
@@ -297,6 +302,7 @@ class ExecutionProvider extends ChangeNotifier {
           return;
         }
         _currentInputPrompt = request.prompt;
+        _inputRequestRevision++;
         if (_currentInputPrompt.isNotEmpty) {
           final entry = LogEntry(
             type: LogType.stdout,
@@ -674,7 +680,6 @@ class ExecutionProvider extends ChangeNotifier {
         '脚本开始执行: $safeName (id: $executionId, runtime: $runtimeBackendId)',
         source: 'Execution',
       );
-
     } catch (e) {
       _logger.error('脚本启动失败: $safeName, error: $e', source: 'Execution');
       _appendLiveLog(LogEntry(
@@ -816,10 +821,40 @@ class ExecutionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendStdin(String input) async {
+  Future<void> sendStdin(
+    String input, {
+    String? expectedExecutionId,
+    int? expectedInputRevision,
+    bool propagateErrors = false,
+  }) async {
+    if (expectedExecutionId != null &&
+        (_state.executionId != expectedExecutionId ||
+            _state.status != ExecutionStatus.running ||
+            !_waitingForInput ||
+            expectedInputRevision != _inputRequestRevision)) {
+      throw StateError('Input request is no longer current');
+    }
+    if (_sendingInput) {
+      if (propagateErrors) throw StateError('Input is already being sent');
+      return;
+    }
+    final executionId = _state.executionId;
+    final revision = _inputRequestRevision;
+    final prompt = _currentInputPrompt;
+    final wasWaiting = _waitingForInput;
+    _sendingInput = true;
+    // Consume this prompt before yielding. UI and MCP share this reservation.
+    _waitingForInput = false;
     try {
       await _runtimeManager.sendStdin(input);
-      final prompt = _currentInputPrompt;
+      // A fast script may already have emitted its next input prompt or exited.
+      // Never clear that newer prompt or append this echo to a different run.
+      if (_disposed ||
+          _state.executionId != executionId ||
+          _inputRequestRevision != revision ||
+          _state.status != ExecutionStatus.running) {
+        return;
+      }
       final echoedInput = prompt.isNotEmpty ? '$prompt$input' : '> $input';
       final visibleLogs = logs;
       final mergedPromptLine = prompt.isNotEmpty &&
@@ -840,7 +875,17 @@ class ExecutionProvider extends ChangeNotifier {
       _waitingForInput = false;
       _scheduleNotify();
     } catch (e) {
+      if (!_disposed &&
+          _state.executionId == executionId &&
+          _inputRequestRevision == revision &&
+          _state.status == ExecutionStatus.running) {
+        _waitingForInput = wasWaiting;
+        _scheduleNotify();
+      }
       _logger.error('sendStdin error: $e', source: 'Execution');
+      if (propagateErrors) rethrow;
+    } finally {
+      _sendingInput = false;
     }
   }
 
@@ -908,5 +953,4 @@ class ExecutionProvider extends ChangeNotifier {
     unawaited(_runtimeManager.dispose());
     super.dispose();
   }
-
 }

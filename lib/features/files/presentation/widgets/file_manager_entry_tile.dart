@@ -10,6 +10,7 @@ class FileManagerEntryTile extends StatelessWidget {
   final AppFileEntry entry;
   final VoidCallback? onOpen;
   final VoidCallback? onPreview;
+  final VoidCallback? onLongPress;
   final bool canMutate;
   final List<PopupMenuEntry<String>> Function(BuildContext context)?
       menuBuilder;
@@ -20,6 +21,7 @@ class FileManagerEntryTile extends StatelessWidget {
     required this.entry,
     this.onOpen,
     this.onPreview,
+    this.onLongPress,
     this.canMutate = false,
     this.menuBuilder,
     this.onMenuSelected,
@@ -54,7 +56,7 @@ class FileManagerEntryTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (canMutate && menuBuilder != null)
+          if (menuBuilder != null)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 20),
               itemBuilder: menuBuilder!,
@@ -65,6 +67,7 @@ class FileManagerEntryTile extends StatelessWidget {
         ],
       ),
       onTap: entry.isDirectory ? onOpen : onPreview,
+      onLongPress: onLongPress,
     );
   }
 }

@@ -303,12 +303,22 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
     }
   }
 
-  Future<bool> saveScript(String name, String content) {
+  Future<bool> saveScript(String name, String content, {
+    Future<void> Function()? beforeSave,
+  }) {
     return _enqueue(() async {
+      // Compare the revision inside the same queue used by UI saves.
+      // Guard errors must reach the caller, not become a generic false.
+      await beforeSave?.call();
       try {
         final safeName = ScriptNameValidator.normalize(name);
+        final previous = await _repository.getScript(safeName);
         await _repository.saveScriptFile(safeName, content);
-        final now = DateTime.now();
+        final clock = DateTime.now().millisecondsSinceEpoch;
+        final previousMs = previous?.modifiedAt.millisecondsSinceEpoch ?? 0;
+        final now = DateTime.fromMillisecondsSinceEpoch(
+          clock > previousMs ? clock : previousMs + 1,
+        );
         final idx = _scripts.indexWhere((s) => s.name == safeName);
         if (idx >= 0) {
           final updated = _scripts[idx].copyWith(modifiedAt: now);

@@ -1909,6 +1909,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invalidOverrideConfig => 'Invalid request override configuration';
 
   @override
+  String get sponsorProject => 'Sponsor';
+
+  @override
+  String get sponsorProjectDescription => 'Scan with WeChat';
+
+  @override
+  String get sponsorQrHint =>
+      'Thank you for your support. Scan with WeChat to sponsor.';
+
+  @override
   String get appSubtitle => 'Local Python script runtime';
 
   @override
@@ -1947,4 +1957,253 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get architectureRequirementsValue => 'Android 8.0+ · arm64-v8a';
+
+  @override
+  String get mcpSectionTitle => 'AI / MCP service';
+
+  @override
+  String get mcpSectionDescription =>
+      'Let authorized external AI clients access scripts, projects, and package tools';
+
+  @override
+  String get mcpPageTitle => 'AI / MCP Service';
+
+  @override
+  String get mcpService => 'MCP service';
+
+  @override
+  String get mcpStatusStopped => 'Stopped';
+
+  @override
+  String get mcpStatusStarting => 'Starting...';
+
+  @override
+  String get mcpStatusRunning => 'Running';
+
+  @override
+  String get mcpStatusError => 'Error';
+
+  @override
+  String mcpStartFailed(Object error) {
+    return 'Failed to start: $error';
+  }
+
+  @override
+  String get mcpOverlayPermissionRequired =>
+      'Keep-alive notification started; the overlay needs system permission';
+
+  @override
+  String mcpKeepAliveUnavailable(Object error) {
+    return 'MCP started, but keep-alive is unavailable: $error';
+  }
+
+  @override
+  String mcpHideOverlayFailed(Object error) {
+    return 'Failed to hide the overlay: $error';
+  }
+
+  @override
+  String get mcpLanUrl => 'LAN URL';
+
+  @override
+  String get mcpShowKeepAliveOverlay => 'Show keep-alive overlay';
+
+  @override
+  String get mcpHideOverlay => 'Hide overlay';
+
+  @override
+  String get mcpConnectionTokenHint =>
+      'Devices on the same LAN can connect with the LAN URL. Requests must include Authorization: Bearer <token>.';
+
+  @override
+  String get mcpConnectionNoTokenHint =>
+      'Devices on the same LAN can connect with the LAN URL. Token authentication is off, so every device that can reach this port can call it.';
+
+  @override
+  String get mcpPortRange => 'Port (1024-65535)';
+
+  @override
+  String get mcpRequirePairingToken => 'Require pairing token';
+
+  @override
+  String get mcpTokenDisabledWarning =>
+      'LAN requests need no token when this is off. Use only on a trusted network';
+
+  @override
+  String get mcpPairingToken => 'Pairing token';
+
+  @override
+  String mcpCurrentToken(Object hint) {
+    return 'Current token: $hint (only a fragment is shown for security)';
+  }
+
+  @override
+  String get mcpTokenGenerated => 'generated';
+
+  @override
+  String get mcpNoTokenYet =>
+      'No token yet; one can be generated after authentication is enabled';
+
+  @override
+  String get mcpRegenerate => 'Regenerate';
+
+  @override
+  String get mcpRegenerateTokenHint =>
+      'The old token stops working immediately. The token is shown only once, so copy it promptly.';
+
+  @override
+  String get mcpToolPermissions => 'Tool permissions';
+
+  @override
+  String get mcpToolPermissionsHint =>
+      'Authorized operations run directly without per-call confirmation. Enable run and delete permissions only as needed.';
+
+  @override
+  String get mcpPermissionReadScripts => 'Read scripts';
+
+  @override
+  String get mcpPermissionWriteScripts => 'Create or modify scripts';
+
+  @override
+  String get mcpPermissionReadProjects => 'Read projects';
+
+  @override
+  String get mcpPermissionWriteProjects =>
+      'Create projects or modify project files';
+
+  @override
+  String get mcpPermissionReadNetwork => 'Query network records';
+
+  @override
+  String get mcpPermissionReadPackages => 'Query installed packages';
+
+  @override
+  String get mcpPermissionInstallPackages => 'Install packages';
+
+  @override
+  String get mcpPermissionRunScripts =>
+      'Run scripts, interactive input, output, and stop';
+
+  @override
+  String get mcpPermissionWriteFilesystem =>
+      'Create directories, rename, or save files';
+
+  @override
+  String get mcpPermissionDeleteFilesystem =>
+      'Delete files or empty directories';
+
+  @override
+  String get mcpPermissionReadFilesystem => 'Read accessible files';
+
+  @override
+  String get mcpCurrentConnections => 'Current connections';
+
+  @override
+  String mcpSessionsCount(int count) {
+    return '$count sessions';
+  }
+
+  @override
+  String get mcpNoConnections =>
+      'No connections. External AI clients appear here after initialize completes.';
+
+  @override
+  String mcpSessionSummary(Object id, Object version) {
+    return 'Session $id... · Protocol $version';
+  }
+
+  @override
+  String get mcpDisconnect => 'Disconnect';
+
+  @override
+  String get mcpAuditLog => 'Audit log';
+
+  @override
+  String mcpRecentToolCalls(int count) {
+    return '$count recent tool calls';
+  }
+
+  @override
+  String get mcpClearAuditLog => 'Clear audit log';
+
+  @override
+  String get mcpNoAuditRecords =>
+      'No records yet. Connections and tool calls are recorded here without tokens or sensitive content.';
+
+  @override
+  String mcpAuditToolCall(Object client, Object tool, int duration) {
+    return '$client called $tool ($duration ms)';
+  }
+
+  @override
+  String mcpAuditToolCallFailed(Object client, Object tool, Object error) {
+    return '$client called $tool; failed: $error';
+  }
+
+  @override
+  String mcpAuditConnect(Object client) {
+    return '$client connected';
+  }
+
+  @override
+  String mcpAuditDisconnect(Object client) {
+    return '$client disconnected';
+  }
+
+  @override
+  String mcpAuditServer(Object status, Object details) {
+    return 'MCP service $status $details';
+  }
+
+  @override
+  String get mcpPortSavedNextStart =>
+      'Port saved; it takes effect the next time the service starts';
+
+  @override
+  String get mcpInvalidPort => 'Invalid port (1024-65535 required)';
+
+  @override
+  String get mcpRegenerateTokenTitle => 'Regenerate pairing token';
+
+  @override
+  String get mcpRegenerateTokenConfirm =>
+      'The old token will stop working immediately and connected AI clients must update it. Continue?';
+
+  @override
+  String get mcpGenerate => 'Generate';
+
+  @override
+  String get mcpNewTokenTitle => 'New token (shown once)';
+
+  @override
+  String get mcpCopyToken => 'Copy token';
+
+  @override
+  String get mcpCopiedToClipboard => 'Copied to clipboard';
+
+  @override
+  String get mcpConfirmationTitle => 'AI requested an operation';
+
+  @override
+  String mcpConfirmationClient(Object client) {
+    return 'From: $client';
+  }
+
+  @override
+  String mcpConfirmationAutoDeny(int seconds) {
+    return 'Automatically denied in $seconds seconds if not handled';
+  }
+
+  @override
+  String get mcpConfirmationAutoDenySoon =>
+      'About to be denied automatically...';
+
+  @override
+  String get mcpDeny => 'Deny';
+
+  @override
+  String get mcpAllowSession => 'Allow for this session';
+
+  @override
+  String get mcpAllow => 'Allow';
 }

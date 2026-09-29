@@ -1862,6 +1862,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidOverrideConfig => '请求覆盖配置无效';
 
   @override
+  String get sponsorProject => '赞助';
+
+  @override
+  String get sponsorProjectDescription => '使用微信扫一扫';
+
+  @override
+  String get sponsorQrHint => '感谢你的支持，请使用微信扫码赞助';
+
+  @override
   String get appSubtitle => '本地 Python 脚本运行环境';
 
   @override
@@ -1899,4 +1908,238 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get architectureRequirementsValue => 'Android 8.0+ · arm64-v8a';
+
+  @override
+  String get mcpSectionTitle => 'AI / MCP 服务';
+
+  @override
+  String get mcpSectionDescription => '让外部 AI 客户端在授权后访问脚本、项目与库管理能力';
+
+  @override
+  String get mcpPageTitle => 'AI / MCP 服务';
+
+  @override
+  String get mcpService => 'MCP 服务';
+
+  @override
+  String get mcpStatusStopped => '已停止';
+
+  @override
+  String get mcpStatusStarting => '启动中…';
+
+  @override
+  String get mcpStatusRunning => '运行中';
+
+  @override
+  String get mcpStatusError => '错误';
+
+  @override
+  String mcpStartFailed(Object error) {
+    return '启动失败：$error';
+  }
+
+  @override
+  String get mcpOverlayPermissionRequired => '保活通知已启动；悬浮窗需要系统授权';
+
+  @override
+  String mcpKeepAliveUnavailable(Object error) {
+    return 'MCP 已启动，保活不可用：$error';
+  }
+
+  @override
+  String mcpHideOverlayFailed(Object error) {
+    return '隐藏悬浮球失败：$error';
+  }
+
+  @override
+  String get mcpLanUrl => '局域网 URL';
+
+  @override
+  String get mcpShowKeepAliveOverlay => '显示保活悬浮球';
+
+  @override
+  String get mcpHideOverlay => '隐藏悬浮球';
+
+  @override
+  String get mcpConnectionTokenHint =>
+      '同一局域网设备可使用局域网 URL 连接。请求需携带 Authorization: Bearer <令牌>。';
+
+  @override
+  String get mcpConnectionNoTokenHint =>
+      '同一局域网设备可使用局域网 URL 连接。当前未启用令牌认证，局域网内可访问此端口的设备都能调用。';
+
+  @override
+  String get mcpPortRange => '端口（1024-65535）';
+
+  @override
+  String get mcpRequirePairingToken => '要求配对令牌';
+
+  @override
+  String get mcpTokenDisabledWarning => '关闭后局域网请求无需令牌，请确认网络可信';
+
+  @override
+  String get mcpPairingToken => '配对令牌';
+
+  @override
+  String mcpCurrentToken(Object hint) {
+    return '当前令牌：$hint（出于安全只显示片段）';
+  }
+
+  @override
+  String get mcpTokenGenerated => '已生成';
+
+  @override
+  String get mcpNoTokenYet => '尚未生成令牌；开启认证后可生成';
+
+  @override
+  String get mcpRegenerate => '重新生成';
+
+  @override
+  String get mcpRegenerateTokenHint => '重新生成后旧令牌立即失效；令牌只显示一次，请及时复制。';
+
+  @override
+  String get mcpToolPermissions => '工具权限';
+
+  @override
+  String get mcpToolPermissionsHint => '已授权的操作直接执行，无逐次确认。运行和删除权限请按需开启。';
+
+  @override
+  String get mcpPermissionReadScripts => '读取脚本';
+
+  @override
+  String get mcpPermissionWriteScripts => '创建/修改脚本';
+
+  @override
+  String get mcpPermissionReadProjects => '读取项目';
+
+  @override
+  String get mcpPermissionWriteProjects => '创建项目/修改项目文件';
+
+  @override
+  String get mcpPermissionReadNetwork => '查询网络记录';
+
+  @override
+  String get mcpPermissionReadPackages => '查询已安装库';
+
+  @override
+  String get mcpPermissionInstallPackages => '安装库';
+
+  @override
+  String get mcpPermissionRunScripts => '运行脚本/交互输入/读取输出/停止运行';
+
+  @override
+  String get mcpPermissionWriteFilesystem => '新建目录/重命名/保存文件';
+
+  @override
+  String get mcpPermissionDeleteFilesystem => '删除文件/空目录';
+
+  @override
+  String get mcpPermissionReadFilesystem => '读取可访问文件';
+
+  @override
+  String get mcpCurrentConnections => '当前连接';
+
+  @override
+  String mcpSessionsCount(int count) {
+    return '$count 个会话';
+  }
+
+  @override
+  String get mcpNoConnections => '暂无连接。外部 AI 客户端完成 initialize 后会出现在这里。';
+
+  @override
+  String mcpSessionSummary(Object id, Object version) {
+    return '会话 $id… · 协议 $version';
+  }
+
+  @override
+  String get mcpDisconnect => '断开';
+
+  @override
+  String get mcpAuditLog => '审计日志';
+
+  @override
+  String mcpRecentToolCalls(int count) {
+    return '最近 $count 次工具调用';
+  }
+
+  @override
+  String get mcpClearAuditLog => '清空审计日志';
+
+  @override
+  String get mcpNoAuditRecords => '暂无记录。每次连接和工具调用都会写入审计日志（不含令牌与敏感内容）。';
+
+  @override
+  String mcpAuditToolCall(Object client, Object tool, int duration) {
+    return '$client 调用 $tool（${duration}ms）';
+  }
+
+  @override
+  String mcpAuditToolCallFailed(Object client, Object tool, Object error) {
+    return '$client 调用 $tool 失败：$error';
+  }
+
+  @override
+  String mcpAuditConnect(Object client) {
+    return '$client 建立连接';
+  }
+
+  @override
+  String mcpAuditDisconnect(Object client) {
+    return '$client 断开连接';
+  }
+
+  @override
+  String mcpAuditServer(Object status, Object details) {
+    return 'MCP 服务 $status $details';
+  }
+
+  @override
+  String get mcpPortSavedNextStart => '端口已保存，下次启动生效';
+
+  @override
+  String get mcpInvalidPort => '端口无效（需 1024-65535）';
+
+  @override
+  String get mcpRegenerateTokenTitle => '重新生成配对令牌';
+
+  @override
+  String get mcpRegenerateTokenConfirm => '旧令牌将立即失效，已连接的外部 AI 客户端需要更新令牌。继续吗？';
+
+  @override
+  String get mcpGenerate => '生成';
+
+  @override
+  String get mcpNewTokenTitle => '新令牌（仅显示一次）';
+
+  @override
+  String get mcpCopyToken => '复制令牌';
+
+  @override
+  String get mcpCopiedToClipboard => '已复制到剪贴板';
+
+  @override
+  String get mcpConfirmationTitle => 'AI 请求执行操作';
+
+  @override
+  String mcpConfirmationClient(Object client) {
+    return '发起方：$client';
+  }
+
+  @override
+  String mcpConfirmationAutoDeny(int seconds) {
+    return '$seconds 秒内未处理将自动拒绝';
+  }
+
+  @override
+  String get mcpConfirmationAutoDenySoon => '即将自动拒绝…';
+
+  @override
+  String get mcpDeny => '拒绝';
+
+  @override
+  String get mcpAllowSession => '本次会话允许';
+
+  @override
+  String get mcpAllow => '允许';
 }

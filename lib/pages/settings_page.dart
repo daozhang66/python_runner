@@ -18,6 +18,7 @@ import '../providers/app_locale_provider.dart';
 import '../providers/infrastructure_providers.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/app_dialogs.dart';
+import '../features/mcp/presentation/pages/mcp_settings_page.dart';
 import 'update_log_page.dart';
 import 'theme_settings_page.dart';
 import 'app_logs_page.dart';
@@ -81,6 +82,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _buildAppearanceSection(),
               _buildRuntimeSection(),
               _buildNetworkDebugSection(),
+              _buildMcpSection(),
               _buildDiagnosticsSection(),
               _buildAboutSection(),
             ]),
@@ -92,6 +94,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   // ── Section builders ──
+
+  /// AI / MCP 服务入口（计划 §11）。
+  Widget _buildMcpSection() {
+    final l10n = AppLocalizations.of(context)!;
+    return _SectionCard(
+      icon: Icons.smart_toy_outlined,
+      title: l10n.mcpSectionTitle,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.smart_toy_outlined),
+          title: Text(l10n.mcpSectionTitle),
+          subtitle: Text(l10n.mcpSectionDescription),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const McpSettingsPage()),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   void dispose() {

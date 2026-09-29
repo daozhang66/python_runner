@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 唤醒锁（脚本后台运行） -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- 可选：电池优化豁免 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 存储权限（Android 12及以下） -->
@@ -50,6 +51,7 @@
         </activity>
 
         <!-- Python执行前台服务 -->
+        <service android:name=".McpKeepAliveService" android:exported="false" />
         <service
             android:name=".PythonForegroundService"
             android:exported="false" />

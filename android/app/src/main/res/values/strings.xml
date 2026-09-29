@@ -1,0 +1,5 @@
+<resources>
+    <string name="mcp_notification_channel">MCP service</string>
+    <string name="mcp_notification_text">MCP service is running</string>
+    <string name="mcp_overlay_content_description">MCP overlay: tap to open the app, drag to move, long-press to hide</string>
+</resources>

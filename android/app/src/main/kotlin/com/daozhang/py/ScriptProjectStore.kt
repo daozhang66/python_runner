@@ -126,10 +126,19 @@ class ScriptProjectStore(
         return file.readText()
     }
 
-    fun saveProjectFile(projectKey: String, path: String, content: String): Boolean {
+    @Synchronized
+    fun saveProjectFile(projectKey: String, path: String, content: String, expectedModifiedAt: Long? = null): Boolean {
         val file = safeProjectFile(projectKey, path)
+        val previous = file.lastModified()
+        if (expectedModifiedAt != null && (!file.isFile || previous != expectedModifiedAt)) {
+            throw ProjectWriteConflictException()
+        }
         file.parentFile?.mkdirs()
         file.writeText(content)
+        // Ensure two saves within a clock tick have distinct revisions.
+        if (!file.setLastModified(maxOf(System.currentTimeMillis(), previous + 1))) {
+            throw java.io.IOException("Cannot update file revision")
+        }
         return true
     }
 

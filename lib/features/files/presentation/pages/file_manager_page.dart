@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../l10n/app_localizations.dart';
@@ -52,6 +53,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       renameEntry: bridge.renameFileManagerEntry,
       deleteEntry: bridge.deleteFileManagerEntry,
       writeFile: bridge.writeFileManagerFile,
+      transferEntry: bridge.transferFileManagerEntry,
       ensureDirectory: bridge.ensureFileManagerDirectory,
       workingDirectoryProvider: () async =>
           (await SharedPreferences.getInstance()).getString('working_dir'),
@@ -83,6 +85,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   Future<void> _goUpOrExit() async {
+    if (_controller.transferring) return;
     if (_controller.canGoUp) {
       await _controller.goUp();
       return;
@@ -214,18 +217,111 @@ class _FileManagerPageState extends State<FileManagerPage> {
       );
   }
 
+  String _label(String zh, String en) =>
+      Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
+
+  List<PopupMenuEntry<String>> _entryMenu(AppFileEntry entry) {
+    final l10n = AppLocalizations.of(context)!;
+    PopupMenuItem<String> item(String value, IconData icon, String label) =>
+        PopupMenuItem(
+            value: value,
+            child: ListTile(
+                leading: Icon(icon),
+                title: Text(label),
+                contentPadding: EdgeInsets.zero));
+    return [
+      if (_controller.canMutate(entry)) ...[
+        item('copy', Icons.copy, l10n.copy),
+        item('cut', Icons.content_cut, _label('剪切', 'Cut')),
+        item('rename', Icons.drive_file_rename_outline, l10n.rename),
+        item('delete', Icons.delete_outline, l10n.delete),
+      ],
+      item('path', Icons.link, _label('复制路径', 'Copy path')),
+      item('details', Icons.info_outline, _label('属性', 'Properties')),
+    ];
+  }
+
+  void _handleEntryAction(AppFileEntry entry, String action) {
+    if (_controller.transferring) return;
+    switch (action) {
+      case 'copy':
+      case 'cut':
+        _controller.stageTransfer(entry, move: action == 'cut');
+        break;
+      case 'rename':
+        _showRenameDialog(entry);
+        break;
+      case 'delete':
+        _confirmDelete(entry);
+        break;
+      case 'path':
+        Clipboard.setData(ClipboardData(text: entry.path));
+        break;
+      case 'details':
+        showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+                  title: Text(entry.name),
+                  content: SingleChildScrollView(
+                      child: SelectableText(
+                    '${entry.path}\n${entry.isDirectory ? _label('目录', 'Directory') : '${entry.size} B'}\n${entry.modifiedAt.toLocal()}',
+                  )),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(AppLocalizations.of(context)!.back))
+                  ],
+                ));
+        break;
+    }
+  }
+
+  Future<void> _showEntryActions(AppFileEntry entry) async {
+    final action = await showModalBottomSheet<String>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+                child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                ListTile(
+                    title: Text(entry.name,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(entry.path,
+                        maxLines: 2, overflow: TextOverflow.ellipsis)),
+                ..._entryMenu(entry).cast<PopupMenuItem<String>>().map((item) =>
+                    InkWell(
+                        onTap: () => Navigator.pop(sheetContext, item.value),
+                        child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: item.child))),
+              ]),
+            )));
+    if (action != null && mounted) _handleEntryAction(entry, action);
+  }
+
+  Future<void> _paste() async {
+    try {
+      await _controller.paste();
+      if (mounted && _controller.clipboardEntry == null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_label('粘贴完成', 'Paste completed')),
+        ));
+      }
+    } catch (e) {
+      _showError(e.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final location = _controller.location;
     final entries = _controller.visibleEntries;
-    final switchLabel = location.isRoot
-        ? l10n.switchToWorkingDirectory
-        : l10n.switchToRoot;
+    final switchLabel =
+        location.isRoot ? l10n.switchToWorkingDirectory : l10n.switchToRoot;
 
     return PopScope(
-      canPop: !_controller.canGoUp,
+      canPop: !_controller.canGoUp && !_controller.transferring,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goUpOrExit();
       },
@@ -234,46 +330,43 @@ class _FileManagerPageState extends State<FileManagerPage> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _goUpOrExit,
-            tooltip: _controller.canGoUp ? l10n.upOneLevel : l10n.back,
+            tooltip: l10n.back,
           ),
-          title: Text(l10n.fileManager),
+          title: Text(l10n.fileManager, maxLines: 1),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: l10n.refresh,
-              onPressed: _controller.refresh,
-            ),
-            IconButton(
-              icon: Icon(
-                location.isRoot
-                    ? Icons.folder_special_outlined
-                    : Icons.my_location_outlined,
-              ),
-              tooltip: switchLabel,
-              onPressed: _switchMode,
-            ),
-            IconButton(
-              icon: Icon(
-                _searchVisible ? Icons.search_off : Icons.search,
-              ),
-              tooltip: l10n.search,
-              onPressed: () {
-                setState(() {
-                  _searchVisible = !_searchVisible;
-                  if (!_searchVisible) _searchController.clear();
-                });
-              },
+              icon: const Icon(Icons.arrow_upward),
+              tooltip: l10n.upOneLevel,
+              onPressed: _controller.canGoUp ? _controller.goUp : null,
             ),
             PopupMenuButton<String>(
+              key: const ValueKey('file-manager-actions'),
+              tooltip: l10n.more,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
               onSelected: (action) {
                 if (action == 'new_folder') _showCreateFolderDialog();
+                if (action == 'refresh') _controller.refresh();
+                if (action == 'paste') _paste();
+                if (action == 'search') {
+                  setState(() {
+                    _searchVisible = !_searchVisible;
+                    if (!_searchVisible) _searchController.clear();
+                  });
+                }
               },
               itemBuilder: (context) => [
+                PopupMenuItem(value: 'refresh', child: ListTile(
+                  leading: const Icon(Icons.refresh), title: Text(l10n.refresh), contentPadding: EdgeInsets.zero)),
+                PopupMenuItem(value: 'search', child: ListTile(
+                  leading: Icon(_searchVisible ? Icons.search_off : Icons.search), title: Text(l10n.search), contentPadding: EdgeInsets.zero)),
+                if (_controller.clipboardEntry != null)
+                  PopupMenuItem(value: 'paste', enabled: _controller.canPaste, child: ListTile(
+                    leading: const Icon(Icons.content_paste), title: Text(_label('粘贴', 'Paste')), contentPadding: EdgeInsets.zero)),
                 PopupMenuItem(
                   value: 'new_folder',
+                  enabled: !_controller.transferring && location.path != '/',
                   child: ListTile(
                     leading: const Icon(Icons.create_new_folder_outlined),
                     title: Text(l10n.newFolder),
@@ -295,6 +388,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 children: [
                   Row(
                     children: [
+                      IconButton(
+                        icon: Icon(location.isRoot ? Icons.folder_special_outlined : Icons.my_location_outlined),
+                        tooltip: switchLabel,
+                        onPressed: _switchMode,
+                      ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -355,6 +453,44 @@ class _FileManagerPageState extends State<FileManagerPage> {
             Expanded(child: _buildBody(context, l10n, entries)),
           ],
         ),
+        bottomNavigationBar: _controller.clipboardEntry == null
+            ? null
+            : SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(children: [
+                    Icon(
+                        _controller.clipboardMove
+                            ? Icons.content_cut
+                            : Icons.copy,
+                        size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_controller.clipboardEntry!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(_controller.clipboardMove ? _label('待移动', 'Ready to move') : _label('待复制', 'Ready to copy'),
+                          style: Theme.of(context).textTheme.labelSmall),
+                      ])),
+                    if (_controller.transferring)
+                      const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                    else
+                      FilledButton.icon(
+                          onPressed: _controller.canPaste ? _paste : null,
+                          icon: const Icon(Icons.content_paste),
+                          label: Text(_label('粘贴', 'Paste'))),
+                    IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: l10n.cancel,
+                        onPressed: _controller.transferring
+                            ? null
+                            : _controller.clearTransfer),
+                  ]),
+                ),
+              ),
       ),
     );
   }
@@ -433,30 +569,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
           canMutate: canMutate,
           onOpen: () => _controller.enterDirectory(entry),
           onPreview: () => _openFile(entry),
-          onMenuSelected: (action) {
-            if (action == 'rename') _showRenameDialog(entry);
-            if (action == 'delete') _confirmDelete(entry);
-          },
-          menuBuilder: canMutate
-              ? (menuContext) => [
-                    PopupMenuItem(
-                      value: 'rename',
-                      child: ListTile(
-                        leading: const Icon(Icons.drive_file_rename_outline),
-                        title: Text(l10n.rename),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: const Icon(Icons.delete_outline),
-                        title: Text(l10n.delete),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ]
-              : null,
+          onLongPress: () => _showEntryActions(entry),
+          onMenuSelected: (action) => _handleEntryAction(entry, action),
+          menuBuilder: (_) => _entryMenu(entry),
         );
       },
     );

@@ -42,6 +42,7 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
       widget.editorController ?? CodeLineEditingController();
   bool get _ownsEditor => widget.editorController == null;
   CodeFindController? _findController;
+  late final SelectionToolbarController _toolbarController;
   bool _loading = true;
   bool _isBinary = false;
   bool _modified = false;
@@ -52,11 +53,42 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
   void initState() {
     super.initState();
     _findController = CodeFindController(_editorController);
+    _toolbarController = MobileSelectionToolbarController(builder: ({
+      required BuildContext context,
+      required TextSelectionToolbarAnchors anchors,
+      required CodeLineEditingController controller,
+      required VoidCallback onDismiss,
+      required VoidCallback onRefresh,
+    }) {
+      final buttons = <ContextMenuButtonItem>[
+        if (!controller.isEmpty)
+          ContextMenuButtonItem(type: ContextMenuButtonType.copy,
+            onPressed: () async { await controller.copy(); onDismiss(); }),
+        if (!_readOnly && _canEdit && !controller.isEmpty)
+          ContextMenuButtonItem(type: ContextMenuButtonType.cut,
+            onPressed: () { controller.cut(); onDismiss(); }),
+        if (!_readOnly && _canEdit)
+          ContextMenuButtonItem(type: ContextMenuButtonType.paste,
+            onPressed: () { controller.paste(); onDismiss(); }),
+        if (!controller.isEmpty && !controller.isAllSelected)
+          ContextMenuButtonItem(type: ContextMenuButtonType.selectAll,
+            onPressed: () { controller.selectAll(); onRefresh(); }),
+      ];
+      return buttons.isEmpty ? const SizedBox.shrink() :
+        AdaptiveTextSelectionToolbar.buttonItems(anchors: anchors, buttonItems: buttons);
+    });
     _loadContent();
   }
 
   @override
+  void deactivate() {
+    _toolbarController.hide(context);
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
+    _editorController.removeListener(_onTextChanged);
     _findController?.close();
     if (_ownsEditor) {
       _editorController.dispose();
@@ -162,6 +194,7 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
               onSelected: (value) {
                 switch (value) {
                   case 'mode':
+                    _toolbarController.hide(context);
                     setState(() => _readOnly = !_readOnly);
                     break;
                   case 'search':
@@ -227,6 +260,7 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
         Expanded(
           child: CodeEditor(
             controller: _editorController,
+            toolbarController: _toolbarController,
             findController: _findController,
             readOnly: _readOnly,
             showCursorWhenReadOnly: false,

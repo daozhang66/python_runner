@@ -94,6 +94,17 @@ class MainActivity : FlutterActivity() {
         )
     }
     private var batteryOptRequested = false
+    private var mcpKeepAliveWanted = false
+    private var mcpOverlayPermissionPending = false
+    private var mcpOverlayColors = mapOf<String, Int>()
+
+    private fun startMcpKeepAlive(show: Boolean, hide: Boolean = false) {
+        val intent = Intent(this, McpKeepAliveService::class.java)
+            .putExtra(McpKeepAliveService.SHOW, show)
+            .putExtra(McpKeepAliveService.HIDE, hide)
+        mcpOverlayColors.forEach { (key, value) -> intent.putExtra(key, value) }
+        androidx.core.content.ContextCompat.startForegroundService(this, intent)
+    }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         // Register native crash handler ASAP 鈥?before Flutter engine init
@@ -326,8 +337,21 @@ class MainActivity : FlutterActivity() {
                     call.argument<String>("projectKey") ?: "",
                     call.argument<String>("path") ?: "",
                     call.argument<String>("content") ?: "",
-                    result
+                    result,
+                    call.argument<Number>("expectedModifiedAt")?.toLong()
                 )
+            },
+            "readFileBounded" to { call, result ->
+                try {
+                    result.success(nativeFileOperations.readFileBounded(
+                        call.argument<String>("path") ?: "",
+                        call.argument<Number>("maxBytes")?.toInt() ?: 0
+                    ))
+                } catch (e: FileReadLimitException) {
+                    result.error("1046", e.message, null)
+                } catch (e: Exception) {
+                    result.error("1040", "读取文件失败: ${e.message}", null)
+                }
             },
             "createProjectDirectory" to { call, result ->
                 handleCreateProjectDirectory(
@@ -372,6 +396,19 @@ class MainActivity : FlutterActivity() {
                     call.argument<String>("name") ?: "",
                     result
                 )
+            },
+            "transferFileManagerEntry" to { call, result ->
+                val path = call.argument<String>("path") ?: ""
+                val destination = call.argument<String>("destination") ?: ""
+                val move = call.argument<Boolean>("move") == true
+                coroutineScope.launch {
+                    try {
+                        val transferred = nativeFileOperations.transferFileManagerEntry(path, destination, move)
+                        withContext(Dispatchers.Main) { result.success(transferred) }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) { result.error("1044", "文件操作失败: ${e.message}", null) }
+                    }
+                }
             },
             "renameFileManagerEntry" to { call, result ->
                 handleRenameFileManagerEntry(
@@ -582,6 +619,44 @@ class MainActivity : FlutterActivity() {
                 moveTaskToBack(true)
                 result.success(null)
             },
+            "startMcpKeepAlive" to { call, result ->
+                try {
+                    mcpKeepAliveWanted = true
+                    startMcpKeepAlive(call.argument<Boolean>("showOverlay") == true)
+                    val granted = android.provider.Settings.canDrawOverlays(this)
+                    if (!granted && call.argument<Boolean>("requestPermission") == true) {
+                        mcpOverlayPermissionPending = true
+                        startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")))
+                    }
+                    result.success(granted)
+                } catch (e: Exception) {
+                    result.error("1050", "MCP 保活启动失败: ${e.message}", null)
+                }
+            },
+            "hideMcpOverlay" to { _, result ->
+                mcpOverlayPermissionPending = false
+                try {
+                    if (mcpKeepAliveWanted) startMcpKeepAlive(false, hide = true)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("1051", "隐藏悬浮球失败: ${e.message}", null)
+                }
+            },
+            "setMcpOverlayStyle" to { call, result ->
+                mcpOverlayColors = listOf("surface", "foreground", "primary", "outline")
+                    .mapNotNull { key -> call.argument<Number>(key)?.let { key to it.toInt() } }.toMap()
+                if (mcpKeepAliveWanted) {
+                    try { startMcpKeepAlive(false) } catch (_: Exception) {}
+                }
+                result.success(null)
+            },
+            "stopMcpKeepAlive" to { _, result ->
+                mcpKeepAliveWanted = false
+                mcpOverlayPermissionPending = false
+                stopService(Intent(this, McpKeepAliveService::class.java))
+                result.success(true)
+            },
         )
     }
 
@@ -681,9 +756,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleSaveProjectFile(projectKey: String, path: String, content: String, result: MethodChannel.Result) {
+    private fun handleSaveProjectFile(projectKey: String, path: String, content: String, result: MethodChannel.Result, expectedModifiedAt: Long? = null) {
         try {
-            result.success(scriptProjectStore.saveProjectFile(projectKey, path, content))
+            result.success(scriptProjectStore.saveProjectFile(projectKey, path, content, expectedModifiedAt))
+        } catch (e: ProjectWriteConflictException) {
+            result.error("1047", e.message, null)
         } catch (e: Exception) {
             result.error("1025", "保存项目文件失败: ${e.message}", null)
         }
@@ -982,9 +1059,15 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         requestBatteryOptimizationExemption()
+        if (mcpKeepAliveWanted && mcpOverlayPermissionPending) {
+            mcpOverlayPermissionPending = false
+            try { startMcpKeepAlive(true) } catch (_: Exception) {}
+        }
     }
 
     override fun onDestroy() {
+        mcpKeepAliveWanted = false
+        stopService(Intent(this, McpKeepAliveService::class.java))
         scriptExecutionController.shutdown()
         coroutineScope.cancel()
         super.onDestroy()

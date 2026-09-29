@@ -12,6 +12,21 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  test('conditional project saves forward the revision and preserve conflicts',
+      () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'saveProjectFile');
+      expect(call.arguments['expectedModifiedAt'], 1234);
+      throw PlatformException(code: '1047', message: 'changed');
+    });
+    await expectLater(
+        NativeBridge().saveProjectFile('project_1', 'main.py', '',
+            expectedModifiedAt: 1234),
+        throwsA(isA<NativeBridgeException>()
+            .having((e) => e.rawCode, 'code', '1047')));
+  });
+
   test('native bridge exposes project file APIs with safe argument shape',
       () async {
     final calls = <MethodCall>[];

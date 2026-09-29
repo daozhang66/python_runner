@@ -18,6 +18,8 @@ import 'services/network_debug_config.dart';
 import 'services/request_override_config.dart';
 import 'providers/execution_provider.dart';
 import 'features/packages/application/package_controller.dart';
+import 'features/mcp/application/mcp_server_controller.dart';
+import 'features/mcp/presentation/mcp_overlay_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/app_locale_provider.dart';
 import 'features/scripts/presentation/pages/script_list_page.dart';
@@ -85,6 +87,7 @@ void main() async {
   };
 
   final bridge = NativeBridge();
+  final execution = ExecutionProvider(bridge);
 
   // runApp must run in the same zone as WidgetsFlutterBinding.ensureInitialized()
   // (the root zone); uncaught async errors are already reported through
@@ -93,11 +96,11 @@ void main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        mcpExecutionOwnerProvider.overrideWithValue(execution),
       ],
       child: legacy_provider.MultiProvider(
         providers: [
-          legacy_provider.ChangeNotifierProvider(
-              create: (_) => ExecutionProvider(bridge)),
+          legacy_provider.ChangeNotifierProvider.value(value: execution),
           legacy_provider.ChangeNotifierProvider.value(
               value: httpInspectorStore),
         ],
@@ -485,7 +488,7 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
               value: isDark
                   ? _darkSystemUiOverlayStyle
                   : _lightSystemUiOverlayStyle,
-              child: child ?? const SizedBox.shrink(),
+              child: McpOverlayTheme(child: child ?? const SizedBox.shrink()),
             );
           },
           localizationsDelegates: AppLocalizations.localizationsDelegates,

@@ -110,19 +110,27 @@ class NativeFileOperations(
 
     fun listFilePickerDirectory(path: String): List<Map<String, Any>> {
         if (path.isBlank()) return getFilePickerRoots()
+        // Android may expose the filesystem root as a selectable location but
+        // reject raw File.listFiles() on `/`. Present the same safe, usable
+        // roots as the picker instead of turning the file manager root page
+        // into a permission error.
+        if (path == "/") {
+            return getAppDataRoots()
+        }
         val dir = File(path)
         require(dir.exists()) { "目录不存在: $path" }
         require(dir.isDirectory) { "不是目录: $path" }
-        return dir.listFiles()?.map { appFileEntryMap(it) } ?: emptyList()
+        val children = dir.listFiles()
+            ?: throw SecurityException("无法读取目录: $path")
+        return children.map { appFileEntryMap(it) }
     }
 
     fun listFilePickerDirectoryForPigeon(path: String): List<NativeAppFileEntry> {
         return listFilePickerDirectory(path).map { it.toNativeAppFileEntry() }
     }
 
-    /// App-private data roots mirroring the MTDataFilesProvider mapping:
-    /// data, user_de_data, android_data, android_obb. Surfaced by the file
-    /// manager in root mode so the user can browse the same tree MT sees.
+    /// Returns only this application's private root. The file manager root
+    /// page is a virtual app-data page, not a host filesystem browser.
     fun getAppDataRoots(): List<Map<String, Any>> {
         val roots = linkedMapOf<String, Map<String, Any>>()
         fun addRoot(name: String, file: File?) {
@@ -137,12 +145,7 @@ class NativeFileOperations(
         }
 
         val dataDir = filesDir.parentFile
-        addRoot("data", dataDir)
-        if (dataDir?.path?.startsWith("/data/user/") == true) {
-            addRoot("user_de_data", File("/data/user_de/${dataDir.path.substring(11)}"))
-        }
-        addRoot("android_data", externalFilesDir?.parentFile)
-        addRoot("android_obb", obbDir)
+        addRoot("PythonRunner", dataDir)
         return roots.values.toList()
     }
 
@@ -159,6 +162,25 @@ class NativeFileOperations(
         }
     }
 
+    fun readFileBounded(path: String, maxBytes: Int): ByteArray {
+        require(path.startsWith("/") && !path.contains('\u0000')) { "路径必须是绝对路径" }
+        require(maxBytes in 1..(4 * 1024 * 1024)) { "读取上限无效" }
+        val file = File(path)
+        require(file.isFile) { "文件不存在或不是普通文件" }
+        return file.inputStream().use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (output.size() < maxBytes) {
+                val count = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+                if (count < 0) return@use output.toByteArray()
+                output.write(buffer, 0, count)
+            }
+            // At most one extra byte is read, including when the file grows.
+            if (input.read() != -1) throw FileReadLimitException()
+            output.toByteArray()
+        }
+    }
+
     fun createFileManagerDirectory(path: String, name: String) {
         val parent = mutableTarget(path)
         require(name.isNotBlank()) { "目录名为空" }
@@ -169,6 +191,18 @@ class NativeFileOperations(
         if (!target.mkdir()) {
             throw IllegalStateException("创建目录失败: ${target.name}")
         }
+    }
+
+    fun transferFileManagerEntry(path: String, destination: String, move: Boolean): String {
+        require(!java.nio.file.Files.isSymbolicLink(File(path).toPath())) { "不支持符号链接" }
+        val source = mutableTarget(path)
+        val parent = mutableTarget(destination)
+        // Application data roots are navigation entries, never transfer targets.
+        val roots = getAppDataRoots().map { it["path"].toString() }
+        require(roots.none { File(it).canonicalFile.toPath().startsWith(source.toPath()) }) {
+            "不允许复制或移动应用根目录及其父目录"
+        }
+        return FileTransfer.transfer(source, parent, move)
     }
 
     fun renameFileManagerEntry(path: String, newName: String) {

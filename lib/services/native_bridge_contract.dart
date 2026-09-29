@@ -20,7 +20,9 @@ class NativeBridgeContract {
     'listFilePickerDirectory': ['path'],
     'openFilePickerTree': ['title'],
     'readFilePickerFile': ['path'],
+    'readFileBounded': ['path'],
     'createFileManagerDirectory': ['path', 'name'],
+    'transferFileManagerEntry': ['path', 'destination'],
     'renameFileManagerEntry': ['path', 'newName'],
     'deleteFileManagerEntry': ['path'],
     'writeFileManagerFile': ['path', 'content'],
@@ -113,7 +115,9 @@ class NativeBridgeContract {
     'listFilePickerDirectory',
     'openFilePickerTree',
     'readFilePickerFile',
+    'readFileBounded',
     'createFileManagerDirectory',
+    'transferFileManagerEntry',
     'renameFileManagerEntry',
     'deleteFileManagerEntry',
     'writeFileManagerFile',
@@ -139,6 +143,10 @@ class NativeBridgeContract {
     'uninstallLinuxLikePackage',
     'listLinuxLikePackages',
     'moveToBackground',
+    'startMcpKeepAlive',
+    'stopMcpKeepAlive',
+    'hideMcpOverlay',
+    'setMcpOverlayStyle',
   };
 
   static void validate(String method, Map<String, dynamic> arguments) {

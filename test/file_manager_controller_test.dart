@@ -40,6 +40,7 @@ class _FakeBridge {
   final Map<String, List<int>> files;
   final Map<String, Completer<List<AppFileEntry>>> pendingList = {};
   final ensured = <String>[];
+  final listed = <String>[];
 
   _FakeBridge({
     Map<String, List<AppFileEntry>>? directories,
@@ -47,6 +48,7 @@ class _FakeBridge {
   }) : directories = directories ?? {};
 
   Future<List<AppFileEntry>> list(String path) {
+    listed.add(path);
     final pending = pendingList.remove(path);
     if (pending != null) return pending.future;
     if (listError != null) throw listError!;
@@ -100,6 +102,7 @@ FileManagerController _controller(
   bool workingDirAccessible = true,
   List<AppFileEntry> appDataRoots = const [],
   bool Function(String path)? ensureCreates,
+  Future<void> Function(String path, String destination, bool move)? transfer,
 }) {
   return FileManagerController(
     listDirectory: bridge.list,
@@ -107,6 +110,7 @@ FileManagerController _controller(
     createDirectory: bridge.createDirectory,
     renameEntry: bridge.rename,
     deleteEntry: bridge.delete,
+    transferEntry: transfer,
     ensureDirectory: (path) async {
       bridge.ensured.add(path);
       if (ensureCreates != null && ensureCreates(path)) {
@@ -121,6 +125,106 @@ FileManagerController _controller(
 }
 
 void main() {
+  test(
+      'cut paste keeps clipboard on failure, rejects double submit and clears on success',
+      () async {
+    final bridge = _FakeBridge(directories: {'/work': [], '/work/target': []});
+    final gate = Completer<void>();
+    var calls = 0;
+    var fail = true;
+    final controller = _controller(bridge, configuredWorkingDir: '/work',
+        transfer: (path, destination, move) async {
+      calls++;
+      expect(path, '/work/a.txt');
+      expect(destination, '/work/target');
+      expect(move, isTrue);
+      if (fail) throw StateError('target exists');
+      await gate.future;
+    });
+    addTearDown(controller.dispose);
+    await controller.loadInitial();
+    controller.stageTransfer(_file('/work/a.txt'), move: true);
+    await controller.enterDirectory(_dir('/work/target'));
+    await expectLater(controller.paste(), throwsStateError);
+    expect(controller.clipboardEntry, isNotNull);
+    expect(controller.transferring, isFalse);
+    fail = false;
+    final pending = controller.paste();
+    await controller.paste();
+    expect(calls, 2);
+    expect(controller.transferring, isTrue);
+    gate.complete();
+    await pending;
+    expect(controller.clipboardEntry, isNull);
+    expect(controller.transferring, isFalse);
+  });
+  test('root navigation goes up one level and never reads app parent',
+      () async {
+    const root = '/data/user/0/com.daozhang.py';
+    final bridge = _FakeBridge(directories: {
+      '/work': [],
+      root: [_dir('$root/files')],
+      '$root/files': [_dir('$root/files/projects')],
+      '$root/files/projects': [_dir('$root/files/projects/demo')],
+      '$root/files/projects/demo': [],
+    });
+    final controller = _controller(bridge,
+        configuredWorkingDir: '/work',
+        appDataRoots: [_namedDir(root, 'PythonRunner')]);
+    addTearDown(controller.dispose);
+    await controller.loadInitial();
+    await controller.switchMode(FileManagerLocationMode.root);
+    for (final path in [
+      root,
+      '$root/files',
+      '$root/files/projects',
+      '$root/files/projects/demo'
+    ]) {
+      await controller.enterDirectory(_dir(path));
+    }
+    // Returning from a failed directory must also use its immediate parent.
+    bridge.listError = const FileManagerError(
+        code: FileManagerErrorCode.permissionDenied, message: 'denied');
+    await controller.enterDirectory(_dir('$root/files/projects/demo/locked'));
+    expect(controller.state, FileManagerState.error);
+    bridge.listError = null;
+    for (final expected in [
+      '$root/files/projects/demo',
+      '$root/files/projects',
+      '$root/files',
+      root,
+      '/'
+    ]) {
+      await controller.goUp();
+      expect(controller.location.path, expected);
+      expect(controller.location.mode, FileManagerLocationMode.root);
+    }
+    expect(controller.canGoUp, isFalse);
+    final count = bridge.listed.length;
+    await controller.goUp();
+    expect(bridge.listed.length, count);
+    expect(bridge.listed, isNot(contains('/data/user/0')));
+    expect(bridge.listed, isNot(contains('/')));
+  });
+
+  test('working directory still stops at shared storage boundary', () async {
+    const root = '/storage/emulated/0';
+    final bridge = _FakeBridge(directories: {
+      root: [],
+      '$root/Download': [],
+      defaultScriptWorkingDirectory: [],
+    });
+    final controller = _controller(bridge);
+    addTearDown(controller.dispose);
+    await controller.loadInitial();
+    await controller.goUp();
+    expect(controller.location.path, '$root/Download');
+    await controller.goUp();
+    expect(controller.location.path, root);
+    expect(controller.canGoUp, isFalse);
+    await controller.goUp();
+    expect(bridge.listed, isNot(contains('/storage/emulated')));
+  });
   test('loads configured working directory before any child path', () async {
     final bridge = _FakeBridge(directories: {
       '/work': [_dir('/work/src'), _file('/work/main.py')],
@@ -170,8 +274,7 @@ void main() {
     expect(controller.location.path, '/work');
   });
 
-  test('goUp at the working directory root does not escape the mode',
-      () async {
+  test('goUp at the working directory root does not escape the mode', () async {
     final bridge = _FakeBridge(directories: {
       '/work': [],
     });
@@ -207,13 +310,10 @@ void main() {
     await controller.switchMode(FileManagerLocationMode.root);
     expect(controller.location.path, '/');
     expect(controller.location.mode, FileManagerLocationMode.root);
-    // App data entries are pinned to the top (alphabetical within the rank),
-    // then filesystem directories.
+    // Root mode is a virtual list containing only app data roots.
     expect(controller.visibleEntries.map((e) => e.name), [
       'android_data',
       'data',
-      'storage',
-      'system',
     ]);
 
     await controller.switchMode(FileManagerLocationMode.workingDirectory);
@@ -221,8 +321,7 @@ void main() {
     expect(controller.location.mode, FileManagerLocationMode.workingDirectory);
   });
 
-  test('app data root entries are not mutable from the root listing',
-      () async {
+  test('app data root entries are not mutable from the root listing', () async {
     final bridge = _FakeBridge(directories: {
       '/': [],
     });
@@ -250,10 +349,10 @@ void main() {
       configuredWorkingDir: '/work',
       appDataRoots: [
         _namedDir('/data/user/0/com.daozhang.py', 'data'),
-        _namedDir('/storage/emulated/0/Android/data/com.daozhang.py',
-            'android_data'),
-        _namedDir('/storage/emulated/0/Android/obb/com.daozhang.py',
-            'android_obb'),
+        _namedDir(
+            '/storage/emulated/0/Android/data/com.daozhang.py', 'android_data'),
+        _namedDir(
+            '/storage/emulated/0/Android/obb/com.daozhang.py', 'android_obb'),
       ],
     );
 
@@ -271,7 +370,9 @@ void main() {
   test('navigating into app data keeps root mode and back returns to /',
       () async {
     final bridge = _FakeBridge(directories: {
-      '/data/user/0/com.daozhang.py': [_dir('/data/user/0/com.daozhang.py/files')],
+      '/data/user/0/com.daozhang.py': [
+        _dir('/data/user/0/com.daozhang.py/files')
+      ],
     });
     final controller = _controller(
       bridge,
@@ -289,7 +390,7 @@ void main() {
     expect(controller.canGoUp, isTrue);
 
     await controller.goUp();
-    expect(controller.location.path, '/data/user/0');
+    expect(controller.location.path, '/');
     expect(controller.location.mode, FileManagerLocationMode.root);
 
     // Walk back up to /; there goUp is a no-op and the back gesture exits.
@@ -315,8 +416,7 @@ void main() {
     expect(controller.state, FileManagerState.empty);
   });
 
-  test('auto-creates default working directory when nothing exists',
-      () async {
+  test('auto-creates default working directory when nothing exists', () async {
     final bridge = _FakeBridge(directories: {});
     const fallback = '/storage/emulated/0/Download/PythonRunner';
     final controller = _controller(
@@ -492,7 +592,7 @@ void main() {
     bridge.listError = null;
     await controller.switchMode(FileManagerLocationMode.root);
     expect(controller.location.path, '/');
-    expect(controller.state, FileManagerState.ready);
+    expect(controller.state, FileManagerState.empty);
   });
 
   test('read text preview decodes bytes and rejects directories', () async {
@@ -518,8 +618,7 @@ void main() {
     );
   });
 
-  test('stale directory load results are ignored after navigation',
-      () async {
+  test('stale directory load results are ignored after navigation', () async {
     final bridge = _FakeBridge(directories: {
       '/work': [_dir('/work/a')],
       '/work/a': [_file('/work/a/1.py')],

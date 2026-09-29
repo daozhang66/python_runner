@@ -3513,6 +3513,24 @@ abstract class AppLocalizations {
   /// **'Invalid request override configuration'**
   String get invalidOverrideConfig;
 
+  /// No description provided for @sponsorProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Sponsor'**
+  String get sponsorProject;
+
+  /// No description provided for @sponsorProjectDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with WeChat'**
+  String get sponsorProjectDescription;
+
+  /// No description provided for @sponsorQrHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Thank you for your support. Scan with WeChat to sponsor.'**
+  String get sponsorQrHint;
+
   /// No description provided for @appSubtitle.
   ///
   /// In en, this message translates to:
@@ -3584,6 +3602,414 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Android 8.0+ · arm64-v8a'**
   String get architectureRequirementsValue;
+
+  /// No description provided for @mcpSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI / MCP service'**
+  String get mcpSectionTitle;
+
+  /// No description provided for @mcpSectionDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Let authorized external AI clients access scripts, projects, and package tools'**
+  String get mcpSectionDescription;
+
+  /// No description provided for @mcpPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI / MCP Service'**
+  String get mcpPageTitle;
+
+  /// No description provided for @mcpService.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP service'**
+  String get mcpService;
+
+  /// No description provided for @mcpStatusStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get mcpStatusStopped;
+
+  /// No description provided for @mcpStatusStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting...'**
+  String get mcpStatusStarting;
+
+  /// No description provided for @mcpStatusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get mcpStatusRunning;
+
+  /// No description provided for @mcpStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get mcpStatusError;
+
+  /// No description provided for @mcpStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start: {error}'**
+  String mcpStartFailed(Object error);
+
+  /// No description provided for @mcpOverlayPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep-alive notification started; the overlay needs system permission'**
+  String get mcpOverlayPermissionRequired;
+
+  /// No description provided for @mcpKeepAliveUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP started, but keep-alive is unavailable: {error}'**
+  String mcpKeepAliveUnavailable(Object error);
+
+  /// No description provided for @mcpHideOverlayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to hide the overlay: {error}'**
+  String mcpHideOverlayFailed(Object error);
+
+  /// No description provided for @mcpLanUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN URL'**
+  String get mcpLanUrl;
+
+  /// No description provided for @mcpShowKeepAliveOverlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Show keep-alive overlay'**
+  String get mcpShowKeepAliveOverlay;
+
+  /// No description provided for @mcpHideOverlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide overlay'**
+  String get mcpHideOverlay;
+
+  /// No description provided for @mcpConnectionTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices on the same LAN can connect with the LAN URL. Requests must include Authorization: Bearer <token>.'**
+  String get mcpConnectionTokenHint;
+
+  /// No description provided for @mcpConnectionNoTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices on the same LAN can connect with the LAN URL. Token authentication is off, so every device that can reach this port can call it.'**
+  String get mcpConnectionNoTokenHint;
+
+  /// No description provided for @mcpPortRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Port (1024-65535)'**
+  String get mcpPortRange;
+
+  /// No description provided for @mcpRequirePairingToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Require pairing token'**
+  String get mcpRequirePairingToken;
+
+  /// No description provided for @mcpTokenDisabledWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN requests need no token when this is off. Use only on a trusted network'**
+  String get mcpTokenDisabledWarning;
+
+  /// No description provided for @mcpPairingToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing token'**
+  String get mcpPairingToken;
+
+  /// No description provided for @mcpCurrentToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Current token: {hint} (only a fragment is shown for security)'**
+  String mcpCurrentToken(Object hint);
+
+  /// No description provided for @mcpTokenGenerated.
+  ///
+  /// In en, this message translates to:
+  /// **'generated'**
+  String get mcpTokenGenerated;
+
+  /// No description provided for @mcpNoTokenYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No token yet; one can be generated after authentication is enabled'**
+  String get mcpNoTokenYet;
+
+  /// No description provided for @mcpRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate'**
+  String get mcpRegenerate;
+
+  /// No description provided for @mcpRegenerateTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The old token stops working immediately. The token is shown only once, so copy it promptly.'**
+  String get mcpRegenerateTokenHint;
+
+  /// No description provided for @mcpToolPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool permissions'**
+  String get mcpToolPermissions;
+
+  /// No description provided for @mcpToolPermissionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorized operations run directly without per-call confirmation. Enable run and delete permissions only as needed.'**
+  String get mcpToolPermissionsHint;
+
+  /// No description provided for @mcpPermissionReadScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'Read scripts'**
+  String get mcpPermissionReadScripts;
+
+  /// No description provided for @mcpPermissionWriteScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'Create or modify scripts'**
+  String get mcpPermissionWriteScripts;
+
+  /// No description provided for @mcpPermissionReadProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Read projects'**
+  String get mcpPermissionReadProjects;
+
+  /// No description provided for @mcpPermissionWriteProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Create projects or modify project files'**
+  String get mcpPermissionWriteProjects;
+
+  /// No description provided for @mcpPermissionReadNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Query network records'**
+  String get mcpPermissionReadNetwork;
+
+  /// No description provided for @mcpPermissionReadPackages.
+  ///
+  /// In en, this message translates to:
+  /// **'Query installed packages'**
+  String get mcpPermissionReadPackages;
+
+  /// No description provided for @mcpPermissionInstallPackages.
+  ///
+  /// In en, this message translates to:
+  /// **'Install packages'**
+  String get mcpPermissionInstallPackages;
+
+  /// No description provided for @mcpPermissionRunScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'Run scripts, interactive input, output, and stop'**
+  String get mcpPermissionRunScripts;
+
+  /// No description provided for @mcpPermissionWriteFilesystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Create directories, rename, or save files'**
+  String get mcpPermissionWriteFilesystem;
+
+  /// No description provided for @mcpPermissionDeleteFilesystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files or empty directories'**
+  String get mcpPermissionDeleteFilesystem;
+
+  /// No description provided for @mcpPermissionReadFilesystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Read accessible files'**
+  String get mcpPermissionReadFilesystem;
+
+  /// No description provided for @mcpCurrentConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Current connections'**
+  String get mcpCurrentConnections;
+
+  /// No description provided for @mcpSessionsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} sessions'**
+  String mcpSessionsCount(int count);
+
+  /// No description provided for @mcpNoConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'No connections. External AI clients appear here after initialize completes.'**
+  String get mcpNoConnections;
+
+  /// No description provided for @mcpSessionSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Session {id}... · Protocol {version}'**
+  String mcpSessionSummary(Object id, Object version);
+
+  /// No description provided for @mcpDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get mcpDisconnect;
+
+  /// No description provided for @mcpAuditLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Audit log'**
+  String get mcpAuditLog;
+
+  /// No description provided for @mcpRecentToolCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recent tool calls'**
+  String mcpRecentToolCalls(int count);
+
+  /// No description provided for @mcpClearAuditLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear audit log'**
+  String get mcpClearAuditLog;
+
+  /// No description provided for @mcpNoAuditRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'No records yet. Connections and tool calls are recorded here without tokens or sensitive content.'**
+  String get mcpNoAuditRecords;
+
+  /// No description provided for @mcpAuditToolCall.
+  ///
+  /// In en, this message translates to:
+  /// **'{client} called {tool} ({duration} ms)'**
+  String mcpAuditToolCall(Object client, Object tool, int duration);
+
+  /// No description provided for @mcpAuditToolCallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{client} called {tool}; failed: {error}'**
+  String mcpAuditToolCallFailed(Object client, Object tool, Object error);
+
+  /// No description provided for @mcpAuditConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'{client} connected'**
+  String mcpAuditConnect(Object client);
+
+  /// No description provided for @mcpAuditDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'{client} disconnected'**
+  String mcpAuditDisconnect(Object client);
+
+  /// No description provided for @mcpAuditServer.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP service {status} {details}'**
+  String mcpAuditServer(Object status, Object details);
+
+  /// No description provided for @mcpPortSavedNextStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Port saved; it takes effect the next time the service starts'**
+  String get mcpPortSavedNextStart;
+
+  /// No description provided for @mcpInvalidPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid port (1024-65535 required)'**
+  String get mcpInvalidPort;
+
+  /// No description provided for @mcpRegenerateTokenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate pairing token'**
+  String get mcpRegenerateTokenTitle;
+
+  /// No description provided for @mcpRegenerateTokenConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'The old token will stop working immediately and connected AI clients must update it. Continue?'**
+  String get mcpRegenerateTokenConfirm;
+
+  /// No description provided for @mcpGenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate'**
+  String get mcpGenerate;
+
+  /// No description provided for @mcpNewTokenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New token (shown once)'**
+  String get mcpNewTokenTitle;
+
+  /// No description provided for @mcpCopyToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy token'**
+  String get mcpCopyToken;
+
+  /// No description provided for @mcpCopiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard'**
+  String get mcpCopiedToClipboard;
+
+  /// No description provided for @mcpConfirmationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI requested an operation'**
+  String get mcpConfirmationTitle;
+
+  /// No description provided for @mcpConfirmationClient.
+  ///
+  /// In en, this message translates to:
+  /// **'From: {client}'**
+  String mcpConfirmationClient(Object client);
+
+  /// No description provided for @mcpConfirmationAutoDeny.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically denied in {seconds} seconds if not handled'**
+  String mcpConfirmationAutoDeny(int seconds);
+
+  /// No description provided for @mcpConfirmationAutoDenySoon.
+  ///
+  /// In en, this message translates to:
+  /// **'About to be denied automatically...'**
+  String get mcpConfirmationAutoDenySoon;
+
+  /// No description provided for @mcpDeny.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny'**
+  String get mcpDeny;
+
+  /// No description provided for @mcpAllowSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow for this session'**
+  String get mcpAllowSession;
+
+  /// No description provided for @mcpAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get mcpAllow;
 }
 
 class _AppLocalizationsDelegate

@@ -15,7 +15,7 @@ String _trackedSource(String root, String path) {
 }
 
 void main() {
-  test('production sources contain no floating ball implementation', () {
+  test('legacy script floating ball stays removed; MCP overlay is opt-in', () {
     final root = Directory.current.path;
     final manifest = File('$root/android/app/src/main/AndroidManifest.xml')
         .readAsStringSync();
@@ -40,10 +40,21 @@ void main() {
       final normalized = source.toLowerCase();
       expect(normalized, isNot(contains('floatingball')));
       expect(normalized, isNot(contains('floating_ball')));
-      expect(normalized, isNot(contains('system_alert_window')));
       expect(normalized, isNot(contains('checkoverlaypermission')));
       expect(normalized, isNot(contains('consumependingrunscript')));
     }
+    expect(manifest, contains('android.permission.SYSTEM_ALERT_WINDOW'));
+    expect(
+        manifest,
+        contains(
+            'android:name=".McpKeepAliveService" android:exported="false"'));
+    final keepAlive = File(
+            '$root/android/app/src/main/kotlin/com/daozhang/py/McpKeepAliveService.kt')
+        .readAsStringSync();
+    expect(keepAlive, contains('Settings.canDrawOverlays'));
+    expect(keepAlive, contains('START_NOT_STICKY'));
+    expect(keepAlive, contains('handler.postDelayed(expire, LEASE_MS)'));
+    expect(keepAlive, contains('removeOverlay()'));
 
     expect(
       File('$root/android/app/src/main/kotlin/com/daozhang/py/FloatingBallService.kt')
