@@ -4,83 +4,83 @@
 
 # Python Runner
 
-**Android 端 Python 脚本运行器 —— 写脚本、跑脚本、管依赖、连 AI**
+**Python script runner for Android — write, run, manage dependencies, and connect AI**
 
-[![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/daozhang66/python_runner/releases/latest)
+[![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=release)](https://github.com/daozhang66/python_runner/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/daozhang66/python_runner/ci.yml?branch=main&label=CI)](https://github.com/daozhang66/python_runner/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://www.android.com)
 [![Stars](https://img.shields.io/github/stars/daozhang66/python_runner?style=social)](https://github.com/daozhang66/python_runner/stargazers)
 
-[English](./README_en.md) | 简体中文
+[简体中文](./README_zh.md) | English
 
-**[⬇️ 下载最新版](https://github.com/daozhang66/python_runner/releases/latest)** · [🤖 MCP 接入](#-mcp-接入) · [🛠 从源码构建](#-从源码构建)
+**[⬇️ Download latest](https://github.com/daozhang66/python_runner/releases/latest)** · [🤖 MCP setup](#-mcp-setup) · [🛠 Build from source](#-build-from-source)
 
 </div>
 
 ---
 
-## ✨ 功能一览
+## ✨ Features at a Glance
 
-| | 功能 | 说明 |
+| | Feature | Description |
 |---|---|---|
-| 📝 | **脚本管理** | 新建 / 编辑 / 分组 / 置顶 / 批量操作，列表与宫格双视图 |
-| 📁 | **文件管理** | 浏览应用与项目目录，高亮查看、编辑并保存代码文件 |
-| 🖥️ | **全屏终端** | 实时 stdout / stderr，`input()` 交互，日志搜索与错误过滤 |
-| 📚 | **库管理** | pip 安装 / 卸载、指定版本、自定义 PyPI 源、孤儿依赖清理 |
-| ⚙️ | **双运行时** | Chaquopy 轻量快速；Linux-like（Debian + proot）兼容性更强 |
-| 🌐 | **网络调试** | 自动记录 Python HTTP 请求，支持详情查看与全局请求覆盖 |
-| 🤖 | **MCP 服务** | 外部 AI 通过 MCP 协议远程操作脚本，本机全程可控 |
-| 🩺 | **日志诊断** | 应用日志跨重启保留，崩溃与脚本错误记录，一键导出 |
+| 📝 | **Script management** | Create / edit / group / pin / batch actions, list & grid views |
+| 📁 | **File manager** | Browse app and project directories, view, edit and save code with highlighting |
+| 🖥️ | **Full-screen terminal** | Live stdout / stderr, `input()` interaction, log search and error filtering |
+| 📚 | **Package manager** | pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup |
+| ⚙️ | **Dual runtime** | Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility |
+| 🌐 | **Network inspector** | Automatically records Python HTTP requests with global request overrides |
+| 🤖 | **MCP server** | External AI clients operate your scripts remotely through MCP |
+| 🩺 | **Logs & diagnostics** | App logs persist across restarts, crash and script error reports, one-tap export |
 
-## 🤖 MCP 接入
+## 🤖 MCP Setup
 
-Python Runner 内置 MCP（Model Context Protocol）服务器，Claude Desktop、Cursor 等外部 AI 客户端可以通过标准 MCP 协议直接操作 App：
+Python Runner ships with a built-in MCP (Model Context Protocol) server, so external AI clients such as Claude Desktop or Cursor can operate the app through the standard MCP protocol:
 
-- 📖 **读写脚本**：创建脚本、读取与修改代码、保存文件
-- ▶️ **运行**：运行脚本或项目型脚本组，支持交互式 `input()`
-- 📦 **装库**：查询与安装 Python 包
-- 🌐 **网络记录**：查看脚本的网络请求记录
+- 📖 **Read & write scripts**: create scripts, read and modify code, save files
+- ▶️ **Run**: execute scripts or project groups with interactive `input()` support
+- 📦 **Packages**: query and install Python packages
+- 🌐 **Network records**: inspect network requests made by your scripts
 
-安全机制：**令牌鉴权**、**敏感操作二次确认**、**敏感信息脱敏**、**全程审计日志**，每一步都在你的掌控之中。
+Safety by design: **token authentication**, **confirmation for sensitive operations**, **sensitive data redaction**, and **full audit logging** — you stay in control of every step.
 
-在应用的 **设置 → MCP** 中开启服务后，将以下配置加入你的 AI 客户端：
+Enable the server in **Settings → MCP**, then add the following to your AI client configuration:
 
 ```json
 {
   "mcpServers": {
     "python-runner": {
       "type": "http",
-      "url": "http://<手机IP>:37891/mcp",
+      "url": "http://<phone-ip>:37891/mcp",
       "headers": {
-        "Authorization": "Bearer <在 MCP 设置页生成的访问令牌>"
+        "Authorization": "Bearer <token generated on the MCP settings page>"
       }
     }
   }
 }
 ```
 
-## 🚀 快速开始
+## 🚀 Getting Started
 
-1. 从 [Releases](https://github.com/daozhang66/python_runner/releases/latest) 下载并安装 APK
-2. 新建一个脚本，选择 **Chaquopy** 运行时，开箱即跑
-3. 需要更复杂的依赖？到 **设置 → 运行环境** 安装 Linux-like 环境（Debian + proot）
+1. Download and install the latest APK from [Releases](https://github.com/daozhang66/python_runner/releases/latest)
+2. Create a script and run it with the **Chaquopy** runtime — no setup required
+3. Need heavier dependencies? Install the Linux-like environment (Debian + proot) under **Settings → Runtime**
 
-## ⚙️ 双运行时
+## ⚙️ Dual Runtime
 
 | | Chaquopy | Linux-like |
 |---|---|---|
-| 环境 | 内置于 APK，开箱即用 | Debian rootfs + proot |
-| 启动速度 | ⚡ 快 | 稍慢，首次需安装环境 |
-| pip 包 | 常用纯 Python 包为主 | 兼容性更强，支持更多系统依赖 |
-| 项目型脚本组 | — | ✅ 支持项目内文件浏览与模块导入 |
+| Environment | Bundled in the APK, works out of the box | Debian rootfs + proot |
+| Startup speed | ⚡ Fast | Slower, first-time environment install required |
+| pip packages | Best for common pure-Python packages | Stronger compatibility, more system dependencies |
+| Project script groups | — | ✅ In-project file browsing and module imports |
 
-## 🌐 网络调试
+## 🌐 Network Inspector
 
-自动记录 `requests`、`httpx`、`urllib`、`aiohttp`、`socket` 等常见 Python HTTP 请求，支持 URL / 域名搜索、请求详情、JSON 树查看与统计摘要，还可为脚本配置全局 UA / Cookie / Header / 超时 / 重定向覆盖。
+Automatically records HTTP requests made through `requests`, `httpx`, `urllib`, `aiohttp`, `socket` and more, with URL / host search, request details, JSON tree views and summary statistics. Global overrides for UA / Cookie / Headers / timeout / redirect policy can be applied to your scripts.
 
-## 🛠 从源码构建
+## 🛠 Build from Source
 
 ```bash
 git clone https://github.com/daozhang66/python_runner.git
@@ -89,10 +89,10 @@ flutter pub get
 flutter build apk --release
 ```
 
-> 需要 Flutter stable 与 Android SDK，APK 输出在 `build/app/outputs/flutter-apk/`。
+> Requires Flutter stable and the Android SDK. The APK is output to `build/app/outputs/flutter-apk/`.
 
-## 📄 许可证
+## 📄 License
 
 [MIT](./LICENSE) © 2025 daozhang66
 
-> 本项目由 **Claude Code / Codex** 辅助开发
+> Developed with **Claude Code / Codex** (AI coding assistant)
