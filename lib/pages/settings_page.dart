@@ -18,6 +18,7 @@ import '../providers/app_locale_provider.dart';
 import '../providers/infrastructure_providers.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/app_dialogs.dart';
+import '../ui/app_settings_section.dart';
 import '../features/mcp/presentation/pages/mcp_settings_page.dart';
 import 'update_log_page.dart';
 import 'theme_settings_page.dart';
@@ -85,7 +86,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _buildMcpSection(),
               _buildDiagnosticsSection(),
               _buildAboutSection(),
-            ]),
+            ]
+                .map((section) => Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: section,
+                      ),
+                    ))
+                .toList()),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
         ],

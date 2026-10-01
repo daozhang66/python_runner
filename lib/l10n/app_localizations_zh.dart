@@ -1972,30 +1972,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mcpPortRange => '端口（1024-65535）';
 
   @override
-  String get mcpRequirePairingToken => '要求配对令牌';
+  String get mcpRequirePairingToken => '启用密钥认证';
 
   @override
-  String get mcpTokenDisabledWarning => '关闭后局域网请求无需令牌，请确认网络可信';
+  String get mcpTokenDisabledWarning => '关闭后局域网请求无需密钥，请确认网络可信';
 
   @override
-  String get mcpPairingToken => '配对令牌';
+  String get mcpPairingToken => '配对密钥';
 
   @override
   String mcpCurrentToken(Object hint) {
-    return '当前令牌：$hint（出于安全只显示片段）';
+    return '当前密钥：$hint';
   }
 
   @override
   String get mcpTokenGenerated => '已生成';
 
   @override
-  String get mcpNoTokenYet => '尚未生成令牌；开启认证后可生成';
+  String get mcpNoTokenYet => '尚未生成密钥';
 
   @override
   String get mcpRegenerate => '重新生成';
 
   @override
-  String get mcpRegenerateTokenHint => '重新生成后旧令牌立即失效；令牌只显示一次，请及时复制。';
+  String get mcpRegenerateTokenHint => '密钥可随时查看和复制。更新后，旧密钥立即失效，已连接客户端需更新配置。';
+
+  @override
+  String get mcpCustomToken => '自定义密钥';
+
+  @override
+  String get mcpCustomTokenValidation =>
+      '使用 16–256 个英文字母、数字或 . _ ~ + / -，末尾可带 =。';
+
+  @override
+  String get mcpTokenSaved => '密钥已保存';
+
+  @override
+  String get mcpTokenSaveFailed => '密钥保存失败，原密钥未更改，请重试';
+
+  @override
+  String get mcpTokenStorageError => '无法读取密钥存储，请重试';
+
+  @override
+  String get mcpLegacyTokenHint =>
+      '旧版本仅保存了摘要，无法还原完整密钥。可在自定义密钥中输入原密钥恢复显示，或重新生成。';
 
   @override
   String get mcpToolPermissions => '工具权限';
@@ -2101,19 +2121,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mcpInvalidPort => '端口无效（需 1024-65535）';
 
   @override
-  String get mcpRegenerateTokenTitle => '重新生成配对令牌';
+  String get mcpRegenerateTokenTitle => '重新生成配对密钥';
 
   @override
-  String get mcpRegenerateTokenConfirm => '旧令牌将立即失效，已连接的外部 AI 客户端需要更新令牌。继续吗？';
+  String get mcpRegenerateTokenConfirm =>
+      '更换后旧密钥将立即失效，已连接的外部 AI 客户端需要更新密钥。继续吗？';
 
   @override
   String get mcpGenerate => '生成';
 
   @override
-  String get mcpNewTokenTitle => '新令牌（仅显示一次）';
+  String get mcpNewTokenTitle => '新密钥';
 
   @override
-  String get mcpCopyToken => '复制令牌';
+  String get mcpCopyToken => '复制密钥';
 
   @override
   String get mcpCopiedToClipboard => '已复制到剪贴板';

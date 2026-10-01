@@ -95,7 +95,7 @@ final mcpOperationRegistryProvider = Provider<McpOperationRegistry>((ref) {
   return McpOperationRegistry();
 });
 
-final mcpTokenStoreProvider = Provider<McpTokenStore>((ref) {
+final mcpTokenStoreProvider = ChangeNotifierProvider<McpTokenStore>((ref) {
   return McpTokenStore(preferences: ref.watch(sharedPreferencesProvider));
 });
 
@@ -249,8 +249,9 @@ class McpServerController extends Notifier<McpServerState> {
     }
     state = state.copyWith(status: McpServerStatus.starting, clearNotice: true);
     try {
-      if (requireToken && !_tokens.hasToken) {
-        await _tokens.regenerate();
+      if (requireToken) {
+        await _tokens.initialize();
+        if (!_tokens.hasToken) await _tokens.regenerate();
       }
       final adapter = ref.read(mcpServerAdapterProvider)
         ..acceptingRequests = true;
@@ -373,10 +374,22 @@ class McpServerController extends Notifier<McpServerState> {
   /// 重新生成配对令牌；旧令牌立即失效（计划 §8.2）。
   Future<String> regenerateToken() async {
     final token = await _tokens.regenerate();
+    _invalidateTokenSessions();
+    return token;
+  }
+
+  Future<String> setCustomToken(String value) async {
+    await _tokens.initialize();
+    final unchanged = _tokens.verify(value);
+    final token = await _tokens.setCustomToken(value);
+    if (!unchanged) _invalidateTokenSessions();
+    return token;
+  }
+
+  void _invalidateTokenSessions() {
     ref.read(mcpSessionStoreProvider).clearAll();
     ref.read(mcpConfirmationServiceProvider).denyAll();
     ref.read(mcpPolicyProvider).resetRateCounters();
-    return token;
   }
 
   /// Changes local transport authentication. Restarting the service applies

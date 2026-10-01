@@ -5,6 +5,12 @@ part of 'script_list_page.dart';
 // Script workspace content stays in the presentation library for focused ownership.
 
 extension _ScriptListContent on _ScriptListPageState {
+  EdgeInsets get _browsePadding =>
+      EdgeInsets.fromLTRB(12, 6, 12, 12 + MediaQuery.paddingOf(context).bottom);
+
+  EdgeInsets get _reorderPadding =>
+      EdgeInsets.only(top: 4, bottom: 4 + MediaQuery.paddingOf(context).bottom);
+
   Widget _buildWorkspaceBody({
     required ScriptWorkspaceController controller,
     required List<dynamic> scripts,
@@ -131,7 +137,7 @@ extension _ScriptListContent on _ScriptListPageState {
     List<dynamic> scripts,
     bool showFolderHome,
   ) {
-    final padding = const EdgeInsets.fromLTRB(12, 6, 12, 12);
+    final padding = _browsePadding;
     final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: AppBreakpoints.scriptGridColumns(context),
       childAspectRatio: 1.44,
@@ -454,7 +460,7 @@ extension _ScriptListContent on _ScriptListPageState {
 
     if (_isGridView) {
       return GridView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+        padding: _browsePadding,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: AppBreakpoints.scriptGridColumns(context),
           childAspectRatio: 1.44,
@@ -502,7 +508,7 @@ extension _ScriptListContent on _ScriptListPageState {
           }
           return _homeItemExtent(recentItems[index - firstRecentIndex]);
         },
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: _reorderPadding,
         itemCount: itemCount,
         itemBuilder: (context, index) {
           if (index < firstFolderIndex) {
@@ -543,7 +549,7 @@ extension _ScriptListContent on _ScriptListPageState {
         }
         return _homeItemExtent(recentItems[index - firstRecentIndex]);
       },
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: _reorderPadding,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index < firstFolderIndex) {
@@ -973,7 +979,7 @@ extension _ScriptListContent on _ScriptListPageState {
       return ListView.builder(
         itemExtentBuilder: (_, __) =>
             _ScriptListPageState._scriptListItemExtent,
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: _reorderPadding,
         itemCount: scripts.length,
         itemBuilder: (context, index) => buildItem(index),
       );
@@ -981,7 +987,7 @@ extension _ScriptListContent on _ScriptListPageState {
 
     return ListView.builder(
       itemExtentBuilder: (_, __) => _ScriptListPageState._scriptListItemExtent,
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: _reorderPadding,
       itemCount: scripts.length,
       itemBuilder: (context, index) => buildItem(index),
     );
@@ -1183,7 +1189,7 @@ extension _ScriptListContent on _ScriptListPageState {
       return GridView.builder(
         key: _gridViewKey,
         controller: _gridScrollController,
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+        padding: _browsePadding,
         gridDelegate: gridDelegate,
         itemCount: scripts.length,
         itemBuilder: (context, index) => buildStaticGridItem(index),
@@ -1201,7 +1207,7 @@ extension _ScriptListContent on _ScriptListPageState {
         return GridView(
           key: _gridViewKey,
           controller: _gridScrollController,
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+          padding: _browsePadding,
           gridDelegate: gridDelegate,
           children: children,
         );

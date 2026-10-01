@@ -4,6 +4,7 @@ import android.os.Handler
 import com.chaquo.python.Python
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class RuntimeInfoController(
     private val filesDir: File,
@@ -39,6 +40,58 @@ class RuntimeInfoController(
                 }
             }
         }.also { it.name = "py-info-pigeon"; it.start() }
+    }
+
+    fun getLinuxLikePythonInfo(result: MethodChannel.Result) {
+        Thread {
+            try {
+                val runtime = linuxLikeRuntimeManager.getInfo()
+                val info = mutableMapOf(
+                    "pythonVersion" to "",
+                    "sitePackages" to runtime["userSitePackagesDir"].orEmpty(),
+                    "pythonPath" to runtime["pythonPath"].orEmpty()
+                )
+                if (runtime["available"] == "true") {
+                    info["pythonVersion"] = loadLinuxLikePythonVersion()
+                }
+                mainHandler.post { result.success(info) }
+            } catch (e: Exception) {
+                mainHandler.post { result.error("1014", "Failed to read Linux-like Python info: ${e.message}", null) }
+            }
+        }.also { it.name = "linux-like-py-info"; it.start() }
+    }
+
+    private fun loadLinuxLikePythonVersion(): String {
+        val output = File.createTempFile("python-version-", ".txt", filesDir)
+        var process: Process? = null
+        var tempDir: String? = null
+        try {
+            val builder = ProcessBuilder(
+                linuxLikeRuntimeManager.buildPythonInlineCommand(
+                    "import sys; print(sys.version.splitlines()[0])"
+                )
+            )
+            linuxLikeRuntimeManager.applyHostEnvironment(builder.environment())
+            tempDir = builder.environment()["PROOT_TMP_DIR"]
+            builder.redirectOutput(output)
+            builder.redirectError(File("/dev/null"))
+            val running = builder.start()
+            process = running
+            // Bound the probe independently of script execution and package operations.
+            if (!running.waitFor(5, TimeUnit.SECONDS) || running.exitValue() != 0) {
+                return ""
+            }
+            return output.readText().trim()
+        } finally {
+            process?.let {
+                if (it.isAlive) {
+                    it.destroyForcibly()
+                    it.waitFor()
+                }
+            }
+            output.delete()
+            linuxLikeRuntimeManager.cleanupExecutionTempDir(tempDir)
+        }
     }
 
     fun getLinuxLikeRuntimeInfo(result: MethodChannel.Result) {

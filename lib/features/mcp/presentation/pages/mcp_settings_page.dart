@@ -1,18 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../l10n/app_localizations.dart';
+import '../../../../ui/app_settings_section.dart';
 import '../../application/mcp_policy_service.dart';
 import '../../application/mcp_server_controller.dart';
 import '../../domain/mcp_permission.dart';
 import '../../infrastructure/mcp_audit_log.dart';
 import '../../infrastructure/mcp_session_store.dart';
-import '../../../../l10n/app_localizations.dart';
+import '../../infrastructure/mcp_token_store.dart';
 
-/// AI / MCP 服务设置页（计划 §11）。
-///
-/// 服务开关、状态、端口、连接方式、可选配对令牌、权限、连接数、
-/// 最近工具调用与审计日志。
 class McpSettingsPage extends ConsumerStatefulWidget {
   const McpSettingsPage({super.key});
 
@@ -25,20 +25,29 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
   final List<Listenable> _watchedServices = [];
   bool _portInitialized = false;
   bool _toggling = false;
+  bool _savingToken = false;
   List<String> _lanUrls = const [];
   bool _lanRefreshScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    final services = [
+    for (final service in [
       ref.read(mcpAuditLogProvider),
       ref.read(mcpSessionStoreProvider),
       ref.read(mcpConfirmationServiceProvider),
-    ];
-    for (final service in services) {
+    ]) {
       service.addListener(_onServiceChanged);
       _watchedServices.add(service);
+    }
+    unawaited(_loadToken());
+  }
+
+  Future<void> _loadToken() async {
+    try {
+      await ref.read(mcpTokenStoreProvider).initialize();
+    } catch (_) {
+      // The observable store exposes a retryable, non-sensitive error state.
     }
   }
 
@@ -59,6 +68,8 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     try {
       final urls = await ref.read(mcpServerControllerProvider.notifier).lanUrls;
       if (mounted) setState(() => _lanUrls = urls);
+    } catch (_) {
+      // Loopback remains available if the platform cannot enumerate interfaces.
     } finally {
       _lanRefreshScheduled = false;
     }
@@ -67,6 +78,7 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(mcpServerControllerProvider);
+    final tokens = ref.watch(mcpTokenStoreProvider);
     final sessions = ref.watch(mcpSessionStoreProvider);
     if (!_portInitialized) {
       _portController.text = state.port.toString();
@@ -76,463 +88,288 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
         _lanUrls.isEmpty &&
         !_lanRefreshScheduled) {
       _lanRefreshScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLanUrls());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_refreshLanUrls());
+      });
     }
-
     final l10n = AppLocalizations.of(context)!;
-
     return Scaffold(
       appBar: AppBar(title: Text(l10n.mcpPageTitle)),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          _buildServiceCard(context, state),
-          _buildTokenCard(context),
-          _buildPermissionCard(context),
-          _buildSessionsCard(context, sessions),
-          _buildAuditCard(context),
-          const SizedBox(height: 24),
-        ],
-      ),
+      body: LayoutBuilder(builder: (context, constraints) {
+        final inset =
+            ((constraints.maxWidth - 760) / 2).clamp(0.0, double.infinity);
+        return ListView(
+          padding: EdgeInsets.symmetric(horizontal: inset, vertical: 8),
+          children: [
+            _buildServiceSection(state),
+            _buildTokenSection(tokens),
+            _buildPermissionSection(),
+            _buildSessionsSection(sessions),
+            _buildAuditSection(),
+            const SizedBox(height: 24),
+          ],
+        );
+      }),
     );
   }
 
-  // ── 服务状态 ──
+  Widget _section(IconData icon, String title, List<Widget> children) =>
+      AppSettingsSection(
+        framed: true,
+        icon: icon,
+        title: title,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        children: children,
+      );
 
-  Widget _buildServiceCard(BuildContext context, McpServerState state) {
+  Widget _buildServiceSection(McpServerState state) {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final running = state.status == McpServerStatus.running;
+    final busy = _toggling || state.status == McpServerStatus.starting;
     final statusLabel = switch (state.status) {
       McpServerStatus.stopped => l10n.mcpStatusStopped,
       McpServerStatus.starting => l10n.mcpStatusStarting,
       McpServerStatus.running => l10n.mcpStatusRunning,
       McpServerStatus.error => l10n.mcpStatusError,
     };
-    final statusColor = switch (state.status) {
-      McpServerStatus.running => Colors.green,
-      McpServerStatus.starting => Colors.orange,
-      McpServerStatus.error => colors.error,
-      _ => colors.outline,
-    };
-    final noticeText = _noticeText(l10n, state);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.smart_toy_outlined, size: 20, color: colors.primary),
-                const SizedBox(width: 10),
-                Text(l10n.mcpService,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-                const Spacer(),
-                if (_toggling)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Switch(
-                    value: running,
-                    onChanged: (_) => _toggleService(),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.circle, size: 10, color: statusColor),
-                const SizedBox(width: 6),
-                Text(statusLabel),
-                if (noticeText != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      noticeText,
-                      style: TextStyle(fontSize: 12, color: colors.error),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (running) ...[
-              const Divider(height: 24),
-              _buildCopyRow(
-                  context, 'MCP URL', 'http://127.0.0.1:${state.port}/mcp'),
-              for (final url in _lanUrls)
-                _buildCopyRow(context, l10n.mcpLanUrl, url),
-              Wrap(children: [
-                TextButton.icon(
-                  icon: const Icon(Icons.picture_in_picture_alt),
-                  label: Text(l10n.mcpShowKeepAliveOverlay),
-                  onPressed: () => ref
-                      .read(mcpServerControllerProvider.notifier)
-                      .refreshKeepAlive(
-                          requestPermission: true, showOverlay: true),
-                ),
-                TextButton.icon(
-                  icon: const Icon(Icons.visibility_off_outlined),
-                  label: Text(l10n.mcpHideOverlay),
-                  onPressed: () => ref
-                      .read(mcpServerControllerProvider.notifier)
-                      .hideOverlay(),
-                )
-              ]),
-              const SizedBox(height: 4),
-              Text(
-                state.requireToken
-                    ? l10n.mcpConnectionTokenHint
-                    : l10n.mcpConnectionNoTokenHint,
-                style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-              ),
-            ],
-            const Divider(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _portController,
-                    keyboardType: TextInputType.number,
-                    enabled: !running,
-                    decoration: InputDecoration(
-                      labelText: l10n.mcpPortRange,
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: running ? null : () => _savePort(),
-                  child: Text(l10n.save),
-                ),
-              ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.mcpRequirePairingToken,
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(l10n.mcpTokenDisabledWarning,
-                  style: TextStyle(fontSize: 11)),
-              value: state.requireToken,
-              onChanged: (value) => ref
-                  .read(mcpServerControllerProvider.notifier)
-                  .setRequireToken(value),
-            ),
-          ],
-        ),
+    final notice = _noticeText(l10n, state);
+    return _section(Icons.smart_toy_outlined, l10n.mcpService, [
+      SwitchListTile(
+        key: const ValueKey('mcp-service-switch'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.mcpService),
+        subtitle: Text(statusLabel),
+        value: running,
+        onChanged: busy ? null : (_) => _toggleService(),
       ),
-    );
+      if (busy) const LinearProgressIndicator(minHeight: 2),
+      if (notice != null)
+        Text(notice, style: TextStyle(color: colors.error, fontSize: 12)),
+      if (running) ...[
+        const SizedBox(height: 8),
+        _buildCopyRow('MCP URL', 'http://127.0.0.1:${state.port}/mcp'),
+        for (final url in _lanUrls) _buildCopyRow(l10n.mcpLanUrl, url),
+        Wrap(spacing: 4, runSpacing: 4, children: [
+          TextButton.icon(
+            icon: const Icon(Icons.picture_in_picture_alt),
+            label: Text(l10n.mcpShowKeepAliveOverlay),
+            onPressed: () => ref
+                .read(mcpServerControllerProvider.notifier)
+                .refreshKeepAlive(requestPermission: true, showOverlay: true),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.visibility_off_outlined),
+            label: Text(l10n.mcpHideOverlay),
+            onPressed: () =>
+                ref.read(mcpServerControllerProvider.notifier).hideOverlay(),
+          ),
+        ]),
+        Text(
+          state.requireToken
+              ? l10n.mcpConnectionTokenHint
+              : l10n.mcpConnectionNoTokenHint,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(
+            child: TextField(
+          controller: _portController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          enabled: !running && !busy,
+          decoration:
+              InputDecoration(labelText: l10n.mcpPortRange, isDense: true),
+        )),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: running || busy ? null : _savePort,
+          tooltip: l10n.save,
+          icon: const Icon(Icons.save_outlined),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      SwitchListTile(
+        key: const ValueKey('mcp-auth-switch'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.mcpRequirePairingToken),
+        subtitle: Text(l10n.mcpTokenDisabledWarning),
+        value: state.requireToken,
+        onChanged: busy ? null : _setRequireToken,
+      ),
+    ]);
   }
 
-  Widget _buildCopyRow(BuildContext context, String label, String value) {
-    final colors = Theme.of(context).colorScheme;
+  Widget _buildCopyRow(String label, String value) {
     final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 96,
-            child: Text(label,
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy, size: 16),
-            tooltip: l10n.copy,
-            onPressed: () => _copyToClipboard(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── 配对令牌 ──
-
-  Widget _buildTokenCard(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context)!;
-    final tokens = ref.watch(mcpTokenStoreProvider);
-    final controller = ref.read(mcpServerControllerProvider.notifier);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      child: Row(children: [
+        Expanded(
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.key_outlined, size: 20, color: colors.primary),
-                const SizedBox(width: 10),
-                Text(l10n.mcpPairingToken,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              tokens.hasToken
-                  ? l10n.mcpCurrentToken(
-                      tokens.tokenHint ?? l10n.mcpTokenGenerated)
-                  : l10n.mcpNoTokenYet,
-              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: () => _regenerateToken(controller),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(l10n.mcpRegenerate),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.mcpRegenerateTokenHint,
-                    style:
-                        TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-              ],
-            ),
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            SelectableText(value, style: const TextStyle(fontSize: 13)),
           ],
+        )),
+        IconButton(
+          icon: const Icon(Icons.copy, size: 20),
+          tooltip: l10n.copy,
+          onPressed: () => _copyToClipboard(value),
         ),
-      ),
+      ]),
     );
   }
 
-  // ── 权限 ──
+  Widget _buildTokenSection(McpTokenStore tokens) {
+    final l10n = AppLocalizations.of(context)!;
+    final ready = tokens.isInitialized && !_savingToken;
+    return _section(Icons.key_outlined, l10n.mcpPairingToken, [
+      if (tokens.token != null)
+        SelectableText(
+          tokens.token!,
+          key: const ValueKey('mcp-token-value'),
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        )
+      else
+        Text(tokens.loadFailed
+            ? l10n.mcpTokenStorageError
+            : !tokens.isInitialized
+                ? l10n.loading
+                : tokens.isLegacyToken
+                    ? l10n.mcpLegacyTokenHint
+                    : l10n.mcpNoTokenYet),
+      if (tokens.loadFailed)
+        Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _loadToken,
+              icon: const Icon(Icons.refresh),
+              label: Text(l10n.retry),
+            )),
+      const SizedBox(height: 12),
+      Wrap(spacing: 8, runSpacing: 4, children: [
+        FilledButton.tonalIcon(
+          key: const ValueKey('mcp-regenerate-token'),
+          onPressed: ready ? _regenerateToken : null,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: Text(tokens.hasToken ? l10n.mcpRegenerate : l10n.mcpGenerate),
+        ),
+        OutlinedButton.icon(
+          key: const ValueKey('mcp-custom-token'),
+          onPressed: ready ? _editToken : null,
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: Text(l10n.mcpCustomToken),
+        ),
+        IconButton(
+          key: const ValueKey('mcp-copy-token'),
+          onPressed: tokens.token == null
+              ? null
+              : () => _copyToClipboard(tokens.token!),
+          tooltip: l10n.mcpCopyToken,
+          icon: const Icon(Icons.copy_outlined),
+        ),
+      ]),
+      if (_savingToken) const LinearProgressIndicator(minHeight: 2),
+      const SizedBox(height: 8),
+      Text(l10n.mcpRegenerateTokenHint,
+          style: Theme.of(context).textTheme.bodySmall),
+    ]);
+  }
 
-  Widget _buildPermissionCard(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+  Widget _buildPermissionSection() {
     final l10n = AppLocalizations.of(context)!;
     final policy = ref.watch(mcpPolicyProvider);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.admin_panel_settings_outlined,
-                    size: 20, color: colors.primary),
-                const SizedBox(width: 10),
-                Text(l10n.mcpToolPermissions,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.mcpToolPermissionsHint,
-              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-            ),
-            for (final permission in McpPermission.values)
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(_permissionTitle(l10n, permission),
-                    style: const TextStyle(fontSize: 13)),
-                subtitle: Text(permission.id,
-                    style: TextStyle(
-                        fontSize: 11, color: colors.onSurfaceVariant)),
-                value: policy.isPermissionEnabled(permission),
-                onChanged: (value) =>
-                    _togglePermission(policy, permission, value),
-              ),
-          ],
+    return _section(
+        Icons.admin_panel_settings_outlined, l10n.mcpToolPermissions, [
+      Text(l10n.mcpToolPermissionsHint,
+          style: Theme.of(context).textTheme.bodySmall),
+      for (final permission in McpPermission.values)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(_permissionTitle(l10n, permission)),
+          subtitle: Text(permission.id),
+          value: policy.isPermissionEnabled(permission),
+          onChanged: (value) => _togglePermission(policy, permission, value),
         ),
-      ),
-    );
+    ]);
   }
 
-  // ── 连接信息 ──
-
-  Widget _buildSessionsCard(BuildContext context, McpSessionStore sessions) {
-    final colors = Theme.of(context).colorScheme;
+  Widget _buildSessionsSection(McpSessionStore sessions) {
     final l10n = AppLocalizations.of(context)!;
-    final list = sessions.sessions;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.devices_outlined, size: 20, color: colors.primary),
-                const SizedBox(width: 10),
-                Text(l10n.mcpCurrentConnections,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-                const Spacer(),
-                Text(l10n.mcpSessionsCount(sessions.activeCount)),
-              ],
+    return _section(Icons.devices_outlined, l10n.mcpCurrentConnections, [
+      Text(l10n.mcpSessionsCount(sessions.activeCount)),
+      if (sessions.sessions.isEmpty)
+        Text(l10n.mcpNoConnections,
+            style: Theme.of(context).textTheme.bodySmall)
+      else
+        for (final session in sessions.sessions)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.laptop, size: 20),
+            title: Text(session.clientLabel),
+            subtitle: Text(l10n.mcpSessionSummary(
+                session.id.substring(
+                    0, session.id.length < 8 ? session.id.length : 8),
+                session.protocolVersion)),
+            trailing: IconButton(
+              icon: const Icon(Icons.link_off, size: 20),
+              tooltip: l10n.mcpDisconnect,
+              onPressed: () => sessions.terminate(session.id),
             ),
-            if (list.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  l10n.mcpNoConnections,
-                  style:
-                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-                ),
-              )
-            else
-              for (final session in list)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.laptop, size: 18),
-                  title: Text(session.clientLabel,
-                      style: const TextStyle(fontSize: 13)),
-                  subtitle: Text(
-                    l10n.mcpSessionSummary(
-                        session.id.substring(0, 8), session.protocolVersion),
-                    style:
-                        TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.link_off, size: 18),
-                    tooltip: l10n.mcpDisconnect,
-                    onPressed: () => sessions.terminate(session.id),
-                  ),
-                ),
-          ],
-        ),
-      ),
-    );
+          ),
+    ]);
   }
 
-  // ── 审计日志 ──
-
-  Widget _buildAuditCard(BuildContext context) {
+  Widget _buildAuditSection() {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final audit = ref.watch(mcpAuditLogProvider);
     final entries = audit.entries.reversed.take(30).toList();
-    final toolCalls =
+    final count =
         entries.where((entry) => entry.kind == McpAuditKind.toolCall).length;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.receipt_long_outlined,
-                    size: 20, color: colors.primary),
-                const SizedBox(width: 10),
-                Text(l10n.mcpAuditLog,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary)),
-                const Spacer(),
-                Text(
-                  l10n.mcpRecentToolCalls(toolCalls),
-                  style:
-                      TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                  tooltip: l10n.mcpClearAuditLog,
-                  onPressed: entries.isEmpty ? null : () => audit.clear(),
-                ),
-              ],
-            ),
-            if (entries.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  l10n.mcpNoAuditRecords,
-                  style:
-                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-                ),
-              )
-            else
-              for (final entry in entries)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatTime(entry.timestamp),
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: colors.onSurfaceVariant,
-                            fontFamily: 'monospace'),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        _auditIcon(entry),
-                        size: 13,
-                        color: entry.status == 'ok'
-                            ? colors.primary
-                            : colors.error,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _auditText(l10n, entry),
-                          style: const TextStyle(fontSize: 11),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-          ],
+    return _section(Icons.receipt_long_outlined, l10n.mcpAuditLog, [
+      Row(children: [
+        Expanded(child: Text(l10n.mcpRecentToolCalls(count))),
+        IconButton(
+          icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+          tooltip: l10n.mcpClearAuditLog,
+          onPressed: entries.isEmpty ? null : audit.clear,
         ),
-      ),
-    );
+      ]),
+      if (entries.isEmpty)
+        Text(l10n.mcpNoAuditRecords,
+            style: Theme.of(context).textTheme.bodySmall)
+      else
+        for (final entry in entries)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_formatTime(entry.timestamp),
+                  style:
+                      TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+              const SizedBox(width: 8),
+              Icon(_auditIcon(entry),
+                  size: 16,
+                  color: entry.status == 'ok' ? colors.primary : colors.error),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(_auditText(l10n, entry),
+                      style: const TextStyle(fontSize: 12))),
+            ]),
+          ),
+    ]);
   }
 
-  IconData _auditIcon(McpAuditEntry entry) {
-    return switch (entry.kind) {
-      McpAuditKind.toolCall => Icons.build_outlined,
-      McpAuditKind.connect => Icons.login,
-      McpAuditKind.disconnect => Icons.logout,
-      McpAuditKind.server => Icons.dns_outlined,
-    };
-  }
+  IconData _auditIcon(McpAuditEntry entry) => switch (entry.kind) {
+        McpAuditKind.toolCall => Icons.build_outlined,
+        McpAuditKind.connect => Icons.login,
+        McpAuditKind.disconnect => Icons.logout,
+        McpAuditKind.server => Icons.dns_outlined,
+      };
 
   String? _noticeText(AppLocalizations l10n, McpServerState state) {
     final detail = state.noticeDetail?.toString() ?? '';
@@ -547,39 +384,34 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     };
   }
 
-  String _permissionTitle(AppLocalizations l10n, McpPermission permission) {
-    return switch (permission) {
-      McpPermission.readScripts => l10n.mcpPermissionReadScripts,
-      McpPermission.writeScripts => l10n.mcpPermissionWriteScripts,
-      McpPermission.readProjects => l10n.mcpPermissionReadProjects,
-      McpPermission.writeProjects => l10n.mcpPermissionWriteProjects,
-      McpPermission.readNetwork => l10n.mcpPermissionReadNetwork,
-      McpPermission.readPackages => l10n.mcpPermissionReadPackages,
-      McpPermission.installPackages => l10n.mcpPermissionInstallPackages,
-      McpPermission.runScripts => l10n.mcpPermissionRunScripts,
-      McpPermission.writeFilesystem => l10n.mcpPermissionWriteFilesystem,
-      McpPermission.deleteFilesystem => l10n.mcpPermissionDeleteFilesystem,
-      McpPermission.readFilesystem => l10n.mcpPermissionReadFilesystem,
-    };
-  }
+  String _permissionTitle(AppLocalizations l10n, McpPermission permission) =>
+      switch (permission) {
+        McpPermission.readScripts => l10n.mcpPermissionReadScripts,
+        McpPermission.writeScripts => l10n.mcpPermissionWriteScripts,
+        McpPermission.readProjects => l10n.mcpPermissionReadProjects,
+        McpPermission.writeProjects => l10n.mcpPermissionWriteProjects,
+        McpPermission.readNetwork => l10n.mcpPermissionReadNetwork,
+        McpPermission.readPackages => l10n.mcpPermissionReadPackages,
+        McpPermission.installPackages => l10n.mcpPermissionInstallPackages,
+        McpPermission.runScripts => l10n.mcpPermissionRunScripts,
+        McpPermission.writeFilesystem => l10n.mcpPermissionWriteFilesystem,
+        McpPermission.deleteFilesystem => l10n.mcpPermissionDeleteFilesystem,
+        McpPermission.readFilesystem => l10n.mcpPermissionReadFilesystem,
+      };
 
   String _auditText(AppLocalizations l10n, McpAuditEntry entry) {
     final client = entry.clientLabel ?? '';
-    switch (entry.kind) {
-      case McpAuditKind.toolCall:
-        if (entry.status == 'ok') {
-          return l10n.mcpAuditToolCall(
-              client, entry.tool ?? 'unknown', entry.durationMs ?? 0);
-        }
-        return l10n.mcpAuditToolCallFailed(
-            client, entry.tool ?? 'unknown', entry.errorCode ?? 'UNKNOWN');
-      case McpAuditKind.connect:
-        return l10n.mcpAuditConnect(client);
-      case McpAuditKind.disconnect:
-        return l10n.mcpAuditDisconnect(client);
-      case McpAuditKind.server:
-        return l10n.mcpAuditServer(entry.status, entry.argsSummary ?? '');
-    }
+    return switch (entry.kind) {
+      McpAuditKind.toolCall => entry.status == 'ok'
+          ? l10n.mcpAuditToolCall(
+              client, entry.tool ?? 'unknown', entry.durationMs ?? 0)
+          : l10n.mcpAuditToolCallFailed(
+              client, entry.tool ?? 'unknown', entry.errorCode ?? 'UNKNOWN'),
+      McpAuditKind.connect => l10n.mcpAuditConnect(client),
+      McpAuditKind.disconnect => l10n.mcpAuditDisconnect(client),
+      McpAuditKind.server =>
+        l10n.mcpAuditServer(entry.status, entry.argsSummary ?? ''),
+    };
   }
 
   String _formatTime(DateTime time) {
@@ -587,99 +419,174 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
 
-  // ── 交互 ──
-
   Future<void> _toggleService() async {
     setState(() => _toggling = true);
     try {
       final controller = ref.read(mcpServerControllerProvider.notifier);
-      final running = ref.read(mcpServerControllerProvider).status ==
-          McpServerStatus.running;
-      await controller.setEnabled(!running);
+      await controller.setEnabled(!controller.isRunning);
+    } finally {
+      if (mounted) setState(() => _toggling = false);
+    }
+  }
+
+  Future<void> _setRequireToken(bool value) async {
+    setState(() => _toggling = true);
+    try {
+      await ref
+          .read(mcpServerControllerProvider.notifier)
+          .setRequireToken(value);
     } finally {
       if (mounted) setState(() => _toggling = false);
     }
   }
 
   Future<void> _savePort() async {
-    final controller = ref.read(mcpServerControllerProvider.notifier);
-    final port = int.tryParse(_portController.text.trim());
-    final ok = await controller.setPort(port ?? 0);
+    final ok = await ref
+        .read(mcpServerControllerProvider.notifier)
+        .setPort(int.tryParse(_portController.text.trim()) ?? 0);
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok ? l10n.mcpPortSavedNextStart : l10n.mcpInvalidPort),
-      duration: const Duration(seconds: 2),
-    ));
+    _showMessage(ok ? l10n.mcpPortSavedNextStart : l10n.mcpInvalidPort);
   }
 
   Future<void> _togglePermission(
-    McpPolicyService policy,
-    McpPermission permission,
-    bool value,
-  ) async {
+      McpPolicyService policy, McpPermission permission, bool value) async {
     await policy.setPermissionEnabled(permission, value);
     if (mounted) setState(() {});
   }
 
-  Future<void> _regenerateToken(McpServerController controller) async {
+  Future<void> _regenerateToken() async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.mcpRegenerateTokenTitle),
-        content: Text(l10n.mcpRegenerateTokenConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.mcpGenerate),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final token = await controller.regenerateToken();
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.mcpNewTokenTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SelectableText(
-              token,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => _copyToClipboard(token),
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(l10n.mcpCopyToken),
-            ),
+    if (ref.read(mcpTokenStoreProvider).hasToken) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: Text(l10n.mcpRegenerateTokenTitle),
+          content: Text(l10n.mcpRegenerateTokenConfirm),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(l10n.cancel)),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(l10n.mcpGenerate)),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.close),
-          ),
-        ],
-      ),
-    );
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await _saveToken(
+        () => ref.read(mcpServerControllerProvider.notifier).regenerateToken());
   }
 
-  void _copyToClipboard(String value) {
-    Clipboard.setData(ClipboardData(text: value));
+  Future<void> _editToken() async {
+    final tokens = ref.read(mcpTokenStoreProvider);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (_) =>
+          _CustomTokenDialog(token: tokens.token, replacing: tokens.hasToken),
+    );
+    if (value == null || !mounted) return;
+    await _saveToken(() =>
+        ref.read(mcpServerControllerProvider.notifier).setCustomToken(value));
+  }
+
+  Future<void> _saveToken(Future<String> Function() save) async {
+    setState(() => _savingToken = true);
+    try {
+      await save();
+      if (mounted) _showMessage(AppLocalizations.of(context)!.mcpTokenSaved);
+    } catch (_) {
+      if (mounted) {
+        _showMessage(AppLocalizations.of(context)!.mcpTokenSaveFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _savingToken = false);
+    }
+  }
+
+  void _showMessage(String message) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message), duration: const Duration(seconds: 2)));
+
+  Future<void> _copyToClipboard(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) {
+      _showMessage(AppLocalizations.of(context)!.mcpCopiedToClipboard);
+    }
+  }
+}
+
+class _CustomTokenDialog extends StatefulWidget {
+  const _CustomTokenDialog({required this.token, required this.replacing});
+  final String? token;
+  final bool replacing;
+  @override
+  State<_CustomTokenDialog> createState() => _CustomTokenDialogState();
+}
+
+class _CustomTokenDialogState extends State<_CustomTokenDialog> {
+  late final _controller = TextEditingController(text: widget.token ?? '');
+  bool _invalid = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!McpTokenStore.isValidCustomToken(_controller.text)) {
+      setState(() => _invalid = true);
+      return;
+    }
+    Navigator.pop(context, _controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(l10n.mcpCopiedToClipboard),
-      duration: Duration(seconds: 1),
-    ));
+    return AlertDialog(
+      scrollable: true,
+      title: Text(l10n.mcpCustomToken),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(
+          key: const ValueKey('mcp-custom-token-field'),
+          controller: _controller,
+          autofocus: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
+          keyboardType: TextInputType.visiblePassword,
+          textInputAction: TextInputAction.done,
+          maxLines: 3,
+          maxLength: McpTokenStore.maxCustomLength,
+          maxLengthEnforcement: MaxLengthEnforcement.none,
+          decoration: InputDecoration(
+            labelText: l10n.mcpPairingToken,
+            errorText: _invalid ? l10n.mcpCustomTokenValidation : null,
+            errorMaxLines: 4,
+          ),
+          onChanged: (_) {
+            if (_invalid) setState(() => _invalid = false);
+          },
+          onSubmitted: (_) => _save(),
+        ),
+        const SizedBox(height: 8),
+        Text(widget.replacing
+            ? l10n.mcpRegenerateTokenConfirm
+            : l10n.mcpCustomTokenValidation),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: Text(l10n.cancel)),
+        FilledButton(
+            key: const ValueKey('mcp-save-custom-token'),
+            onPressed: _save,
+            child: Text(l10n.save)),
+      ],
+    );
   }
 }

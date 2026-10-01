@@ -42,19 +42,25 @@ class ConfirmDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      scrollable: true,
       title: Text(title),
       content: Text(content),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           child: Text(cancelText.isEmpty ? l10n.cancel : cancelText),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          style: confirmColor != null
-              ? TextButton.styleFrom(foregroundColor: confirmColor)
-              : null,
+          style: TextButton.styleFrom(
+            foregroundColor: confirmColor,
+            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
           child: Text(confirmText.isEmpty ? l10n.confirm : confirmText),
         ),
       ],

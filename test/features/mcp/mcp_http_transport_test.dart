@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:python_runner/features/mcp/application/mcp_confirmation_service.dart';
 import 'package:python_runner/features/mcp/application/mcp_policy_service.dart';
 import 'package:python_runner/features/mcp/infrastructure/mcp_audit_log.dart';
@@ -46,6 +47,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     tokens = McpTokenStore(preferences: prefs);
     token = await tokens.regenerate();
@@ -192,6 +194,31 @@ void main() {
       token: newToken,
     );
     expect(fresh.statusCode, 200);
+  });
+
+  test(
+      'custom credentials authenticate immediately without restarting transport',
+      () async {
+    const custom = 'custom-transport-token-123456';
+    await tokens.setCustomToken(custom);
+    final old = await request(
+        'POST', {'jsonrpc': '2.0', 'id': 1, 'method': 'ping'},
+        token: token);
+    expect(old.statusCode, 401);
+    final fresh = await request(
+        'POST',
+        {
+          'jsonrpc': '2.0',
+          'id': 2,
+          'method': 'initialize',
+          'params': {
+            'protocolVersion': '2025-06-18',
+            'clientInfo': {'name': 'custom-key-client', 'version': '1'},
+          },
+        },
+        token: custom);
+    expect(fresh.statusCode, 200);
+    expect(tokens.token, custom);
   });
 
   test('GET /mcp 返回 405（无 SSE 推送）', () async {

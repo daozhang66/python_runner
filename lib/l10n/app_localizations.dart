@@ -3714,7 +3714,7 @@ abstract class AppLocalizations {
   /// No description provided for @mcpRequirePairingToken.
   ///
   /// In en, this message translates to:
-  /// **'Require pairing token'**
+  /// **'Require pairing key'**
   String get mcpRequirePairingToken;
 
   /// No description provided for @mcpTokenDisabledWarning.
@@ -3726,13 +3726,13 @@ abstract class AppLocalizations {
   /// No description provided for @mcpPairingToken.
   ///
   /// In en, this message translates to:
-  /// **'Pairing token'**
+  /// **'Pairing key'**
   String get mcpPairingToken;
 
   /// No description provided for @mcpCurrentToken.
   ///
   /// In en, this message translates to:
-  /// **'Current token: {hint} (only a fragment is shown for security)'**
+  /// **'Current key: {hint}'**
   String mcpCurrentToken(Object hint);
 
   /// No description provided for @mcpTokenGenerated.
@@ -3744,7 +3744,7 @@ abstract class AppLocalizations {
   /// No description provided for @mcpNoTokenYet.
   ///
   /// In en, this message translates to:
-  /// **'No token yet; one can be generated after authentication is enabled'**
+  /// **'No key has been generated yet'**
   String get mcpNoTokenYet;
 
   /// No description provided for @mcpRegenerate.
@@ -3756,8 +3756,44 @@ abstract class AppLocalizations {
   /// No description provided for @mcpRegenerateTokenHint.
   ///
   /// In en, this message translates to:
-  /// **'The old token stops working immediately. The token is shown only once, so copy it promptly.'**
+  /// **'You can view and copy the key at any time. Changing it invalidates the old key; connected clients must update their configuration.'**
   String get mcpRegenerateTokenHint;
+
+  /// No description provided for @mcpCustomToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom key'**
+  String get mcpCustomToken;
+
+  /// No description provided for @mcpCustomTokenValidation.
+  ///
+  /// In en, this message translates to:
+  /// **'Use 16–256 letters, digits, or . _ ~ + / -, optionally ending with =.'**
+  String get mcpCustomTokenValidation;
+
+  /// No description provided for @mcpTokenSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Key saved'**
+  String get mcpTokenSaved;
+
+  /// No description provided for @mcpTokenSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The key could not be saved. The previous key is unchanged. Try again.'**
+  String get mcpTokenSaveFailed;
+
+  /// No description provided for @mcpTokenStorageError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read the key storage. Try again.'**
+  String get mcpTokenStorageError;
+
+  /// No description provided for @mcpLegacyTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The old version stored only a digest, so the full key cannot be recovered. Enter your original key in Custom key to restore its display, or generate a new one.'**
+  String get mcpLegacyTokenHint;
 
   /// No description provided for @mcpToolPermissions.
   ///
@@ -3954,13 +3990,13 @@ abstract class AppLocalizations {
   /// No description provided for @mcpNewTokenTitle.
   ///
   /// In en, this message translates to:
-  /// **'New token (shown once)'**
+  /// **'New key'**
   String get mcpNewTokenTitle;
 
   /// No description provided for @mcpCopyToken.
   ///
   /// In en, this message translates to:
-  /// **'Copy token'**
+  /// **'Copy key'**
   String get mcpCopyToken;
 
   /// No description provided for @mcpCopiedToClipboard.

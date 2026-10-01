@@ -40,11 +40,13 @@ extension _SettingsSections on _SettingsPageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       Text(l10n.pypiSource,
                           style: Theme.of(context).textTheme.titleSmall),
-                      const Spacer(),
                       Text(
                         l10n.useOfficialSourceWhenEmpty,
                         style: TextStyle(
@@ -75,6 +77,7 @@ extension _SettingsSections on _SettingsPageState {
                       const SizedBox(width: 8),
                       IconButton(
                         onPressed: _saveMirror,
+                        tooltip: l10n.save,
                         icon: const Icon(Icons.save),
                       ),
                     ],
@@ -100,11 +103,13 @@ extension _SettingsSections on _SettingsPageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       Text(l10n.executionTimeout,
                           style: Theme.of(context).textTheme.titleSmall),
-                      const Spacer(),
                       Text(
                         _timeout == 0
                             ? l10n.unlimited
@@ -263,56 +268,13 @@ extension _SettingsSections on _SettingsPageState {
                             fontSize: 13, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
                     Text(l10n.proxyConfigurationDescription,
-                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: TextField(
-                            controller: _proxyHostController,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            decoration: InputDecoration(
-                              hintText: '192.168.1.100',
-                              labelText: l10n.proxyAddress,
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 1,
-                          child: TextField(
-                            controller: _proxyPortController,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            decoration: InputDecoration(
-                              hintText: '8888',
-                              labelText: l10n.port,
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: _saveProxyConfig,
-                          icon: const Icon(Icons.save),
-                        ),
-                      ],
-                    ),
+                    _buildProxyFields(),
                   ],
                 ),
               ),
@@ -367,8 +329,7 @@ extension _SettingsSections on _SettingsPageState {
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                      scrollable: true,
                       backgroundColor:
                           Theme.of(ctx).colorScheme.surfaceContainerHigh,
                       surfaceTintColor: Colors.transparent,
@@ -449,6 +410,57 @@ extension _SettingsSections on _SettingsPageState {
         ),
       ],
     );
+  }
+
+  Widget _buildProxyFields() {
+    final l10n = AppLocalizations.of(context)!;
+    return LayoutBuilder(builder: (context, constraints) {
+      final host = TextField(
+        controller: _proxyHostController,
+        enableSuggestions: false,
+        autocorrect: false,
+        decoration: InputDecoration(
+          hintText: '192.168.1.100',
+          labelText: l10n.proxyAddress,
+          isDense: true,
+        ),
+      );
+      final port = TextField(
+        controller: _proxyPortController,
+        enableSuggestions: false,
+        autocorrect: false,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: InputDecoration(
+          hintText: '8888',
+          labelText: l10n.port,
+          isDense: true,
+        ),
+      );
+      final save = IconButton(
+        onPressed: _saveProxyConfig,
+        tooltip: l10n.save,
+        icon: const Icon(Icons.save_outlined),
+      );
+      if (constraints.maxWidth < 420) {
+        return Column(children: [
+          host,
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: port),
+            const SizedBox(width: 8),
+            save
+          ]),
+        ]);
+      }
+      return Row(children: [
+        Expanded(flex: 3, child: host),
+        const SizedBox(width: 8),
+        Expanded(flex: 2, child: port),
+        const SizedBox(width: 8),
+        save,
+      ]);
+    });
   }
 
   Widget _buildAboutSection() {

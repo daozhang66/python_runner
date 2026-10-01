@@ -10,33 +10,11 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  Icon(icon, size: 20, color: colors.primary),
-                  const SizedBox(width: 10),
-                  Text(title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.primary,
-                      )),
-                ],
-              ),
-            ),
-            ...children,
-          ],
-        ),
-      ),
+    return AppSettingsSection(
+      framed: true,
+      icon: icon,
+      title: title,
+      children: children,
     );
   }
 }
@@ -484,12 +462,7 @@ class _AboutPageState extends State<_AboutPage> {
     } catch (_) {}
     if (runtimeBackend == RuntimeManager.linuxLikeBackendId) {
       try {
-        final linuxInfo = await _bridge.getLinuxLikeRuntimeInfo();
-        pyInfo = {
-          'pythonVersion': linuxInfo['runtimeFlavor'] ?? 'Linux-like',
-          'sitePackages': linuxInfo['userSitePackagesDir'] ?? '',
-          'pythonPath': linuxInfo['pythonPath'] ?? '',
-        };
+        pyInfo = await _bridge.getLinuxLikePythonInfo();
       } catch (_) {}
     } else {
       try {
@@ -554,8 +527,10 @@ class _AboutPageState extends State<_AboutPage> {
                     ? 'Linux-like'
                     : 'Chaquopy',
               ),
-              if (_pyVersion.isNotEmpty)
-                _AboutItem(label: l10n.version, value: _pyVersion),
+              _AboutItem(
+                label: l10n.version,
+                value: _pyVersion.isNotEmpty ? _pyVersion : l10n.unknownVersion,
+              ),
               if (installDirectory.isNotEmpty)
                 _AboutItem(
                     label: l10n.installDirectory,
@@ -576,6 +551,11 @@ class _AboutPageState extends State<_AboutPage> {
                 value: 'github.com/daozhang66/python_runner',
                 onTap: () => _bridge
                     .openUrl('https://github.com/daozhang66/python_runner'),
+              ),
+              _AboutItem(
+                label: l10n.sponsorProject,
+                value: l10n.sponsorProjectDescription,
+                onTap: () => _showSponsorDialog(context),
               ),
             ],
           ),
@@ -604,6 +584,36 @@ class _AboutPageState extends State<_AboutPage> {
     );
   }
 
+  void _showSponsorDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.sponsorProject),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.sponsorQrHint, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Image.asset(
+                'IMG_20260802_014149.png',
+                fit: BoxFit.contain,
+                semanticLabel: l10n.sponsorProject,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AboutCard extends StatelessWidget {
@@ -614,34 +624,12 @@ class _AboutCard extends StatelessWidget {
       {required this.icon, required this.title, required this.children});
   @override
   Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: c.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: c.primary),
-                const SizedBox(width: 8),
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: c.onSurface)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
+    return AppSettingsSection(
+      framed: true,
+      icon: icon,
+      title: title,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      children: children,
     );
   }
 }

@@ -525,6 +525,11 @@ class NativeBridge {
     );
   }
 
+  Future<Map<String, String>> getLinuxLikePythonInfo() async {
+    final result = await _invoke('getLinuxLikePythonInfo', {});
+    return _stringMap(result);
+  }
+
   Future<Map<String, String>> getAppInfo() async {
     return _withPigeonFallback(
       '应用信息',

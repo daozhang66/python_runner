@@ -1,0 +1,123 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:python_runner/l10n/app_localizations.dart';
+import 'package:python_runner/pages/settings_page.dart';
+import 'package:python_runner/providers/theme_provider.dart';
+import 'package:python_runner/ui/app_theme.dart';
+import 'package:python_runner/ui/app_settings_section.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    for (final font in {
+      'MiSans': 'assets/fonts/MiSansVF.ttf',
+      'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
+    }.entries) {
+      final loader = FontLoader(font.key);
+      loader.addFont(rootBundle.load(font.value));
+      await loader.load();
+    }
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('settings ${brightness.name} appearance', (tester) async {
+      await _pumpSettings(tester, brightness: brightness);
+      expect(find.byType(Card), findsWidgets);
+      for (final section in tester
+          .widgetList<AppSettingsSection>(find.byType(AppSettingsSection))) {
+        expect(section.framed, isTrue);
+      }
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/settings_soft_${brightness.name}.png'),
+      );
+    }, tags: const ['golden']);
+  }
+
+  for (final locale in ['zh', 'en']) {
+    testWidgets('settings stay usable at 320 width and 2x text: $locale',
+        (tester) async {
+      await _pumpSettings(tester,
+          width: 320, textScale: 2, locale: Locale(locale));
+      expect(tester.takeException(), isNull);
+      for (var step = 0; step < 28; step++) {
+        await tester.drag(
+            find.byType(CustomScrollView).first, const Offset(0, -400));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      final position =
+          tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+      expect(position.pixels, closeTo(position.maxScrollExtent, 1));
+    });
+  }
+
+  testWidgets('wide settings constrain forms without moving their sections',
+      (tester) async {
+    await _pumpSettings(tester, width: 1024);
+    expect(tester.getSize(find.byType(AppSettingsSection).first).width,
+        lessThanOrEqualTo(760));
+    expect(find.text('语言'), findsOneWidget);
+    expect(find.text('主题与配色'), findsOneWidget);
+  });
+
+  testWidgets('proxy fields use readable rows on narrow screens',
+      (tester) async {
+    await _pumpSettings(tester,
+        width: 320,
+        textScale: 2,
+        initialPreferences: const {'net_debug_mode': true});
+    final host = find.byWidgetPredicate((widget) =>
+        widget is TextField && widget.decoration?.hintText == '192.168.1.100');
+    await tester.scrollUntilVisible(host, 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(host).width, greaterThan(230));
+    final port = find.byWidgetPredicate((widget) =>
+        widget is TextField && widget.decoration?.hintText == '8888');
+    expect(
+        tester.getTopLeft(port).dy, greaterThan(tester.getBottomLeft(host).dy));
+    expect(tester.getSize(port).width, greaterThan(180));
+  });
+}
+
+Future<void> _pumpSettings(
+  WidgetTester tester, {
+  Brightness brightness = Brightness.light,
+  double width = 390,
+  double textScale = 1,
+  Locale locale = const Locale('zh'),
+  Map<String, Object> initialPreferences = const {},
+}) async {
+  SharedPreferences.setMockInitialValues(initialPreferences);
+  final preferences = await SharedPreferences.getInstance();
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = Size(width, 844);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(ProviderScope(
+    overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.build(
+        ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness),
+        fontFamily: 'MiSans',
+      ),
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
+      ),
+      home: const SettingsPage(currentThemeMode: ThemeMode.system),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}

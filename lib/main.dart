@@ -27,8 +27,11 @@ import 'pages/package_manager_page.dart';
 import 'pages/network_inspector_page.dart';
 import 'pages/settings_page.dart';
 import 'ui/app_design_tokens.dart';
+import 'ui/app_bottom_navigation.dart';
+import 'ui/app_navigation_pages.dart';
 import 'ui/app_responsive.dart';
 import 'ui/app_theme_palette.dart';
+import 'ui/app_theme.dart';
 import 'l10n/app_localizations.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
@@ -189,231 +192,7 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
       return cachedTheme;
     }
 
-    final isHandCraftedDark =
-        isDark && selectedPreset != null && !selectedPreset.isSeedBased;
-    final bgColor = isHandCraftedDark
-        ? colorScheme.surface
-        : (isDark
-            ? AppThemeColors.darkBackground
-            : AppThemeColors.pageBackground(colorScheme));
-    final cardColor = isHandCraftedDark
-        ? colorScheme.surfaceContainer
-        : (isDark
-            ? AppThemeColors.darkSurface
-            : AppThemeColors.cardSurface(colorScheme));
-    final borderColor = isHandCraftedDark
-        ? colorScheme.outline
-        : (isDark
-            ? AppThemeColors.darkBorder
-            : colorScheme.outlineVariant.withValues(alpha: 0.44));
-    final navIndicator = isHandCraftedDark
-        ? colorScheme.primaryContainer
-        : (isDark
-            ? AppThemeColors.darkPinnedSurface
-            : AppThemeColors.navigationIndicator(colorScheme));
-
-    final theme = ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      fontFamily: fontFamily,
-      scaffoldBackgroundColor: bgColor,
-      canvasColor: isDark ? bgColor : null,
-      cardTheme: CardThemeData(
-        elevation: 0,
-        color: cardColor,
-        margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.cardHorizontal,
-          vertical: AppSpacing.cardVertical,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          side: BorderSide(color: borderColor),
-        ),
-      ),
-      appBarTheme: AppBarTheme(
-        centerTitle: false,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
-        backgroundColor: isDark ? bgColor : colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
-        surfaceTintColor: Colors.transparent,
-        shape: Border(
-          bottom: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.2),
-            width: 0.5,
-          ),
-        ),
-      ),
-      tabBarTheme: TabBarThemeData(
-        dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.32),
-        indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(
-            color: colorScheme.primary.withValues(alpha: 0.82),
-            width: 3,
-          ),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        labelColor: colorScheme.primary,
-        unselectedLabelColor: colorScheme.onSurfaceVariant,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        elevation: 0,
-        height: 68,
-        backgroundColor:
-            isDark ? bgColor : AppThemeColors.cardSurface(colorScheme),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: navIndicator,
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-      ),
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return colorScheme.onSurface.withValues(alpha: 0.38);
-          }
-          if (states.contains(WidgetState.selected)) {
-            return colorScheme.onPrimary;
-          }
-          return colorScheme.onSurfaceVariant;
-        }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return colorScheme.onSurface.withValues(alpha: 0.12);
-          }
-          if (states.contains(WidgetState.selected)) {
-            return colorScheme.primary;
-          }
-          return isDark
-              ? colorScheme.surfaceContainerHighest
-              : colorScheme.surfaceContainerHigh;
-        }),
-        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return Colors.transparent;
-          }
-          return colorScheme.outline.withValues(alpha: isDark ? 0.58 : 0.42);
-        }),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.xl),
-          ),
-        ),
-      ),
-      segmentedButtonTheme: SegmentedButtonThemeData(
-        style: ButtonStyle(
-          side: WidgetStatePropertyAll(
-            BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.58),
-            ),
-          ),
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return isHandCraftedDark
-                  ? colorScheme.primaryContainer
-                  : AppThemeColors.navigationIndicator(colorScheme);
-            }
-            return isHandCraftedDark
-                ? colorScheme.surfaceContainerHigh
-                : AppThemeColors.cardSurface(colorScheme);
-          }),
-          foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return colorScheme.primary;
-            }
-            return colorScheme.onSurfaceVariant;
-          }),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-            ),
-          ),
-        ),
-      ),
-      dialogTheme: DialogThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-          ),
-        ),
-      ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-        ),
-        showDragHandle: true,
-      ),
-      popupMenuTheme: PopupMenuThemeData(
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: isHandCraftedDark
-            ? colorScheme.surfaceContainerHigh
-            : AppThemeColors.softSurface(colorScheme),
-        selectedColor: isHandCraftedDark
-            ? colorScheme.primaryContainer
-            : AppThemeColors.navigationIndicator(colorScheme),
-        secondarySelectedColor: isHandCraftedDark
-            ? colorScheme.primaryContainer
-            : AppThemeColors.navigationIndicator(colorScheme),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-        secondaryLabelStyle: TextStyle(color: colorScheme.onPrimaryContainer),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-      ),
-      dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.32),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: isDark
-            ? colorScheme.surfaceContainerHigh
-            : AppThemeColors.softSurface(colorScheme),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.62),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.62),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide(
-            color: colorScheme.primary.withValues(alpha: 0.84),
-            width: 1.4,
-          ),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
-    );
+    final theme = AppTheme.build(colorScheme, fontFamily: fontFamily);
 
     if (isDark) {
       _cachedDarkTheme = theme;
@@ -804,66 +583,14 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   void _selectTab(int index) {
+    if (_currentIndex == index) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     if (index == 2) {
       unawaited(
         ref.read(packageControllerProvider.notifier).ensureLoaded(),
       );
     }
     setState(() => _currentIndex = index);
-  }
-
-  Widget _buildBottomNavigation(ColorScheme colors) {
-    final localizations = AppLocalizations.of(context)!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark
-        ? colors.surfaceContainerHigh
-        : Color.alphaBlend(
-            colors.surfaceContainerHighest.withValues(alpha: 0.34),
-            colors.surface,
-          );
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        border: Border(
-          top: BorderSide(
-            color: colors.outlineVariant.withValues(alpha: isDark ? 0.55 : 0.5),
-            width: 1,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: isDark ? 0.18 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: NavigationBar(
-        backgroundColor: AppThemeColors.transparent,
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.code_outlined),
-            selectedIcon: const Icon(Icons.code),
-            label: localizations.scripts,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.http_outlined),
-            selectedIcon: const Icon(Icons.http),
-            label: localizations.network,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.inventory_2_outlined),
-            selectedIcon: const Icon(Icons.inventory_2),
-            label: localizations.packageManager,
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildNavigationRail() {
@@ -892,9 +619,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildPageStack() {
-    return IndexedStack(
+  Widget _buildPageStack({bool animate = false}) {
+    return AppNavigationPages(
       index: _currentIndex,
+      animate: animate,
       children: [
         ScriptListPage(
           controller: _scriptListController,
@@ -954,12 +682,14 @@ class _HomePageState extends ConsumerState<HomePage> {
 
           return Scaffold(
             appBar: null,
+            extendBody: true,
             body: SafeArea(
               bottom: false,
-              child: _buildPageStack(),
+              child: _buildPageStack(animate: true),
             ),
-            bottomNavigationBar: _buildBottomNavigation(
-              Theme.of(context).colorScheme,
+            bottomNavigationBar: AppBottomNavigation(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: _selectTab,
             ),
           );
         },

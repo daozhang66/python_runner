@@ -48,6 +48,7 @@ abstract final class AppRadius {
   static const lg = 12.0;
   static const xl = 16.0;
   static const pill = 999.0;
+  static const dialog = 28.0;
 
   static BorderRadius circular(double value) => BorderRadius.circular(value);
   static BorderRadius get small => circular(sm);

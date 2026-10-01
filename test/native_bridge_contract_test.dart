@@ -28,6 +28,38 @@ void main() {
     messenger.setMockMethodCallHandler(nativeMethodChannel, null);
   });
 
+  test('Linux-like Python info uses its own interpreter query', () async {
+    messenger.setMockMethodCallHandler(nativeMethodChannel, (call) async {
+      expect(call.method, 'getLinuxLikePythonInfo');
+      return {
+        'pythonVersion': '3.11.2 (main, Linux)',
+        'sitePackages': '/runtime/site-packages',
+        'pythonPath': '/runtime/rootfs/usr/bin/python3',
+      };
+    });
+
+    final info = await NativeBridge().getLinuxLikePythonInfo();
+    expect(info['pythonVersion'], '3.11.2 (main, Linux)');
+    expect(info['sitePackages'], '/runtime/site-packages');
+    expect(info['pythonPath'], '/runtime/rootfs/usr/bin/python3');
+  });
+
+  test('Unavailable Linux-like Python does not substitute an engine name',
+      () async {
+    messenger.setMockMethodCallHandler(nativeMethodChannel, (call) async {
+      expect(call.method, 'getLinuxLikePythonInfo');
+      return {'pythonVersion': '', 'sitePackages': '', 'pythonPath': ''};
+    });
+
+    expect(
+        (await NativeBridge().getLinuxLikePythonInfo())['pythonVersion'], '');
+    final aboutSource =
+        File('lib/pages/settings_widgets.dart').readAsStringSync();
+    expect(aboutSource, contains('_bridge.getLinuxLikePythonInfo()'));
+    expect(aboutSource, isNot(contains("linuxInfo['runtimeFlavor']")));
+    expect(aboutSource, contains('l10n.unknownVersion'));
+  });
+
   test('Dart contract rejects missing required native bridge arguments', () {
     expect(
       () => NativeBridgeContract.validate('startApkDownload', {
@@ -641,7 +673,6 @@ class _FakeAppHostApi extends pigeon.AppHostApi {
 
   @override
   Future<pigeon.NativeAppInfo> getAppInfo() async => appInfo;
-
 }
 
 class _ThrowingRuntimeHostApi extends pigeon.RuntimeHostApi {

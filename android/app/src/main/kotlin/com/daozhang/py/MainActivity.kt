@@ -545,6 +545,7 @@ class MainActivity : FlutterActivity() {
             },
             "getAppInfo" to { _, result -> appUpdateController.getAppInfo(result) },
             "getPythonInfo" to { _, result -> runtimeInfoController.getPythonInfo(result) },
+            "getLinuxLikePythonInfo" to { _, result -> runtimeInfoController.getLinuxLikePythonInfo(result) },
             "getLinuxLikeRuntimeInfo" to { _, result ->
                 runtimeInfoController.getLinuxLikeRuntimeInfo(result)
             },

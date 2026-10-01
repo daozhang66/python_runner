@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Keystore-bound credentials cannot be restored on another device. -->
+    <exclude domain="sharedpref" path="mcp_pairing.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureKeyStorage:mcp_pairing.xml" />
+</full-backup-content>

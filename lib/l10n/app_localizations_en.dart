@@ -2023,33 +2023,54 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mcpPortRange => 'Port (1024-65535)';
 
   @override
-  String get mcpRequirePairingToken => 'Require pairing token';
+  String get mcpRequirePairingToken => 'Require pairing key';
 
   @override
   String get mcpTokenDisabledWarning =>
       'LAN requests need no token when this is off. Use only on a trusted network';
 
   @override
-  String get mcpPairingToken => 'Pairing token';
+  String get mcpPairingToken => 'Pairing key';
 
   @override
   String mcpCurrentToken(Object hint) {
-    return 'Current token: $hint (only a fragment is shown for security)';
+    return 'Current key: $hint';
   }
 
   @override
   String get mcpTokenGenerated => 'generated';
 
   @override
-  String get mcpNoTokenYet =>
-      'No token yet; one can be generated after authentication is enabled';
+  String get mcpNoTokenYet => 'No key has been generated yet';
 
   @override
   String get mcpRegenerate => 'Regenerate';
 
   @override
   String get mcpRegenerateTokenHint =>
-      'The old token stops working immediately. The token is shown only once, so copy it promptly.';
+      'You can view and copy the key at any time. Changing it invalidates the old key; connected clients must update their configuration.';
+
+  @override
+  String get mcpCustomToken => 'Custom key';
+
+  @override
+  String get mcpCustomTokenValidation =>
+      'Use 16–256 letters, digits, or . _ ~ + / -, optionally ending with =.';
+
+  @override
+  String get mcpTokenSaved => 'Key saved';
+
+  @override
+  String get mcpTokenSaveFailed =>
+      'The key could not be saved. The previous key is unchanged. Try again.';
+
+  @override
+  String get mcpTokenStorageError =>
+      'Unable to read the key storage. Try again.';
+
+  @override
+  String get mcpLegacyTokenHint =>
+      'The old version stored only a digest, so the full key cannot be recovered. Enter your original key in Custom key to restore its display, or generate a new one.';
 
   @override
   String get mcpToolPermissions => 'Tool permissions';
@@ -2173,10 +2194,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mcpGenerate => 'Generate';
 
   @override
-  String get mcpNewTokenTitle => 'New token (shown once)';
+  String get mcpNewTokenTitle => 'New key';
 
   @override
-  String get mcpCopyToken => 'Copy token';
+  String get mcpCopyToken => 'Copy key';
 
   @override
   String get mcpCopiedToClipboard => 'Copied to clipboard';

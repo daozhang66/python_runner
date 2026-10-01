@@ -1,14 +1,17 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import '../ui/app_design_tokens.dart';
 
-const double _dialogRadiusValue = 28;
+const double _dialogRadiusValue = AppRadius.dialog;
 const BorderRadius _dialogRadius =
     BorderRadius.all(Radius.circular(_dialogRadiusValue));
 
 Color appDialogBackgroundColor(BuildContext context, bool enableBlur) {
   final colors = Theme.of(context).colorScheme;
-  return colors.surface.withValues(alpha: enableBlur ? 0.74 : 1);
+  final surface = Theme.of(context).dialogTheme.backgroundColor ??
+      colors.surfaceContainerHigh;
+  return surface.withValues(alpha: enableBlur ? 0.74 : 1);
 }
 
 Widget appDialogFrame({

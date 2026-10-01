@@ -2,6 +2,42 @@ import 'package:flutter/material.dart';
 import 'app_design_tokens.dart';
 import '../l10n/app_localizations.dart';
 
+BoxDecoration _searchSurfaceDecoration(BuildContext context) {
+  final colors = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return BoxDecoration(
+    color:
+        isDark ? colors.surfaceContainer : AppThemeColors.softSurface(colors),
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(
+      color: isDark
+          ? colors.outline
+          : colors.outlineVariant.withValues(alpha: 0.48),
+    ),
+    boxShadow: isDark
+        ? null
+        : [
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+  );
+}
+
+/// Paints the search surface behind existing controls without adding spacing.
+class AppControlBackground extends StatelessWidget {
+  const AppControlBackground({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: _searchSurfaceDecoration(context),
+        child: child,
+      );
+}
+
 /// 统一搜索栏组件。
 ///
 /// 用于脚本搜索、网络搜索、终端搜索、库搜索等。
@@ -28,10 +64,6 @@ class AppSearchBar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fieldFill =
-        isDark ? colors.surfaceContainer : AppThemeColors.softSurface(colors);
-    final fieldBorder =
-        isDark ? colors.outline : colors.outlineVariant.withValues(alpha: 0.48);
     final hintColor = isDark
         ? colors.onSurfaceVariant.withValues(alpha: 0.68)
         : colors.onSurfaceVariant.withValues(alpha: 0.82);
@@ -39,73 +71,69 @@ class AppSearchBar extends StatelessWidget {
         ? colors.onSurfaceVariant.withValues(alpha: 0.9)
         : colors.onSurfaceVariant;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xs,
-        vertical: AppSpacing.xs,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: fieldFill,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: fieldBorder),
-                boxShadow: isDark
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: colors.shadow.withValues(alpha: 0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, _, __) => Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: _searchSurfaceDecoration(context),
+                child: Row(
+                  children: [
+                    Icon(Icons.search, size: 18, color: iconColor),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        autofocus: autofocus,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: hintText.isEmpty ? l10n.search : hintText,
+                          hintStyle: TextStyle(color: hintColor),
+                          border: InputBorder.none,
+                          filled: false,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 0,
+                            vertical: AppSpacing.sm - 2,
+                          ),
                         ),
-                      ],
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.search, size: 18, color: iconColor),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      autofocus: autofocus,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: hintText.isEmpty ? l10n.search : hintText,
-                        hintStyle: TextStyle(color: hintColor),
-                        border: InputBorder.none,
-                        filled: false,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 0,
-                          vertical: AppSpacing.sm - 2,
-                        ),
+                        onChanged: onChanged,
                       ),
-                      onChanged: onChanged,
                     ),
-                  ),
-                  if (controller.text.isNotEmpty && onClear != null)
-                    IconButton(
-                      icon: Icon(Icons.close, size: 16, color: iconColor),
-                      onPressed: onClear,
-                      visualDensity: VisualDensity.compact,
-                      tooltip: l10n.clear,
-                    ),
-                ],
+                    if (controller.text.isNotEmpty && onClear != null)
+                      IconButton(
+                        icon: Icon(Icons.close, size: 16, color: iconColor),
+                        onPressed: onClear,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: l10n.clear,
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (trailingActions.isNotEmpty) const SizedBox(width: AppSpacing.sm),
-          ...trailingActions,
-        ],
+            if (trailingActions.isNotEmpty)
+              const SizedBox(width: AppSpacing.sm),
+            if (trailingActions.isNotEmpty)
+              AppControlBackground(
+                key: const ValueKey('search-actions-background'),
+                child: Row(
+                    mainAxisSize: MainAxisSize.min, children: trailingActions),
+              ),
+          ],
+        ),
       ),
     );
   }

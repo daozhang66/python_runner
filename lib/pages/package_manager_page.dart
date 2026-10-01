@@ -63,7 +63,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
 
   void _install() {
     final name = _packageController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty || ref.read(packageControllerProvider).isInstalling) {
+      return;
+    }
     final version = _versionController.text.trim();
     ref.read(packageControllerProvider.notifier).install(
           name,
@@ -398,13 +400,16 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
         SizedBox(
           width: 40,
           height: 40,
-          child: IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: state.isRefreshing
-                ? null
-                : () => ref.read(packageControllerProvider.notifier).refresh(),
-            visualDensity: VisualDensity.compact,
-            tooltip: l10n.refresh,
+          child: AppControlBackground(
+            child: IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: state.isRefreshing
+                  ? null
+                  : () =>
+                      ref.read(packageControllerProvider.notifier).refresh(),
+              visualDensity: VisualDensity.compact,
+              tooltip: l10n.refresh,
+            ),
           ),
         ),
       ],
@@ -416,78 +421,116 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     final requirementsTooltip = state.supportsRequirementsInstall
         ? l10n.installRequirements
         : l10n.requirementsLinuxOnly;
-    return Row(
-      children: [
-        SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(Icons.add_box_outlined,
-              size: 22, color: Theme.of(context).colorScheme.primary),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: SizedBox(
-            height: 38,
-            child: TextField(
-              controller: _packageController,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: InputDecoration(
-                hintText: l10n.packageName,
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    return AppControlBackground(
+      key: const ValueKey('install-controls-background'),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(Icons.add_box_outlined,
+                size: 22, color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                key: const ValueKey('install-package-name'),
+                controller: _packageController,
+                enableSuggestions: false,
+                autocorrect: false,
+                style: const TextStyle(fontSize: 14, height: 1.2),
+                textAlignVertical: TextAlignVertical.center,
+                decoration: _installFieldDecoration(l10n.packageName),
+                onSubmitted: (_) => _install(),
               ),
-              onSubmitted: (_) => _install(),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(width: 82, height: 38, child: _buildVersionField()),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 38,
-          height: 38,
-          child: Tooltip(
-            message: requirementsTooltip,
-            child: IconButton(
-              icon: const Icon(Icons.description_outlined, size: 20),
-              onPressed:
-                  state.isInstalling || !state.supportsRequirementsInstall
-                      ? null
-                      : () => _installRequirementsFromFile(state),
-              visualDensity: VisualDensity.compact,
+          SizedBox(
+            width: 8,
+            child: Center(
+              child: SizedBox(
+                height: 18,
+                child: VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 72,
-          height: 38,
-          child: FilledButton(
-            onPressed: state.isInstalling ? null : _install,
-            style: FilledButton.styleFrom(
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
+          SizedBox(width: 82, height: 38, child: _buildVersionField()),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 38,
+            height: 38,
+            child: Tooltip(
+              message: requirementsTooltip,
+              child: IconButton(
+                key: const ValueKey('install-requirements'),
+                icon: const Icon(Icons.description_outlined, size: 20),
+                onPressed:
+                    state.isInstalling || !state.supportsRequirementsInstall
+                        ? null
+                        : () => _installRequirementsFromFile(state),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-            child: Text(l10n.install),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 72,
+            height: 38,
+            child: FilledButton.tonal(
+              key: const ValueKey('install-package'),
+              onPressed: state.isInstalling ? null : _install,
+              style: FilledButton.styleFrom(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: Text(l10n.install),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildVersionField() {
     return TextField(
+      key: const ValueKey('install-package-version'),
       controller: _versionController,
       enableSuggestions: false,
       autocorrect: false,
-      decoration: InputDecoration(
-        hintText: AppLocalizations.of(context)!.version,
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      ),
+      style: const TextStyle(fontSize: 14, height: 1.2),
+      textAlignVertical: TextAlignVertical.center,
+      decoration:
+          _installFieldDecoration(AppLocalizations.of(context)!.version),
       onSubmitted: (_) => _install(),
+    );
+  }
+
+  InputDecoration _installFieldDecoration(String hintText) {
+    final colors = Theme.of(context).colorScheme;
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: TextStyle(color: colors.onSurfaceVariant),
+      filled: false,
+      isDense: true,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      focusedBorder: UnderlineInputBorder(
+        borderSide: BorderSide(color: colors.primary),
+      ),
+      errorBorder: UnderlineInputBorder(
+        borderSide: BorderSide(color: colors.error),
+      ),
+      focusedErrorBorder: UnderlineInputBorder(
+        borderSide: BorderSide(color: colors.error),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
     );
   }
 
@@ -532,6 +575,7 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     );
 
     return AppSurface(
+      tonal: true,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: ListTile(
         dense: true,

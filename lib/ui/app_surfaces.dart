@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_design_tokens.dart';
+import 'app_settings_section.dart';
 
 /// 统一卡片表面组件。
 ///
@@ -8,6 +9,9 @@ import 'app_design_tokens.dart';
 class AppSurface extends StatelessWidget {
   final bool pinned;
   final bool selected;
+
+  /// Opt in on migrated tool screens; the script workspace keeps its styling.
+  final bool tonal;
   final EdgeInsetsGeometry margin;
   final Widget child;
   final VoidCallback? onTap;
@@ -18,6 +22,7 @@ class AppSurface extends StatelessWidget {
     super.key,
     this.pinned = false,
     this.selected = false,
+    this.tonal = false,
     this.margin = const EdgeInsets.symmetric(
         horizontal: AppSpacing.md, vertical: AppSpacing.xs),
     this.onTap,
@@ -29,25 +34,33 @@ class AppSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    const radius = AppRadius.xl;
+    final radius = tonal ? AppRadius.md : AppRadius.xl;
 
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: AppThemeColors.scriptSurface(
-          context,
-          colors,
-          selected: selected,
-          pinned: pinned,
-        ),
+        color: tonal
+            ? (selected
+                ? colors.secondaryContainer
+                : colors.surfaceContainerLow)
+            : AppThemeColors.scriptSurface(
+                context,
+                colors,
+                selected: selected,
+                pinned: pinned,
+              ),
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: AppThemeColors.scriptBorder(
-            context,
-            colors,
-            selected: selected,
-            pinned: pinned,
-          ),
+          color: tonal
+              ? (selected
+                  ? colors.primary
+                  : colors.outlineVariant.withValues(alpha: 0.5))
+              : AppThemeColors.scriptBorder(
+                  context,
+                  colors,
+                  selected: selected,
+                  pinned: pinned,
+                ),
           width: AppThemeColors.isDark(context) ? 0.8 : 1,
         ),
       ),
@@ -68,9 +81,7 @@ class AppSurface extends StatelessWidget {
   }
 }
 
-/// 统一分区卡片，用于设置页、网络详情页等。
-///
-/// 带标题图标和标题文字的分组容器。
+/// Retains the existing API while presenting details as unframed sections.
 class AppSectionCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -85,43 +96,10 @@ class AppSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm - 2),
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.large,
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
-              child: Row(
-                children: [
-                  Icon(icon, size: 18, color: colors.primary),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ...children,
-          ],
-        ),
-      ),
+    return AppSettingsSection(
+      icon: icon,
+      title: title,
+      children: children,
     );
   }
 }

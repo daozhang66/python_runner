@@ -33,6 +33,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   @override
   void initState() {
     super.initState();
+    _store.addListener(_syncSearch);
     unawaited(_store.loadDisplayPreferences());
   }
 
@@ -42,14 +43,24 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
     final providedStore = context.read<HttpInspectorStore?>();
     final nextStore = providedStore ?? HttpInspectorStore.instance;
     if (identical(nextStore, _store)) return;
+    _store.removeListener(_syncSearch);
     _store = nextStore;
+    _store.addListener(_syncSearch);
+    _syncSearch();
     unawaited(_store.loadDisplayPreferences());
   }
 
   @override
   void dispose() {
+    _store.removeListener(_syncSearch);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _syncSearch() {
+    if (_searchController.text.trim() != _store.filterDomain) {
+      _searchController.text = _store.filterDomain;
+    }
   }
 
   @override
@@ -363,6 +374,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
         : AppLocalizations.of(context)!
             .visibleRequestsCount(visibleTotal, _store.count);
     return AppSurface(
+      tonal: true,
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

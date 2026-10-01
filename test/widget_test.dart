@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/pages/settings_page.dart';
 import 'package:python_runner/providers/theme_provider.dart';
+import 'package:python_runner/ui/app_theme.dart';
 
 void main() {
   testWidgets('settings page shows update controls',
@@ -82,6 +83,7 @@ Widget _buildSettings(SharedPreferences preferences) => ProviderScope(
         sharedPreferencesProvider.overrideWithValue(preferences),
       ],
       child: MaterialApp(
+        theme: AppTheme.build(ColorScheme.fromSeed(seedColor: Colors.blue)),
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,

@@ -17,6 +17,24 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets('workspace preserves original title and menu-only actions',
+      (tester) async {
+    final harness = await _pumpWorkspace(
+      tester,
+      scripts: [_script('daily.py')],
+    );
+    addTearDown(harness.dispose);
+
+    expect(find.text('Python'), findsOneWidget);
+    expect(find.text('Python Runner'), findsNothing);
+    expect(find.byTooltip('搜索脚本'), findsNothing);
+    expect(find.byTooltip('添加脚本'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await _openWorkspaceMenu(tester);
+    expect(find.widgetWithText(ListTile, '搜索脚本'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '添加脚本'), findsOneWidget);
+  });
+
   testWidgets('workspace shows skeleton during first script load',
       (tester) async {
     final loadGate = Completer<void>();
