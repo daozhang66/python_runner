@@ -165,6 +165,11 @@ class BackupJournalTest {
                             "script parent must be durable",
                             "backup_operations/op/payload/scripts" in synced,
                         )
+                        assertTrue(
+                            "operation ancestry must be durable",
+                            "backup_operations" in synced,
+                        )
+                        assertTrue("filesDir must be durable", "" in synced)
                     }
                 },
             )

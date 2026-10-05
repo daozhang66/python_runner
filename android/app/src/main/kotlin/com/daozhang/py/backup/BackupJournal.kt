@@ -104,6 +104,12 @@ class BackupJournal(
         syncTree(File(op(id), "payload"))
         durable.mkdir(op(id))
         durable.mkdir(File(op(id), "rollback"))
+        // prepare() may have created these directories with ordinary mkdirs.
+        // Persist every link from the operation back through the native root;
+        // syncing a child alone does not publish its entry in its parent.
+        syncDirectory(op(id))
+        syncDirectory(op(id).parentFile!!)
+        syncDirectory(filesDir)
         val state =
             JSONObject()
                 .put("version", 1)

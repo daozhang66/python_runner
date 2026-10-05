@@ -17,6 +17,7 @@ class BackupArchive(
     private val filesDir: File,
     private val progress: (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
     private val maxBytes: Long = 8L * 1024 * 1024 * 1024,
+    private val maxStructuralBytes: Long = BackupZipPreflight.MAX_METADATA_BYTES,
 ) {
     companion object {
         const val MARKER = ".python_runner_backup.json"
@@ -236,6 +237,12 @@ class BackupArchive(
                 }
             }
             cancelled(cancel)
+            checkBackup(
+                file.length() <= maxBytes,
+                "LIMIT_EXCEEDED",
+                "Archive exceeds input size limit",
+            )
+            BackupZipPreflight.inspect(file, cancel, maxMetadataBytes = maxStructuralBytes)
             JSONObject()
                 .put("path", file.absolutePath)
                 .put("fileName", file.name)
@@ -271,6 +278,10 @@ class BackupArchive(
                     }
                     out.fd.sync()
                 }
+            }
+            BackupZipPreflight.inspect(archive, cancel, maxMetadataBytes = maxStructuralBytes) {
+                count ->
+                progress(id, "scanning", count.toLong(), 0)
             }
             @Suppress("DEPRECATION")
             ZipFile(archive).use { zip ->

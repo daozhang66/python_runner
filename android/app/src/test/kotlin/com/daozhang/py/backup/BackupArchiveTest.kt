@@ -12,6 +12,30 @@ import org.junit.rules.TemporaryFolder
 
 class BackupArchiveTest {
     @Test
+    fun exportedZipIncludingMetadataMustFitInputByteLimit() {
+        source()
+        val limited = BackupArchive(temp.root, maxBytes = 128)
+        expectFailure { limited.create("inputLimit", metadata(), AtomicBoolean(false)) }
+        assertFalse(limited.operationDir("inputLimit").walkTopDown().any { it.extension == "zip" })
+    }
+
+    @Test
+    fun exportAndRestoreEnforceSameStructuralBudget() {
+        source()
+        val limited = BackupArchive(temp.root, maxStructuralBytes = 100)
+        expectFailure { limited.create("exportLimit", metadata(), AtomicBoolean(false)) }
+        assertFalse(limited.operationDir("exportLimit").walkTopDown().any { it.extension == "zip" })
+        expectFailure {
+            limited.stage(
+                "restoreLimit",
+                zip("main.py" to byteArrayOf(1)).inputStream(),
+                "a.zip",
+                AtomicBoolean(false),
+            )
+        }
+    }
+
+    @Test
     fun abandonedCleanupPreservesEveryJournalAndRemovesStaleTransfers() {
         val backend = core()
         backend.transferFile("stale").writeBytes(byteArrayOf(1, 2, 3))

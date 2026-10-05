@@ -58,7 +58,8 @@ class ScriptExecutionController(
 
     private val executionStateLock = Any()
     fun hasActiveExecution(): Boolean = synchronized(executionStateLock) {
-        currentExecutionId != null || currentExecutionThread?.isAlive == true || currentExecutionProcess?.isAlive == true
+        LiveExecutionWorkers.hasActive() || currentExecutionId != null ||
+            currentExecutionThread?.isAlive == true || currentExecutionProcess?.isAlive == true
     }
     private var currentExecutionThread: Thread? = null
     private var currentExecutionProcess: Process? = null
@@ -242,7 +243,7 @@ class ScriptExecutionController(
         synchronized(executionStateLock) {
             currentExecutionThread = executionThread
         }
-        executionThread.start()
+        LiveExecutionWorkers.start(executionThread)
 
         // Watchdog thread: kill script if it exceeds the timeout
         if (timeoutSeconds > 0) {
@@ -457,6 +458,7 @@ class ScriptExecutionController(
                 )
                 executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
                 val process = processBuilder.start()
+                LiveExecutionWorkers.track(process)
                 synchronized(executionStateLock) {
                     currentExecutionProcess = process
                 }
@@ -549,7 +551,7 @@ class ScriptExecutionController(
         synchronized(executionStateLock) {
             currentExecutionThread = linuxLikeExecutionThread
         }
-        linuxLikeExecutionThread.start()
+        LiveExecutionWorkers.start(linuxLikeExecutionThread)
     }
 
     fun sendLinuxLikeStdin(input: String, result: MethodChannel.Result) {
