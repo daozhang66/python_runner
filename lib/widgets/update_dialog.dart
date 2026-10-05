@@ -38,7 +38,11 @@ class UpdateDialog extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400),
             decoration: AppMaterials.of(context).liquid
-                ? null
+                // Container needs a decoration to derive its clip path, even
+                // when AppGlassSurface paints the background.
+                ? BoxDecoration(
+                    borderRadius: AppRadius.circular(AppSpacing.xl),
+                  )
                 : BoxDecoration(
                     color: colorScheme.surface,
                     borderRadius: AppRadius.circular(AppSpacing.xl),
