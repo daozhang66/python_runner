@@ -152,6 +152,7 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
         widget.logContent.startsWith('(暂无');
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(AppLocalizations.of(context)!.systemLogs),
         actions: [
           IconButton(
@@ -366,7 +367,7 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
     final colors = Theme.of(context).colorScheme;
     return PopScope(
       canPop: !_installing,
-      child: AlertDialog(
+      child: AppAlertDialog(
         title: Text(l10n.linuxLikeExperimental),
         content: _checking
             ? const SizedBox(
@@ -488,7 +489,9 @@ class _AboutPageState extends State<_AboutPage> {
         ? (_chaquopyPipDir.isNotEmpty ? _chaquopyPipDir : _sitePackages)
         : _sitePackages;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.about)),
+      appBar: AppBar(
+          flexibleSpace: appGlassBarBackground(context),
+          title: Text(l10n.about)),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
@@ -549,8 +552,14 @@ class _AboutPageState extends State<_AboutPage> {
               _AboutItem(
                 label: l10n.projectHomepage,
                 value: 'github.com/daozhang66/python_runner',
+                singleLine: true,
                 onTap: () => _bridge
                     .openUrl('https://github.com/daozhang66/python_runner'),
+              ),
+              _AboutItem(
+                label: l10n.sponsorProject,
+                value: l10n.sponsorProjectDescription,
+                onTap: () => _showSponsorDialog(context),
               ),
             ],
           ),
@@ -579,6 +588,36 @@ class _AboutPageState extends State<_AboutPage> {
     );
   }
 
+  void _showSponsorDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AppAlertDialog(
+        title: Text(l10n.sponsorProject),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.sponsorQrHint, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Icon(
+                Icons.qr_code_2,
+                size: 160,
+                semanticLabel: l10n.sponsorProject,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AboutCard extends StatelessWidget {
@@ -603,36 +642,46 @@ class _AboutItem extends StatelessWidget {
   final String label;
   final String value;
   final bool mono;
+  final bool singleLine;
   final VoidCallback? onTap;
   const _AboutItem(
       {required this.label,
       required this.value,
       this.mono = false,
+      this.singleLine = false,
       this.onTap});
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
+    final valueText = Text(
+      value,
+      maxLines: singleLine ? 1 : null,
+      overflow: singleLine ? TextOverflow.ellipsis : null,
+      style: TextStyle(
+        fontSize: 12.5,
+        color: c.onSurface,
+        fontFamily: mono ? 'monospace' : null,
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: GestureDetector(
         onTap: onTap,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              singleLine ? CrossAxisAlignment.center : CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 70,
               child: Text(label,
+                  maxLines: singleLine ? 1 : null,
+                  overflow: singleLine ? TextOverflow.ellipsis : null,
                   style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
             ),
             Expanded(
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: c.onSurface,
-                  fontFamily: mono ? 'monospace' : null,
-                ),
-              ),
+              child: singleLine
+                  ? Tooltip(message: value, child: valueText)
+                  : valueText,
             ),
             if (onTap != null)
               Icon(Icons.chevron_right, size: 16, color: c.onSurfaceVariant),
