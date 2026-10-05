@@ -16,9 +16,10 @@ import org.junit.rules.TemporaryFolder
 class BackupZipPreflightTest {
     @get:Rule val temp = TemporaryFolder()
 
-    private fun zip(count: Int, extra: ByteArray? = null): File {
+    private fun zip(count: Int, extra: ByteArray? = null, comment: String? = null): File {
         val file = File(temp.root, "input.zip")
         ZipOutputStream(file.outputStream().buffered()).use { out ->
+            if (comment != null) out.setComment(comment)
             repeat(count) { index ->
                 val entry =
                     ZipEntry("file$index").apply {
@@ -34,6 +35,89 @@ class BackupZipPreflightTest {
         }
         return file
     }
+
+    @Test
+    fun competingEocdInsideCommentCannotSelectAnUnboundedDirectory() {
+        val file = zip(4)
+        val bytes = file.readBytes()
+        val originalEnd = bytes.size - 22
+        fun read32(offset: Int): Int =
+            (0..3).sumOf { (bytes[offset + it].toInt() and 255) shl (8 * it) }
+        val originalCentral = read32(originalEnd + 16)
+        val extraHeader = bytes.copyOfRange(originalCentral, originalCentral + 46 + "file0".length)
+        val extraOffset = originalEnd
+        val realEocdOffset = extraOffset + extraHeader.size
+        val fakeEocdOffset = realEocdOffset + 22
+        file.outputStream().use { output ->
+            output.write(bytes, 0, originalEnd)
+            output.write(extraHeader)
+            output.write(eocd(1, extraHeader.size, extraOffset, 23))
+            output.write(eocd(5, fakeEocdOffset - originalCentral, originalCentral, 0))
+            output.write(0)
+        }
+        // Characterize the pinned dependency only with this tiny trusted fixture:
+        // its constructor chooses the fake signature, ignoring comment length.
+        assertEquals(5, commonsCount(file))
+        assertEquals(
+            "INVALID_ARCHIVE",
+            failure { BackupZipPreflight.inspect(file, AtomicBoolean(false), maxEntries = 3) }.code,
+        )
+    }
+
+    @Test
+    fun ordinaryCommentsAndSignaturesOutsideCommonsSearchRemainValid() {
+        for (comment in
+            listOf("normal Unicode 备份", "prefix PK\u0005\u0006 short", "x".repeat(65535))) {
+            val file = zip(2, comment = comment)
+            assertEquals(2, BackupZipPreflight.inspect(file, AtomicBoolean(false)).entryCount)
+            assertEquals(2, commonsCount(file))
+        }
+    }
+
+    @Test
+    fun optionalZip64LocatorWinsEvenWithoutClassicSentinelFields() {
+        val file = File(temp.root, "optional64.zip")
+        ZipArchiveOutputStream(file).use { output ->
+            output.setUseZip64(Zip64Mode.Always)
+            output.setComment("normal ZIP64 comment")
+            repeat(4) { index ->
+                output.putArchiveEntry(ZipArchiveEntry("item$index"))
+                output.closeArchiveEntry()
+            }
+        }
+        // Commons checks the locator independently of classic sentinel values.
+        // Make classic fields describe zero entries while retaining valid ZIP64.
+        RandomAccessFile(file, "rw").use { input ->
+            val eocdOffset = input.length() - 22 - "normal ZIP64 comment".length
+            input.seek(eocdOffset + 8)
+            input.write(ByteArray(12))
+        }
+        assertEquals(4, commonsCount(file))
+        assertEquals(
+            "LIMIT_EXCEEDED",
+            failure { BackupZipPreflight.inspect(file, AtomicBoolean(false), maxEntries = 3) }.code,
+        )
+        assertEquals(4, BackupZipPreflight.inspect(file, AtomicBoolean(false)).entryCount)
+    }
+
+    private fun eocd(count: Int, size: Int, offset: Int, comment: Int): ByteArray =
+        java.nio.ByteBuffer.allocate(22)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putInt(0x06054b50)
+            .putShort(0)
+            .putShort(0)
+            .putShort(count.toShort())
+            .putShort(count.toShort())
+            .putInt(size)
+            .putInt(offset)
+            .putShort(comment.toShort())
+            .array()
+
+    @Suppress("DEPRECATION")
+    private fun commonsCount(file: File): Int =
+        org.apache.commons.compress.archivers.zip.ZipFile(file).use {
+            it.entries.asSequence().count()
+        }
 
     @Test
     fun actualRecordsOverrideDishonestEocdCount() {

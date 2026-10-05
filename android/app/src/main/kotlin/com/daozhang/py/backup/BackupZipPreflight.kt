@@ -34,16 +34,19 @@ internal object BackupZipPreflight {
                 input.seek(length - tail.size)
                 input.readFully(tail)
                 var eocd = -1
+                // Commons Compress 1.26.2 searches [EOF-22, EOF-65557]
+                // backwards and selects the first signature without checking
+                // comment length. Select precisely that same record, then
+                // validate it. Never fall back to an earlier valid-looking
+                // EOCD: the constructor would still follow the later one.
                 for (index in tail.size - 22 downTo 0) {
-                    if (
-                        u32(tail, index) == 0x06054b50L &&
-                            index + 22 + u16(tail, index + 20) == tail.size
-                    ) {
+                    if (u32(tail, index) == 0x06054b50L) {
                         eocd = index
                         break
                     }
                 }
                 checkBackup(eocd >= 0)
+                checkBackup(eocd + 22 + u16(tail, eocd + 20) == tail.size)
                 checkBackup(u16(tail, eocd + 4) == 0 && u16(tail, eocd + 6) == 0)
                 checkBackup(u16(tail, eocd + 8) == u16(tail, eocd + 10))
                 val eocdOffset = length - tail.size + eocd
@@ -54,7 +57,9 @@ internal object BackupZipPreflight {
                 var metadataBytes = length - eocdOffset
                 val locator = ByteArray(20)
                 val hasLocator =
-                    if (eocdOffset >= 20) {
+                    // The pinned parser tests locator presence independently
+                    // of classic sentinel fields, and only at positions > 20.
+                    if (eocdOffset > 20) {
                         input.seek(eocdOffset - 20)
                         input.readFully(locator)
                         u32(locator, 0) == 0x07064b50L
@@ -89,6 +94,9 @@ internal object BackupZipPreflight {
                     centralOffset <= footerOffset && centralSize <= footerOffset - centralOffset
                 )
                 checkBackup(centralOffset + centralSize == footerOffset)
+                // For ZIP32 this equality also forces Commons' inferred
+                // leading-data adjustment to zero. Both readers start at the
+                // same centralOffset and stop on the same non-CFH footer.
                 checkBackup(
                     metadataBytes <= maxMetadataBytes,
                     "LIMIT_EXCEEDED",
