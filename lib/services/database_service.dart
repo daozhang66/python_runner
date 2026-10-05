@@ -3,17 +3,21 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+
 import '../models/script_file.dart';
 import '../models/script_group.dart';
+import '../features/backup/domain/backup_manifest.dart';
+import '../features/backup/domain/restore_plan.dart';
+import 'script_name_validator.dart';
 
 class DatabaseService {
   DatabaseService({String? databasePath}) : _databasePath = databasePath;
 
   @visibleForTesting
   DatabaseService.test({required String databasePath})
-      : _databasePath = databasePath;
+    : _databasePath = databasePath;
 
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
   static const String databaseFileName = 'python_runner.db';
   static const int maxBackupBundles = 5;
 
@@ -69,11 +73,7 @@ class DatabaseService {
         );
       }
       if (await _isRecoverableDatabaseFailure(path, error)) {
-        return _archiveAndRebuild(
-          path,
-          reason: 'corrupt',
-          cause: error,
-        );
+        return _archiveAndRebuild(path, reason: 'corrupt', cause: error);
       }
       final backupPath = await _copyDatabaseBackup(path, reason: 'open_failed');
       throw DatabaseOpenException(
@@ -116,10 +116,7 @@ class DatabaseService {
   }) async {
     final backupPath = await _archiveDatabaseBundle(path, reason: reason);
     if (backupPath == null) {
-      throw DatabaseOpenException(
-        '数据库恢复前无法归档原数据库。',
-        cause: cause,
-      );
+      throw DatabaseOpenException('数据库恢复前无法归档原数据库。', cause: cause);
     }
     try {
       await deleteDatabase(path);
@@ -137,10 +134,7 @@ class DatabaseService {
     }
   }
 
-  Future<bool> _isRecoverableDatabaseFailure(
-    String path,
-    Object error,
-  ) async {
+  Future<bool> _isRecoverableDatabaseFailure(String path, Object error) async {
     if (await FileSystemEntity.type(path) != FileSystemEntityType.file) {
       return false;
     }
@@ -151,8 +145,10 @@ class DatabaseService {
         message.contains('file is encrypted');
   }
 
-  Future<String?> _copyDatabaseBackup(String path,
-      {required String reason}) async {
+  Future<String?> _copyDatabaseBackup(
+    String path, {
+    required String reason,
+  }) async {
     final source = File(path);
     if (!await source.exists()) return null;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -162,8 +158,10 @@ class DatabaseService {
     return backupPath;
   }
 
-  Future<String?> _archiveDatabaseBundle(String path,
-      {required String reason}) async {
+  Future<String?> _archiveDatabaseBundle(
+    String path, {
+    required String reason,
+  }) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final moved = <(File source, File archive)>[];
     try {
@@ -229,11 +227,7 @@ class DatabaseService {
     }
   }
 
-  Future<void> _onDowngrade(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
+  Future<void> _onDowngrade(Database db, int oldVersion, int newVersion) async {
     throw _DatabaseDowngradeSignal(oldVersion);
   }
 
@@ -248,10 +242,7 @@ class DatabaseService {
   }
 
   @visibleForTesting
-  static Future<void> createSchemaForTest(
-    Database db,
-    int version,
-  ) async {
+  static Future<void> createSchemaForTest(Database db, int version) async {
     if (version < 1 || version > schemaVersion) {
       throw ArgumentError.value(
         version,
@@ -288,6 +279,9 @@ class DatabaseService {
     }
     if (version >= 6) {
       await _addHomeSortOrder(db);
+    }
+    if (version >= 7) {
+      await _createRestoreCommitTable(db);
     }
     await db.setVersion(version);
   }
@@ -334,6 +328,7 @@ class DatabaseService {
     ''');
     await _createProjectGroupIndexes(db);
     await _addHomeSortOrder(db);
+    await _createRestoreCommitTable(db);
   }
 
   static Future<void> _onUpgrade(
@@ -342,12 +337,14 @@ class DatabaseService {
     int newVersion,
   ) async {
     if (oldVersion < 2) {
-      await db
-          .execute('ALTER TABLE scripts ADD COLUMN isPinned INTEGER DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE scripts ADD COLUMN isPinned INTEGER DEFAULT 0',
+      );
     }
     if (oldVersion < 3) {
       await db.execute(
-          'ALTER TABLE scripts ADD COLUMN sortOrder INTEGER DEFAULT 0');
+        'ALTER TABLE scripts ADD COLUMN sortOrder INTEGER DEFAULT 0',
+      );
       await _migrateSortOrder(db);
     }
     if (oldVersion < 4) {
@@ -364,21 +361,206 @@ class DatabaseService {
     }
     if (oldVersion < 5) {
       await db.execute('ALTER TABLE script_groups ADD COLUMN projectKey TEXT');
-      await db
-          .execute('ALTER TABLE script_groups ADD COLUMN mainFilePath TEXT');
       await db.execute(
-          'ALTER TABLE script_groups ADD COLUMN isProject INTEGER DEFAULT 0');
+        'ALTER TABLE script_groups ADD COLUMN mainFilePath TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE script_groups ADD COLUMN isProject INTEGER DEFAULT 0',
+      );
       await _createProjectGroupIndexes(db);
     }
     if (oldVersion < 6) {
       await _addHomeSortOrder(db);
     }
+    if (oldVersion < 7) {
+      await _createRestoreCommitTable(db);
+    }
+  }
+
+  static Future<void> _createRestoreCommitTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS backup_restore_commits (
+        operationId TEXT PRIMARY KEY,
+        committedAt INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  /// Both metadata tables are read from the same SQLite transaction snapshot.
+  Future<BackupLibrarySnapshot> readBackupSnapshot() async {
+    final db = await database;
+    return db.transaction(
+      (txn) async => BackupLibrarySnapshot(
+        scripts: (await txn.query(
+          'scripts',
+          orderBy: 'sortOrder ASC, name ASC',
+        )).map(ScriptFile.fromMap),
+        groups: (await txn.query(
+          'script_groups',
+          orderBy: 'sortOrder ASC, id ASC',
+        )).map(ScriptGroup.fromMap),
+      ),
+    );
+  }
+
+  /// Must follow native file commit while the library write gate is held.
+  /// Metadata and the recovery marker commit together or roll back together.
+  /// Replaying a committed operation is harmless until its marker is forgotten.
+  Future<void> applyRestorePlan(
+    RestorePlan plan,
+    String operationId,
+    String localScriptsRoot,
+  ) async {
+    if (operationId.isEmpty ||
+        operationId.trim() != operationId ||
+        operationId.length > 255) {
+      throw ArgumentError.value(operationId, 'operationId');
+    }
+    if (!isAbsolute(localScriptsRoot)) {
+      throw ArgumentError.value(
+        localScriptsRoot,
+        'localScriptsRoot',
+        'An absolute local root is required',
+      );
+    }
+    final db = await database;
+    await db.transaction((txn) async {
+      final committed = await txn.query(
+        'backup_restore_commits',
+        columns: ['operationId'],
+        where: 'operationId = ?',
+        whereArgs: [operationId],
+      );
+      if (committed.isNotEmpty) return;
+      final groupIds = <int, int>{};
+      final ordinarySourceIds = <int>{};
+      for (final planned in plan.groups) {
+        if (groupIds.containsKey(planned.sourceId)) {
+          throw StateError('Duplicate planned source group');
+        }
+        final group = planned.group;
+        final values = group.toMap()..remove('id');
+        final int targetId;
+        if (planned.action == RestoreAction.create) {
+          if (group.id != null) {
+            throw StateError('New group cannot retain a source ID');
+          }
+          targetId = await txn.insert(
+            'script_groups',
+            values,
+            conflictAlgorithm: ConflictAlgorithm.abort,
+          );
+        } else {
+          final id = group.id;
+          if (id == null) {
+            throw StateError('Existing group requires a local ID');
+          }
+          final rows = await txn.query(
+            'script_groups',
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+          if (rows.length != 1 ||
+              rows.single['name'] != group.name ||
+              rows.single['projectKey'] != group.projectKey ||
+              rows.single['isProject'] != (group.isProject ? 1 : 0)) {
+            throw StateError('Restore group destination changed');
+          }
+          targetId = id;
+          if (planned.action == RestoreAction.overwrite) {
+            await txn.update(
+              'script_groups',
+              values,
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+          }
+        }
+        groupIds[planned.sourceId] = targetId;
+        if (!group.isProject) ordinarySourceIds.add(planned.sourceId);
+      }
+      for (final placement in plan.homePlacements) {
+        final count = placement.scriptName != null
+            ? await txn.update(
+                'scripts',
+                {'homeSortOrder': placement.homeSortOrder},
+                where: 'name = ?',
+                whereArgs: [placement.scriptName],
+              )
+            : await txn.update(
+                'script_groups',
+                {'homeSortOrder': placement.homeSortOrder},
+                where: 'id = ?',
+                whereArgs: [placement.groupId],
+              );
+        if (count != 1) {
+          throw StateError('Restore placement destination changed');
+        }
+      }
+      for (final planned in plan.scripts) {
+        final script = planned.script;
+        if (ScriptNameValidator.normalize(script.name) != script.name) {
+          throw const FormatException('Invalid restore script name');
+        }
+        final sourceGroup = planned.sourceGroupId;
+        if (sourceGroup != null && !ordinarySourceIds.contains(sourceGroup)) {
+          throw StateError(
+            'Missing ordinary group mapping for restored script',
+          );
+        }
+        final values = script.toMap()
+          ..['path'] = join(localScriptsRoot, script.name)
+          ..['groupId'] = sourceGroup == null ? null : groupIds[sourceGroup];
+        if (planned.action == RestoreAction.create) {
+          await txn.insert(
+            'scripts',
+            values,
+            conflictAlgorithm: ConflictAlgorithm.abort,
+          );
+        } else if (planned.action == RestoreAction.overwrite) {
+          final count = await txn.update(
+            'scripts',
+            values,
+            where: 'name = ?',
+            whereArgs: [script.name],
+          );
+          if (count != 1) {
+            throw StateError('Restore script destination changed');
+          }
+        } else {
+          throw StateError('Scripts cannot use the group reuse action');
+        }
+      }
+      await txn.insert('backup_restore_commits', {
+        'operationId': operationId,
+        'committedAt': DateTime.now().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.abort);
+    });
+  }
+
+  Future<Set<String>> committedRestoreIds() async {
+    final db = await database;
+    final rows = await db.query(
+      'backup_restore_commits',
+      columns: ['operationId'],
+    );
+    return Set.unmodifiable(rows.map((row) => row['operationId'] as String));
+  }
+
+  Future<void> forgetRestoreCommit(String operationId) async {
+    final db = await database;
+    await db.delete(
+      'backup_restore_commits',
+      where: 'operationId = ?',
+      whereArgs: [operationId],
+    );
   }
 
   static Future<void> _addHomeSortOrder(Database db) async {
     await db.execute('ALTER TABLE scripts ADD COLUMN homeSortOrder INTEGER');
-    await db
-        .execute('ALTER TABLE script_groups ADD COLUMN homeSortOrder INTEGER');
+    await db.execute(
+      'ALTER TABLE script_groups ADD COLUMN homeSortOrder INTEGER',
+    );
   }
 
   static Future<void> _createProjectGroupIndexes(Database db) async {
@@ -390,8 +572,10 @@ class DatabaseService {
   }
 
   static Future<void> _migrateSortOrder(Database db) async {
-    final maps =
-        await db.query('scripts', orderBy: 'isPinned DESC, modifiedAt DESC');
+    final maps = await db.query(
+      'scripts',
+      orderBy: 'isPinned DESC, modifiedAt DESC',
+    );
     final batch = db.batch();
     for (int i = 0; i < maps.length; i++) {
       batch.update(
@@ -415,15 +599,20 @@ class DatabaseService {
 
   Future<List<ScriptFile>> getAllScripts() async {
     final db = await database;
-    final maps =
-        await db.query('scripts', orderBy: 'isPinned DESC, sortOrder ASC');
+    final maps = await db.query(
+      'scripts',
+      orderBy: 'isPinned DESC, sortOrder ASC',
+    );
     return maps.map((m) => ScriptFile.fromMap(m)).toList();
   }
 
   Future<ScriptFile?> getScript(String name) async {
     final db = await database;
-    final maps =
-        await db.query('scripts', where: 'name = ?', whereArgs: [name]);
+    final maps = await db.query(
+      'scripts',
+      where: 'name = ?',
+      whereArgs: [name],
+    );
     if (maps.isEmpty) return null;
     return ScriptFile.fromMap(maps.first);
   }
@@ -434,7 +623,10 @@ class DatabaseService {
   }
 
   Future<void> renameScript(
-      String oldName, String newName, String newPath) async {
+    String oldName,
+    String newName,
+    String newPath,
+  ) async {
     final db = await database;
     await db.update(
       'scripts',
@@ -471,29 +663,30 @@ class DatabaseService {
   }
 
   Future<void> batchUpdateHomeSortOrders(
-      List<ScriptFile> scripts, List<ScriptGroup> groups) async {
+    List<ScriptFile> scripts,
+    List<ScriptGroup> groups,
+  ) async {
     final db = await database;
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (final script in scripts) {
         batch.update(
-            'scripts',
-            {
-              'sortOrder': script.sortOrder,
-              'homeSortOrder': script.homeSortOrder,
-            },
-            where: 'name = ?',
-            whereArgs: [script.name]);
+          'scripts',
+          {
+            'sortOrder': script.sortOrder,
+            'homeSortOrder': script.homeSortOrder,
+          },
+          where: 'name = ?',
+          whereArgs: [script.name],
+        );
       }
       for (final group in groups) {
         batch.update(
-            'script_groups',
-            {
-              'sortOrder': group.sortOrder,
-              'homeSortOrder': group.homeSortOrder,
-            },
-            where: 'id = ?',
-            whereArgs: [group.id]);
+          'script_groups',
+          {'sortOrder': group.sortOrder, 'homeSortOrder': group.homeSortOrder},
+          where: 'id = ?',
+          whereArgs: [group.id],
+        );
       }
       await batch.commit(noResult: true);
     });
@@ -518,10 +711,7 @@ class DatabaseService {
     final db = await database;
     await db.update(
       'script_groups',
-      {
-        'name': name,
-        'modifiedAt': DateTime.now().millisecondsSinceEpoch,
-      },
+      {'name': name, 'modifiedAt': DateTime.now().millisecondsSinceEpoch},
       where: 'id = ?',
       whereArgs: [groupId],
     );
@@ -559,11 +749,7 @@ class DatabaseService {
         where: 'groupId = ?',
         whereArgs: [groupId],
       );
-      await txn.delete(
-        'script_groups',
-        where: 'id = ?',
-        whereArgs: [groupId],
-      );
+      await txn.delete('script_groups', where: 'id = ?', whereArgs: [groupId]);
     });
   }
 
@@ -588,11 +774,7 @@ class DatabaseService {
 }
 
 class DatabaseOpenException implements Exception {
-  DatabaseOpenException(
-    this.message, {
-    this.cause,
-    this.backupPath,
-  });
+  DatabaseOpenException(this.message, {this.cause, this.backupPath});
 
   final String message;
   final Object? cause;
