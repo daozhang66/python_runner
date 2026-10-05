@@ -1,0 +1,64 @@
+Python Runner
+Android application for running Python scripts
+https://github.com/daozhang66/python_runner
+
+Copyright (C) 2025-2026 daozhang66
+SPDX-License-Identifier: GPL-3.0-only
+
+Python Runner is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License, version 3,
+as published by the Free Software Foundation.
+
+Python Runner is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Python Runner, in the LICENSE file. If not, see
+https://www.gnu.org/licenses/.
+
+Scope and third-party materials
+------------------------------
+This notice applies to code authored for Python Runner, except where a file
+or component carries a separate license or copyright notice. It does not
+replace the rights, notices, or license terms of third-party contributors.
+
+In particular, retain the following existing third-party notices:
+
+* third_party/re_editor/LICENSE: MIT; Copyright (c) 2024 Reqable.
+* third_party/g1455/LICENSE: MIT; Copyright (c) 2026 Mike Matiunin (PlugFox).
+* third_party/notices/navigation-glass.txt: attribution and MIT terms for
+  the optical model adapted in assets/shaders/navigation_glass.frag.
+* android/app/src/main/python/pyaes/: MIT notices in the individual files;
+  Copyright (c) 2014 Richard Moore.
+* android/app/src/main/python/pyDes.py: upstream author Todd Whiteman;
+  the file identifies its license as MIT.
+
+Flutter/Dart packages, Chaquopy, Python and its packages, MiSans fonts,
+prebuilt native libraries, and separately downloaded Debian runtime images
+remain subject to their respective upstream terms. Their inclusion or use
+does not make them original Python Runner code. This notice does not grant
+permission to relicense them, establish that all binary distribution
+requirements have been met, or create an exception to the GPL for a
+combined work. Redistributors must preserve the applicable notices and
+meet the source-code and other obligations of the licenses involved.
+
+Merely running an independently written Python script with Python Runner
+does not, by itself, place that script under the GPL.
+
+Earlier releases
+----------------
+This change does not revoke MIT permissions already granted for copies of
+earlier releases distributed under the MIT License. Consult the license
+shipped with the particular release or source revision you received.
+
+Distributing APKs
+-----------------
+When distributing a GPL-covered APK, comply with section 6 of LICENSE.
+For a download release using section 6(d), provide equivalent access to
+the complete Corresponding Source for that APK, including local changes
+and the scripts needed to control compilation and installation. Identify
+the exact source revision used to build the APK; a link to a moving main
+branch or a tag that predates the binary's changes is not a substitute.
+Third-party components may carry additional source and notice obligations.

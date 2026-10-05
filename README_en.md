@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=release)](https://github.com/daozhang66/python_runner/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/daozhang66/python_runner/ci.yml?branch=main&label=CI)](https://github.com/daozhang66/python_runner/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)](./LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://www.android.com)
 [![Stars](https://img.shields.io/github/stars/daozhang66/python_runner?style=social)](https://github.com/daozhang66/python_runner/stargazers)
@@ -93,6 +93,10 @@ flutter build apk --release
 
 ## 📄 License
 
-[MIT](./LICENSE) © 2025 daozhang66
+Code authored for Python Runner is licensed under the [GNU GPL version 3 only (GPL-3.0-only)](./LICENSE), Copyright © 2025–2026 daozhang66. See [NOTICE](./NOTICE) for the project grant and scope.
+
+Third-party code, fonts, and runtime components retain their respective licenses and copyright notices. Merely running independently written Python scripts with this application does not, by itself, require those scripts to use the GPL. Earlier MIT-licensed releases retain their original grants.
+
+Distributing a GPL-covered APK requires compliance with GPL section 6. For download releases, section 6(d) permits equivalent access to the complete Corresponding Source and build scripts matching that APK; an outdated tag or a moving branch alone is not a substitute.
 
 > Developed with **Claude Code / Codex** (AI coding assistant)

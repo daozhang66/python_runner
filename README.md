@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/daozhang66/python_runner?color=2ea44f&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/daozhang66/python_runner/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/daozhang66/python_runner/ci.yml?branch=main&label=CI)](https://github.com/daozhang66/python_runner/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)](./LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://www.android.com)
 [![Stars](https://img.shields.io/github/stars/daozhang66/python_runner?style=social)](https://github.com/daozhang66/python_runner/stargazers)
@@ -93,6 +93,10 @@ flutter build apk --release
 
 ## 📄 许可证
 
-[MIT](./LICENSE) © 2025 daozhang66
+Python Runner 的自有代码采用 [GNU GPL v3（仅第 3 版，GPL-3.0-only）](./LICENSE)，Copyright © 2025–2026 daozhang66。项目授权声明和适用范围见 [NOTICE](./NOTICE)。
+
+第三方代码、字体和运行时组件保留各自的许可证与版权声明；使用本应用运行独立编写的 Python 脚本，本身不会使脚本必须采用 GPL。此前按 MIT 发布的版本仍保留原有授权。
+
+分发 GPL 覆盖的 APK 时，须按 GPL 第 6 条提供对应源代码；通过下载发布时，可采用第 6(d) 条的方式提供完整、匹配该 APK 的源码及构建脚本，不能只指向不匹配的旧标签或持续变化的分支。
 
 > 本项目由 **Claude Code / Codex** 辅助开发
