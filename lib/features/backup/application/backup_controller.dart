@@ -145,6 +145,7 @@ class BackupController extends ChangeNotifier {
     BackupConfigurationException() => const BackupFailure(
       'CONFIGURATION_UNAVAILABLE',
     ),
+    UnsupportedBackupVersion() => const BackupFailure('UNSUPPORTED_VERSION'),
     FormatException() => const BackupFailure('INVALID_BACKUP'),
     _ => const BackupFailure('OPERATION_FAILED'),
   };

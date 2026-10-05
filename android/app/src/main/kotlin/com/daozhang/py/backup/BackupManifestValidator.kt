@@ -49,9 +49,9 @@ internal object BackupManifestValidator {
 
     fun validate(json: JSONObject, withFiles: Boolean = true) {
         try {
-            checkBackup(
-                json.get("format") == "python_runner_backup" && integer(json, "version") == 1L
-            )
+            checkBackup(json.get("format") == "python_runner_backup")
+            val version = integer(json, "version")
+            checkBackup(version == 1L, "UNSUPPORTED_VERSION", "Unsupported backup version")
             date(json, "createdAt")
             val scripts = json.getJSONArray("scripts").objects()
             val groups = json.getJSONArray("groups").objects()

@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/features/backup/domain/backup_manifest.dart';
 import 'package:python_runner/features/backup/domain/backup_selection.dart';
 
+import 'future_version_fixture.dart';
+
 Map<String, dynamic> manifestFixture() => {
   'format': 'python_runner_backup',
   'version': 1,
@@ -84,6 +86,52 @@ Map<String, dynamic> fileJson(String path, {bool directory = false}) => {
 };
 
 void main() {
+  test(
+    'shared future-version ZIP metadata has a distinct typed failure',
+    () async {
+      final json = await futureVersionFixture();
+      expect(
+        () => BackupManifest.fromJson(json),
+        throwsA(
+          isA<UnsupportedBackupVersion>().having(
+            (e) => e.version,
+            'version',
+            2,
+          ),
+        ),
+      );
+      json['version'] = 1;
+      expect(BackupManifest.fromJson(json).scripts.single.name, 'hello.py');
+    },
+  );
+  test('wrong format and malformed versions are not unsupported versions', () {
+    for (final version in [null, '2', 2.0, 2.5, -1, 9007199254740992]) {
+      final json = manifestFixture()..['version'] = version;
+      expect(
+        () => BackupManifest.fromJson(json),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e is UnsupportedBackupVersion,
+            'unsupported version',
+            false,
+          ),
+        ),
+      );
+    }
+    final json = manifestFixture()
+      ..['format'] = 'other'
+      ..['version'] = 2;
+    expect(
+      () => BackupManifest.fromJson(json),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e is UnsupportedBackupVersion,
+          'unsupported version',
+          false,
+        ),
+      ),
+    );
+  });
   test(
     'roundtrips Unicode, metadata, binary entries and empty directories',
     () {

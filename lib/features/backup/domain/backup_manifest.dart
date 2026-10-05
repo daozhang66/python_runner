@@ -3,6 +3,14 @@ import '../../../models/script_group.dart';
 import '../../../services/project_path_validator.dart';
 import '../../../services/script_name_validator.dart';
 
+/// A recognized backup format whose integral version this app cannot read.
+/// Retains FormatException compatibility for callers that reject all bad input.
+class UnsupportedBackupVersion extends FormatException {
+  const UnsupportedBackupVersion(this.version)
+    : super('Unsupported backup version');
+  final int version;
+}
+
 /// Portable metadata. Source IDs link records only; script paths are discarded.
 class BackupManifest {
   static const markerFileName = '.python_runner_backup.json';
@@ -28,10 +36,15 @@ class BackupManifest {
   }
 
   factory BackupManifest.fromJson(Map<String, dynamic> json) {
+    final archiveVersion = json['version'];
     if (json['format'] != format ||
-        json['version'] is! int ||
-        json['version'] != version) {
-      throw const FormatException('Unsupported backup format or version');
+        archiveVersion is! int ||
+        archiveVersion < 0 ||
+        archiveVersion > 9007199254740991) {
+      throw const FormatException('Invalid backup format or version');
+    }
+    if (archiveVersion != version) {
+      throw UnsupportedBackupVersion(archiveVersion);
     }
     return BackupManifest(
       createdAt: _date(json, 'createdAt'),

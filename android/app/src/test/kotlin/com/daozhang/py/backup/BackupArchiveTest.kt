@@ -12,6 +12,85 @@ import org.junit.rules.TemporaryFolder
 
 class BackupArchiveTest {
     @Test
+    fun realFutureVersionBackupHasDistinctErrorAndCurrentVersionStillStages() {
+        val fixture =
+            javaClass.getResourceAsStream("/backup/future-version.zip")!!.use { it.readBytes() }
+        try {
+            core()
+                .stage("future", fixture.inputStream(), "future-version.zip", AtomicBoolean(false))
+            fail("A future version must not stage or fall back to legacy")
+        } catch (e: BackupException) {
+            assertEquals("UNSUPPORTED_VERSION", e.code)
+        }
+        val entries = fixtureEntries(fixture)
+        val current =
+            entries
+                .map { (name, bytes) ->
+                    name to
+                        if (name == BackupArchive.MARKER) {
+                            JSONObject(String(bytes, Charsets.UTF_8))
+                                .put("version", 1)
+                                .toString()
+                                .toByteArray()
+                        } else bytes
+                }
+                .toTypedArray()
+        val staged =
+            core()
+                .stage("current", zip(*current).inputStream(), "current.zip", AtomicBoolean(false))
+        assertFalse(staged.getBoolean("legacy"))
+        assertEquals(1, staged.getJSONObject("manifest").getInt("version"))
+        assertEquals(
+            "print(\"future fixture\")\n",
+            File(core().payload("current"), "scripts/hello.py").readText(),
+        )
+    }
+
+    @Test
+    fun wrongFormatAndMalformedVersionsRemainInvalidArchives() {
+        val fixture =
+            javaClass.getResourceAsStream("/backup/future-version.zip")!!.use { it.readBytes() }
+        val entries = fixtureEntries(fixture)
+        val original =
+            String(entries.first { it.first == BackupArchive.MARKER }.second, Charsets.UTF_8)
+        val invalid =
+            listOf("null", "\"2\"", "2.0", "2.5", "-1", "9007199254740992").map {
+                original.replace("\"version\":2", "\"version\":$it")
+            } + original.replace("\"python_runner_backup\"", "\"other\"")
+        invalid.forEachIndexed { index, marker ->
+            val malformed =
+                entries
+                    .map { (name, bytes) ->
+                        name to if (name == BackupArchive.MARKER) marker.toByteArray() else bytes
+                    }
+                    .toTypedArray()
+            try {
+                core()
+                    .stage(
+                        "invalidVersion$index",
+                        zip(*malformed).inputStream(),
+                        "invalid.zip",
+                        AtomicBoolean(false),
+                    )
+                fail("Must reject malformed version or wrong format")
+            } catch (e: BackupException) {
+                assertTrue(e.code == "INVALID_ARCHIVE" || e.code == "INVALID_MANIFEST")
+            }
+        }
+    }
+
+    private fun fixtureEntries(bytes: ByteArray): List<Pair<String, ByteArray>> {
+        val entries = mutableListOf<Pair<String, ByteArray>>()
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { input ->
+            while (true) {
+                val entry = input.nextEntry ?: break
+                entries.add(entry.name to input.readBytes())
+            }
+        }
+        return entries
+    }
+
+    @Test
     fun exportedZipIncludingMetadataMustFitInputByteLimit() {
         source()
         val limited = BackupArchive(temp.root, maxBytes = 128)
