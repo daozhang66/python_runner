@@ -6,6 +6,7 @@ import 'package:python_runner/features/backup/domain/backup_manifest.dart';
 import 'package:python_runner/features/backup/domain/backup_selection.dart';
 import 'package:python_runner/features/backup/domain/restore_plan.dart';
 import 'package:python_runner/features/backup/domain/restore_planner.dart';
+import 'package:python_runner/features/scripts/application/script_home_item.dart';
 import 'package:python_runner/services/database_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -165,6 +166,65 @@ void main() {
       untouched.toMap(),
     );
   });
+
+  for (final overwriteProject in [true, false]) {
+    test(
+      'overwrite-only preserves null-rank home order: project=$overwriteProject',
+      () async {
+        final project = localGroup(
+          7,
+          'Project',
+          project: true,
+          key: 'donor_project',
+          home: null,
+        ).copyWith(modifiedAt: DateTime.utc(overwriteProject ? 2025 : 2024));
+        final script = localScript(
+          'alone.py',
+          home: null,
+        ).copyWith(modifiedAt: DateTime.utc(overwriteProject ? 2024 : 2025));
+        await service.createGroup(project);
+        await service.upsertScript(script);
+        final expectedOrder = overwriteProject
+            ? ['group:7', 'alone.py']
+            : ['alone.py', 'group:7'];
+        expect(
+          ScriptHomeItem.ordered([script], [project]).map((item) => item.key),
+          expectedOrder,
+        );
+        final json = manifestFixture();
+        json[overwriteProject ? 'groups' : 'scripts'][overwriteProject
+            ? 2
+            : 1]['modifiedAt'] = DateTime.utc(2020)
+            .millisecondsSinceEpoch;
+        final manifest = BackupManifest.fromJson(json);
+        final plan = RestorePlanner().plan(
+          manifest: manifest,
+          selection: overwriteProject
+              ? BackupSelection(groupIds: {83})
+              : BackupSelection(scriptNames: {'alone.py'}),
+          existingScripts: [script],
+          existingGroups: [project],
+          policy: RestoreConflictPolicy.overwrite,
+        );
+        await service.applyRestorePlan(plan, 'overwrite_only', scriptsRoot);
+        final after = await service.readBackupSnapshot();
+        expect(
+          ScriptHomeItem.ordered(
+            after.scripts,
+            after.groups,
+          ).map((item) => item.key),
+          expectedOrder,
+        );
+        expect(
+          (overwriteProject
+                  ? after.groups.single.modifiedAt
+                  : after.scripts.single.modifiedAt)
+              .toUtc(),
+          DateTime.utc(2020),
+        );
+      },
+    );
+  }
 
   for (final failureTable in ['scripts', 'backup_restore_commits']) {
     test(

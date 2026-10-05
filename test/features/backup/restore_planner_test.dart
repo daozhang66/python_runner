@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/features/backup/domain/backup_manifest.dart';
 import 'package:python_runner/features/backup/domain/backup_selection.dart';
@@ -113,6 +115,37 @@ void main() {
     expect(result.groups.first.group.createdAt, DateTime.utc(2020));
     expect(result.fileMoves.first.targetRoot, 'scripts/你好 (restored 2).py');
   });
+
+  for (final example in [
+    (character: '汉', count: 80, kept: 79),
+    (character: '😀', count: 60, kept: 59),
+  ]) {
+    test(
+      'keepBoth fits ${example.character} names within UTF-8 filename limits',
+      () {
+        final name = '${example.character * example.count}.py';
+        final json = manifestFixture();
+        json['scripts'][1]['name'] = name;
+        json['files'][1]['path'] = 'scripts/$name';
+        manifest = BackupManifest.fromJson(json);
+        expect(utf8.encode(name).length, 243);
+        final firstCandidate =
+            '${example.character * example.kept} (restored 1).py';
+        final result = plan(
+          scripts: [localScript(name), localScript(firstCandidate)],
+          selection: BackupSelection(scriptNames: {name}),
+        );
+        final restoredName = result.scripts.single.script.name;
+        expect(utf8.encode(restoredName).length, lessThanOrEqualTo(255));
+        expect(
+          restoredName,
+          '${example.character * example.kept} (restored 2).py',
+        );
+        expect(utf8.decode(utf8.encode(restoredName)), restoredName);
+        expect(result.fileMoves.single.targetRoot, 'scripts/$restoredName');
+      },
+    );
+  }
 
   test('overwrite restores source membership and pinning and appends in the destination group', () {
     final existing = localScript('你好.py', groupId: 6, pinned: false);

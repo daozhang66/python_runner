@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import '../../../models/script_file.dart';
@@ -230,7 +231,14 @@ class RestorePlanner {
     final homePlacements = <RestoreHomePlacement>[];
     final newHomes = <String, int>{};
     final existingHomes = <String, int>{};
-    if (!empty && newRootKeys.isNotEmpty) {
+    // Restored timestamps can reorder roots with null ranks even when every
+    // selected item overwrites an existing item and nothing is appended.
+    final overwritesRootMetadata =
+        groups.any((g) => g.action == RestoreAction.overwrite) ||
+        scripts.any(
+          (s) => s.action == RestoreAction.overwrite && s.sourceGroupId == null,
+        );
+    if (!empty && (newRootKeys.isNotEmpty || overwritesRootMetadata)) {
       for (final item in ScriptHomeItem.ordered(
         localScripts,
         localGroups,
@@ -306,12 +314,28 @@ class RestorePlanner {
     final extension = dot > 0 ? name.substring(dot) : '';
     for (var i = 1; ; i++) {
       final suffix = ' (restored $i)$extension';
-      final shortened = stem.length + suffix.length > 255
-          ? stem.substring(0, 255 - suffix.length)
-          : stem;
+      final shortened = script
+          ? _utf8Prefix(stem, 255 - utf8.encode(suffix).length)
+          : (stem.length + suffix.length > 255
+                ? stem.substring(0, 255 - suffix.length)
+                : stem);
       final candidate = '$shortened$suffix';
       if (reserved.add(candidate)) return candidate;
     }
+  }
+
+  static String _utf8Prefix(String value, int maxBytes) {
+    final prefix = StringBuffer();
+    var usedBytes = 0;
+    // Iterate scalars so truncation cannot split a UTF-16 surrogate pair.
+    for (final rune in value.runes) {
+      final character = String.fromCharCode(rune);
+      final bytes = utf8.encode(character).length;
+      if (usedBytes + bytes > maxBytes) break;
+      prefix.write(character);
+      usedBytes += bytes;
+    }
+    return prefix.toString();
   }
 
   static String _randomProjectKey() {
