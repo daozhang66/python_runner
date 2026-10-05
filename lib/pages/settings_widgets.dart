@@ -5,8 +5,11 @@ class _SectionCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _SectionCard(
-      {required this.icon, required this.title, required this.children});
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -86,17 +89,19 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
   void _refreshFilteredLines() {
     final query = _query.trim().toLowerCase();
     final section = _selectedSectionRange(widget.logContent);
-    _filteredLines = List<_LogLineRange>.unmodifiable(_allLines.where((line) {
-      if (line.start < section.start || line.start >= section.end) {
-        return false;
-      }
-      final text = line.text(widget.logContent);
-      final lower = text.toLowerCase();
-      final matchesQuery = query.isEmpty || lower.contains(query);
-      final matchesLevel =
-          _levelFilter == 'ALL' || lower.contains(_levelFilter.toLowerCase());
-      return matchesQuery && matchesLevel;
-    }));
+    _filteredLines = List<_LogLineRange>.unmodifiable(
+      _allLines.where((line) {
+        if (line.start < section.start || line.start >= section.end) {
+          return false;
+        }
+        final text = line.text(widget.logContent);
+        final lower = text.toLowerCase();
+        final matchesQuery = query.isEmpty || lower.contains(query);
+        final matchesLevel =
+            _levelFilter == 'ALL' || lower.contains(_levelFilter.toLowerCase());
+        return matchesQuery && matchesLevel;
+      }),
+    );
   }
 
   _LogTextRange _selectedSectionRange(String input) {
@@ -147,7 +152,8 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isEmpty = widget.logContent.isEmpty ||
+    final isEmpty =
+        widget.logContent.isEmpty ||
         _filteredLines.isEmpty ||
         widget.logContent.startsWith('(暂无');
     return Scaffold(
@@ -186,8 +192,12 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
                       labelText: AppLocalizations.of(context)!.level,
                     ),
                     items: const ['ALL', 'INFO', 'WARN', 'ERROR']
-                        .map((level) =>
-                            DropdownMenuItem(value: level, child: Text(level)))
+                        .map(
+                          (level) => DropdownMenuItem(
+                            value: level,
+                            child: Text(level),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) => _refreshFiltersImmediately(
                       () => _levelFilter = value ?? 'ALL',
@@ -202,8 +212,12 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
                       labelText: AppLocalizations.of(context)!.section,
                     ),
                     items: _sectionFilters
-                        .map((section) => DropdownMenuItem(
-                            value: section, child: Text(section)))
+                        .map(
+                          (section) => DropdownMenuItem(
+                            value: section,
+                            child: Text(section),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) => _refreshFiltersImmediately(
                       () => _sectionFilter = value ?? '全部',
@@ -217,9 +231,10 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
             child: isEmpty
                 ? Center(
                     child: Text(
-                    AppLocalizations.of(context)!.noMatchingSystemLogs,
-                    style: const TextStyle(color: Colors.grey),
-                  ))
+                      AppLocalizations.of(context)!.noMatchingSystemLogs,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  )
                 : SelectionArea(
                     child: ListView.builder(
                       padding: const EdgeInsets.all(12),
@@ -228,8 +243,9 @@ class _SystemLogViewPageState extends State<_SystemLogViewPage> {
                       addRepaintBoundaries: true,
                       itemCount: _filteredLines.length,
                       itemBuilder: (context, index) {
-                        final text =
-                            _filteredLines[index].text(widget.logContent);
+                        final text = _filteredLines[index].text(
+                          widget.logContent,
+                        );
                         return Text(
                           text.isEmpty ? '\u200B' : text,
                           style: const TextStyle(
@@ -353,7 +369,8 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
       setState(() => _installing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.installFailed(error))),
+          content: Text(AppLocalizations.of(context)!.installFailed(error)),
+        ),
       );
     } finally {
       await _progressSubscription?.cancel();
@@ -388,22 +405,30 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(_installed
-                            ? l10n.runtimeInstalled
-                            : l10n.runtimeNotInstalled),
+                        child: Text(
+                          _installed
+                              ? l10n.runtimeInstalled
+                              : l10n.runtimeNotInstalled,
+                        ),
                       ),
                     ],
                   ),
                   if (!_installed && !_installing) ...[
                     const SizedBox(height: 12),
-                    Text(l10n.runtimeDownloadRequirement,
-                        style: TextStyle(
-                            fontSize: 12, color: colors.onSurfaceVariant)),
+                    Text(
+                      l10n.runtimeDownloadRequirement,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                   if (_installing) ...[
                     const SizedBox(height: 16),
-                    Text(_stage.isEmpty ? l10n.preparing : _stage,
-                        style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      _stage.isEmpty ? l10n.preparing : _stage,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 10),
                     LinearProgressIndicator(
                       value: _percent > 0 ? _percent / 100 : null,
@@ -411,9 +436,13 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
                       borderRadius: BorderRadius.circular(3),
                     ),
                     const SizedBox(height: 6),
-                    Text(_message.isEmpty ? l10n.processing : _message,
-                        style: TextStyle(
-                            fontSize: 12, color: colors.onSurfaceVariant)),
+                    Text(
+                      _message.isEmpty ? l10n.processing : _message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -426,9 +455,11 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
             FilledButton.icon(
               onPressed: _installing ? null : _installOrRepair,
               icon: Icon(
-                  _installed ? Icons.build_outlined : Icons.download_outlined),
-              label:
-                  Text(_installed ? l10n.repairRuntime : l10n.installRuntime),
+                _installed ? Icons.build_outlined : Icons.download_outlined,
+              ),
+              label: Text(
+                _installed ? l10n.repairRuntime : l10n.installRuntime,
+              ),
             ),
         ],
       ),
@@ -490,8 +521,9 @@ class _AboutPageState extends State<_AboutPage> {
         : _sitePackages;
     return Scaffold(
       appBar: AppBar(
-          flexibleSpace: appGlassBarBackground(context),
-          title: Text(l10n.about)),
+        flexibleSpace: appGlassBarBackground(context),
+        title: Text(l10n.about),
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
@@ -502,9 +534,10 @@ class _AboutPageState extends State<_AboutPage> {
                 Text(
                   l10n.appTitle,
                   style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: c.onSurface),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: c.onSurface,
+                  ),
                 ),
                 if (_appVersion.isNotEmpty) ...[
                   const SizedBox(height: 4),
@@ -514,8 +547,10 @@ class _AboutPageState extends State<_AboutPage> {
                   ),
                 ],
                 const SizedBox(height: 6),
-                Text(l10n.appSubtitle,
-                    style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                Text(
+                  l10n.appSubtitle,
+                  style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                ),
               ],
             ),
           ),
@@ -536,12 +571,16 @@ class _AboutPageState extends State<_AboutPage> {
               ),
               if (installDirectory.isNotEmpty)
                 _AboutItem(
-                    label: l10n.installDirectory,
-                    value: installDirectory,
-                    mono: true),
+                  label: l10n.installDirectory,
+                  value: installDirectory,
+                  mono: true,
+                ),
               if (_pythonPath.isNotEmpty)
                 _AboutItem(
-                    label: l10n.pythonPath, value: _pythonPath, mono: true),
+                  label: l10n.pythonPath,
+                  value: _pythonPath,
+                  mono: true,
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -553,13 +592,9 @@ class _AboutPageState extends State<_AboutPage> {
                 label: l10n.projectHomepage,
                 value: 'github.com/daozhang66/python_runner',
                 singleLine: true,
-                onTap: () => _bridge
-                    .openUrl('https://github.com/daozhang66/python_runner'),
-              ),
-              _AboutItem(
-                label: l10n.sponsorProject,
-                value: l10n.sponsorProjectDescription,
-                onTap: () => _showSponsorDialog(context),
+                onTap: () => _bridge.openUrl(
+                  'https://github.com/daozhang66/python_runner',
+                ),
               ),
             ],
           ),
@@ -569,50 +604,26 @@ class _AboutPageState extends State<_AboutPage> {
             title: l10n.technicalArchitecture,
             children: [
               _AboutItem(
-                  label: l10n.framework,
-                  value: l10n.architectureFrameworkValue),
+                label: l10n.framework,
+                value: l10n.architectureFrameworkValue,
+              ),
               _AboutItem(
-                  label: l10n.runtimeEngine,
-                  value: l10n.architectureEngineValue),
+                label: l10n.runtimeEngine,
+                value: l10n.architectureEngineValue,
+              ),
               _AboutItem(
-                  label: l10n.nativeLayer, value: l10n.architectureNativeValue),
+                label: l10n.nativeLayer,
+                value: l10n.architectureNativeValue,
+              ),
               _AboutItem(
-                  label: l10n.storage, value: l10n.architectureStorageValue),
+                label: l10n.storage,
+                value: l10n.architectureStorageValue,
+              ),
               _AboutItem(
-                  label: l10n.runtimeRequirements,
-                  value: l10n.architectureRequirementsValue),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSponsorDialog(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AppAlertDialog(
-        title: Text(l10n.sponsorProject),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l10n.sponsorQrHint, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              Icon(
-                Icons.qr_code_2,
-                size: 160,
-                semanticLabel: l10n.sponsorProject,
+                label: l10n.runtimeRequirements,
+                value: l10n.architectureRequirementsValue,
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.close),
           ),
         ],
       ),
@@ -624,8 +635,11 @@ class _AboutCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final List<Widget> children;
-  const _AboutCard(
-      {required this.icon, required this.title, required this.children});
+  const _AboutCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
   @override
   Widget build(BuildContext context) {
     return AppSettingsSection(
@@ -644,12 +658,13 @@ class _AboutItem extends StatelessWidget {
   final bool mono;
   final bool singleLine;
   final VoidCallback? onTap;
-  const _AboutItem(
-      {required this.label,
-      required this.value,
-      this.mono = false,
-      this.singleLine = false,
-      this.onTap});
+  const _AboutItem({
+    required this.label,
+    required this.value,
+    this.mono = false,
+    this.singleLine = false,
+    this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -668,15 +683,18 @@ class _AboutItem extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Row(
-          crossAxisAlignment:
-              singleLine ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          crossAxisAlignment: singleLine
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 70,
-              child: Text(label,
-                  maxLines: singleLine ? 1 : null,
-                  overflow: singleLine ? TextOverflow.ellipsis : null,
-                  style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+              child: Text(
+                label,
+                maxLines: singleLine ? 1 : null,
+                overflow: singleLine ? TextOverflow.ellipsis : null,
+                style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant),
+              ),
             ),
             Expanded(
               child: singleLine
