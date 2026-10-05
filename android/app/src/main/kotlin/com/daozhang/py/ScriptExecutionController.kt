@@ -57,6 +57,9 @@ class ScriptExecutionController(
     )
 
     private val executionStateLock = Any()
+    fun hasActiveExecution(): Boolean = synchronized(executionStateLock) {
+        currentExecutionId != null || currentExecutionThread?.isAlive == true || currentExecutionProcess?.isAlive == true
+    }
     private var currentExecutionThread: Thread? = null
     private var currentExecutionProcess: Process? = null
     private var currentExecutionId: String? = null
