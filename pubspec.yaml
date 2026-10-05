@@ -60,7 +60,6 @@ flutter:
     - assets/shaders/navigation_glass.frag
   assets:
     - assets/python_hooks/
-    - IMG_20260802_014149.png
 
   fonts:
     - family: MiSans
