@@ -45,6 +45,7 @@ dependencies:
   url_launcher: ^6.3.1
   # MCP 配对令牌摘要（sha256）
   crypto: ^3.0.3
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:

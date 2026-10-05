@@ -1,0 +1,743 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:python_runner/features/backup/application/backup_controller.dart';
+import 'package:python_runner/features/backup/application/backup_recovery.dart';
+import 'package:python_runner/features/backup/domain/backup_manifest.dart';
+import 'package:python_runner/features/backup/domain/backup_selection.dart';
+import 'package:python_runner/features/backup/domain/restore_plan.dart';
+import 'package:python_runner/features/backup/infrastructure/backup_config_store.dart';
+import 'package:python_runner/features/backup/infrastructure/backup_native_bridge.dart';
+import 'package:python_runner/features/backup/infrastructure/webdav_client.dart';
+import 'package:python_runner/services/database_service.dart';
+import 'package:python_runner/services/native_bridge.dart';
+import 'package:python_runner/services/native_bridge_contract.dart';
+import 'package:python_runner/services/workspace_access.dart';
+
+import 'backup_manifest_test.dart' show manifestFixture, fileJson;
+import 'backup_config_test.dart' show MemorySecrets;
+import 'restore_planner_test.dart' show localScript, localGroup;
+
+class FakeBackupNative extends BackupNativeBridge {
+  FakeBackupNative(this.dir);
+  final Directory dir;
+  final calls = <String>[];
+  final pending = <String>[];
+  String? failure;
+  String? reservation;
+  bool owner = false;
+  bool pickerCancelled = false;
+  bool legacy = false;
+  BackupManifest manifest = BackupManifest.fromJson(manifestFixture());
+  Completer<void>? stageWait;
+  Completer<void>? commitWait;
+  Future<void> Function()? onFinalize;
+  Map<String, dynamic>? metadata;
+  @override
+  Stream<BackupProgress> get progress => const Stream.empty();
+  void check(String call) {
+    calls.add(call);
+    if (failure == call) {
+      throw PlatformException(
+        code: call == 'save' ? 'PERMISSION_LOST' : 'INJECTED',
+      );
+    }
+  }
+
+  @override
+  Future<BackupDocument?> pickBackupDirectory() async {
+    check('pickDirectory');
+    return pickerCancelled
+        ? null
+        : const BackupDocument(uri: 'content://tree', name: 'Backups');
+  }
+
+  @override
+  Future<BackupDocument?> pickBackupArchive() async {
+    check('pickArchive');
+    return pickerCancelled
+        ? null
+        : const BackupDocument(uri: 'content://zip', name: 'test.zip');
+  }
+
+  @override
+  Future<void> acquireWorkspace(String id) async {
+    check('acquire');
+    expect(owner, false);
+    expect(reservation == null || reservation == id, true);
+    owner = true;
+    reservation = id;
+  }
+
+  @override
+  Future<void> releaseWorkspace(String id) async {
+    check('release');
+    owner = false;
+  }
+
+  @override
+  Future<CreatedBackupArchive> createArchive(
+    String id,
+    Map<String, dynamic> value,
+  ) async {
+    check('create');
+    expect(owner, true);
+    reservation = id;
+    metadata = value;
+    final selected = BackupSelection(
+      scriptNames: (value['scripts'] as List).map((s) => s['name'] as String),
+      groupIds: (value['groups'] as List).map((g) => g['id'] as int),
+    ).select(manifest);
+    final full = BackupManifest.fromJson({
+      ...value,
+      'files': selected.files.map((f) => f.toJson()).toList(),
+    });
+    final path = '${dir.path}/$id.zip';
+    await File(path).writeAsString('zip fixture');
+    return CreatedBackupArchive(
+      path: path,
+      fileName: 'python-runner-backup-$id.zip',
+      manifest: full,
+    );
+  }
+
+  @override
+  Future<BackupDocument> saveArchiveToDirectory(
+    String id,
+    String path,
+    String tree,
+  ) async {
+    check('save');
+    expect(owner, false);
+    expect(await File(path).exists(), true);
+    return const BackupDocument(uri: 'content://saved', name: 'backup.zip');
+  }
+
+  @override
+  Future<String> createTransferFile(String id) async {
+    check('transfer');
+    reservation = id;
+    return '${dir.path}/$id.zip';
+  }
+
+  @override
+  Future<StagedBackupArchive> stageArchive(
+    String id,
+    String source,
+    String displayName,
+  ) async {
+    check('stage');
+    reservation = id;
+    await stageWait?.future;
+    return StagedBackupArchive(
+      manifest: manifest,
+      legacy: legacy,
+      stagingId: id,
+    );
+  }
+
+  @override
+  Future<void> commitStaged(String id, Iterable<RestoreFileMove> moves) async {
+    pending.add(id);
+    check('commit');
+    expect(owner, true);
+    await commitWait?.future;
+  }
+
+  @override
+  Future<void> finalizeRestore(String id) async {
+    check('finalize');
+    await onFinalize?.call();
+    pending.remove(id);
+    reservation = null;
+  }
+
+  @override
+  Future<void> rollbackRestore(String id) async {
+    check('rollback');
+    pending.remove(id);
+    reservation = null;
+  }
+
+  @override
+  Future<void> discardOperation(String id) async {
+    check('discard');
+    expect(pending, isNot(contains(id)));
+    reservation = null;
+    final file = File('${dir.path}/$id.zip');
+    if (await file.exists()) await file.delete();
+  }
+
+  @override
+  Future<void> cancelOperation(String id) async {
+    check('cancel');
+    stageWait?.complete();
+  }
+
+  @override
+  Future<List<String>> pendingRestores() async {
+    check('pending');
+    return List.of(pending);
+  }
+
+  @override
+  Future<void> cleanupAbandonedOperations() async {
+    check('cleanup');
+    expect(owner, false);
+    expect(reservation, null);
+  }
+
+  @override
+  Future<String> scriptsRoot() async {
+    check('root');
+    return '${dir.path}/scripts';
+  }
+}
+
+class MemoryDav extends WebDavClient {
+  MemoryDav(WebDavConfig config) : super(config: config, password: 'unused');
+  final calls = <String>[];
+  @override
+  Future<RemoteBackup> upload(
+    File file, {
+    required String fileName,
+    required String operationId,
+    BackupCancellation? cancellation,
+    BackupTransferProgress? onProgress,
+  }) async {
+    calls.add('upload');
+    expect(await file.exists(), true);
+    return RemoteBackup(
+      uri: config.folderUri.resolve(fileName),
+      name: fileName,
+      size: await file.length(),
+    );
+  }
+
+  @override
+  Future<void> download(
+    RemoteBackup backup,
+    File destination, {
+    BackupCancellation? cancellation,
+    BackupTransferProgress? onProgress,
+  }) async {
+    calls.add('download');
+    await destination.writeAsString('zip fixture');
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory dir;
+  late WorkspaceAccess gate;
+  late DatabaseService db;
+  late FakeBackupNative native;
+  late BackupController controller;
+  late BackupConfigStore config;
+  late MemoryDav dav;
+  var running = false;
+  var reloads = 0;
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+  setUp(() async {
+    dir = await Directory.systemTemp.createTemp('backup_controller_');
+    gate = WorkspaceAccess();
+    db = DatabaseService(
+      databasePath: '${dir.path}/test.db',
+      workspaceAccess: gate,
+    );
+    native = FakeBackupNative(dir);
+    SharedPreferences.setMockInitialValues({});
+    config = BackupConfigStore(
+      preferences: await SharedPreferences.getInstance(),
+      storage: MemorySecrets(),
+    );
+    dav = MemoryDav(
+      WebDavConfig(baseUri: Uri.parse('https://dav.example'), username: 'me'),
+    );
+    running = false;
+    reloads = 0;
+    controller = BackupController(
+      database: db,
+      native: native,
+      configStore: config,
+      workspaceAccess: gate,
+      webDavFactory: (_, _) => dav,
+      isExecutionRunning: () => running,
+      reloadWorkspace: () async {
+        reloads++;
+      },
+    );
+  });
+  tearDown(() async {
+    controller.dispose();
+    await db.closeForTest();
+    await dir.delete(recursive: true);
+  });
+  Future<void> seed() async {
+    for (final group in native.manifest.groups) {
+      await db.createGroup(group);
+    }
+    for (final script in native.manifest.scripts) {
+      await db.upsertScript(script);
+    }
+  }
+
+  Future<void> cloudProfile() =>
+      controller.saveWebDavProfile(dav.config, password: 'secret');
+
+  test('local export defaults to whole library including empty groups and releases before copy', () async {
+    await seed();
+    await controller.loadLibrary();
+    await controller.chooseLocalDirectory();
+    await controller.exportLocal();
+    expect(native.metadata!['groups'], hasLength(3));
+    expect(native.calls, [
+      'pickDirectory',
+      'acquire',
+      'create',
+      'release',
+      'save',
+      'discard',
+    ]);
+    expect(controller.state.lastResult!.kind, BackupResultKind.exportedLocal);
+  });
+  test('explicit selection survives reload by identity and cloud uses same validated manifest', () async {
+    await seed();
+    await controller.loadLibrary();
+    controller.selectLibrary(BackupSelection(scriptNames: {'alone.py'}));
+    await cloudProfile();
+    await controller.backupWebDav();
+    expect((native.metadata!['scripts'] as List).single['name'], 'alone.py');
+    expect(native.metadata!['groups'], isEmpty);
+    expect(dav.calls, ['upload']);
+    expect(native.calls, ['acquire', 'create', 'release', 'discard']);
+  });
+  test(
+    'empty selection releases acquire reservation without creating archive',
+    () async {
+      await seed();
+      await controller.chooseLocalDirectory();
+      await controller.loadLibrary();
+      controller.selectLibrary(BackupSelection());
+      await controller.exportLocal();
+      expect(controller.state.error!.code, 'NOTHING_SELECTED');
+      expect(native.reservation, isNull);
+      expect(native.calls, ['pickDirectory', 'acquire', 'release', 'discard']);
+    },
+  );
+  test('empty ordinary group restores with no file moves', () async {
+    await controller.pickAndStageLocal();
+    await controller.updateRestoreSelection(BackupSelection(groupIds: {82}));
+    await controller.confirmRestore(confirmed: true);
+    expect((await db.getAllGroups()).single.name, 'Empty');
+    expect(await db.getAllScripts(), isEmpty);
+  });
+  test('generated project identity stays attached to donor across selection and policy changes', () async {
+    final json = native.manifest.toJson();
+    (json['groups'] as List).add(<String, dynamic>{
+      ...((json['groups'] as List).last as Map<String, dynamic>),
+      'id': 84,
+      'name': 'Other project',
+      'projectKey': 'other_donor',
+      'mainFilePath': null,
+    });
+    (json['files'] as List).add({
+      'path': 'projects/other_donor',
+      'isDirectory': true,
+      'size': 0,
+      'sha256': null,
+      'modifiedAt': 1,
+    });
+    native.manifest = BackupManifest.fromJson(json);
+    await db.createGroup(
+      localGroup(7, 'Project', project: true, key: 'donor_project'),
+    );
+    await controller.pickAndStageLocal();
+    final initial = {
+      for (final g in controller.state.preview!.plan.groups.where(
+        (g) => g.group.isProject,
+      ))
+        g.sourceId: g.group.projectKey,
+    };
+    await controller.updateRestoreSelection(BackupSelection(groupIds: {84}));
+    expect(
+      controller.state.preview!.plan.groups.single.group.projectKey,
+      initial[84],
+    );
+    await controller.updateRestoreSelection(
+      BackupSelection.all(native.manifest),
+    );
+    await controller.updateRestorePolicy(RestoreConflictPolicy.skip);
+    expect(
+      controller.state.preview!.plan.groups
+          .singleWhere((g) => g.sourceId == 84)
+          .group
+          .projectKey,
+      initial[84],
+    );
+    await controller.updateRestorePolicy(RestoreConflictPolicy.keepBoth);
+    expect(
+      controller.state.preview!.plan.groups
+          .singleWhere((g) => g.sourceId == 83)
+          .group
+          .projectKey,
+      initial[83],
+    );
+  });
+  test('cancelled directory permission keeps existing tree; stale tree gives specific error', () async {
+    await seed();
+    await controller.chooseLocalDirectory();
+    native.pickerCancelled = true;
+    await controller.chooseLocalDirectory();
+    expect(controller.state.localDirectory!.uri, 'content://tree');
+    native.failure = 'save';
+    await controller.exportLocal();
+    expect(controller.state.error!.code, 'PERMISSION_LOST');
+    expect(native.calls.last, 'discard');
+  });
+  test('restore commits files then metadata marker then finalizes before forgetting', () async {
+    await controller.pickAndStageLocal();
+    final id = controller.state.preview!.operationId;
+    native.onFinalize = () async {
+      expect(await db.committedRestoreIds(), {id});
+    };
+    await controller.confirmRestore(confirmed: true);
+    expect(native.calls, [
+      'pickArchive',
+      'stage',
+      'acquire',
+      'root',
+      'commit',
+      'finalize',
+      'release',
+    ]);
+    expect(await db.getAllScripts(), hasLength(2));
+    expect(await db.committedRestoreIds(), isEmpty);
+    expect(controller.state.preview, isNull);
+    expect(reloads, 1);
+  });
+  test('remote download stages through native-owned transfer using the same operation', () async {
+    await cloudProfile();
+    await controller.downloadAndStageRemote(
+      RemoteBackup(
+        uri: dav.config.folderUri.resolve('python-runner-backup-remote.zip'),
+        name: 'python-runner-backup-remote.zip',
+        size: 10,
+      ),
+    );
+    expect(native.calls, ['transfer', 'stage']);
+    expect(dav.calls, ['download']);
+    expect(
+      controller.state.preview!.manifest.toJson(),
+      native.manifest.toJson(),
+    );
+    await controller.discardPreview();
+    expect(native.reservation, isNull);
+  });
+  test('changed DB and file-only revision refresh preview and require another confirmation', () async {
+    await controller.pickAndStageLocal();
+    await db.upsertScript(localScript('alone.py'));
+    await controller.confirmRestore(confirmed: true);
+    expect(controller.state.lastResult!.kind, BackupResultKind.previewUpdated);
+    expect(native.calls, isNot(contains('commit')));
+    expect(
+      controller.state.preview!.plan.scripts.any(
+        (s) => s.script.name == 'alone (restored 1).py',
+      ),
+      true,
+    );
+    final snapshot = (await db.readBackupSnapshot()).toMetadataJson(
+      createdAt: DateTime.utc(2020),
+    );
+    const channel = MethodChannel(NativeBridgeContract.channelName);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => true);
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    await NativeBridge.named(workspaceAccess: gate).saveProjectFile(
+      'project',
+      'main.py',
+      'modified by direct native/MCP route',
+    );
+    expect(
+      (await db.readBackupSnapshot()).toMetadataJson(
+        createdAt: DateTime.utc(2020),
+      ),
+      snapshot,
+    );
+    await controller.confirmRestore(confirmed: true);
+    expect(controller.state.lastResult!.kind, BackupResultKind.previewUpdated);
+    expect(native.calls, isNot(contains('commit')));
+    await controller.confirmRestore(confirmed: true);
+    expect(native.calls, contains('commit'));
+  });
+  test('requires explicit confirmation and rejects active tasks without discarding preview', () async {
+    await controller.pickAndStageLocal();
+    await controller.confirmRestore(confirmed: false);
+    expect(native.calls, isNot(contains('commit')));
+    running = true;
+    await controller.confirmRestore(confirmed: true);
+    expect(controller.state.error!.code, 'EXECUTION_RUNNING');
+    expect(controller.state.preview, isNotNull);
+    expect(native.calls, isNot(contains('acquire')));
+  });
+  test(
+    'SQLite failure rolls back native before release and leaves no metadata',
+    () async {
+      await controller.pickAndStageLocal();
+      await (await db.database).execute(
+        "CREATE TRIGGER fail_restore BEFORE INSERT ON scripts BEGIN SELECT RAISE(ABORT, 'fail'); END",
+      );
+      await controller.confirmRestore(confirmed: true);
+      expect(native.calls, [
+        'pickArchive',
+        'stage',
+        'acquire',
+        'root',
+        'commit',
+        'rollback',
+        'release',
+      ]);
+      expect(await db.getAllScripts(), isEmpty);
+      expect(await db.getAllGroups(), isEmpty);
+      expect(await db.committedRestoreIds(), isEmpty);
+    },
+  );
+  test('native commit failure rolls back before release', () async {
+    await controller.pickAndStageLocal();
+    native.failure = 'commit';
+    await controller.confirmRestore(confirmed: true);
+    expect(native.calls, [
+      'pickArchive',
+      'stage',
+      'acquire',
+      'root',
+      'commit',
+      'rollback',
+      'release',
+    ]);
+    expect(await db.getAllScripts(), isEmpty);
+  });
+  test(
+    'committed cleanup failure never rolls back; keeps journal and marker',
+    () async {
+      await controller.pickAndStageLocal();
+      final id = controller.state.preview!.operationId;
+      native.failure = 'finalize';
+      await controller.confirmRestore(confirmed: true);
+      expect(
+        controller.state.lastResult!.kind,
+        BackupResultKind.restoredCleanupPending,
+      );
+      expect(native.calls, isNot(contains('rollback')));
+      expect(native.pending, [id]);
+      await gate.runExclusive(() async {
+        expect(await db.committedRestoreIds(), {id});
+      }, recovery: true);
+      expect(gate.recoveryRequired, true);
+    },
+  );
+  test('rollback failure preserves journal and blocks workspace', () async {
+    await controller.pickAndStageLocal();
+    native.failure = 'rollback';
+    await (await db.database).execute(
+      "CREATE TRIGGER fail_restore BEFORE INSERT ON scripts BEGIN SELECT RAISE(ABORT, 'fail'); END",
+    );
+    await controller.confirmRestore(confirmed: true);
+    expect(gate.recoveryRequired, true);
+    expect(native.pending, isNotEmpty);
+    await expectLater(
+      gate.runMutation(() async {}),
+      throwsA(isA<WorkspaceRecoveryRequired>()),
+    );
+  });
+  test(
+    'cancel staging discards reservation and cannot publish stale preview',
+    () async {
+      native.stageWait = Completer<void>();
+      final staging = controller.pickAndStageLocal();
+      while (!native.calls.contains('stage')) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await controller.cancel();
+      await staging;
+      expect(controller.state.preview, isNull);
+      expect(native.calls, ['pickArchive', 'stage', 'cancel', 'discard']);
+      expect(native.reservation, isNull);
+    },
+  );
+  test('legacy ZIP recommends Python entrypoint and allows validated choice or none', () async {
+    final json = native.manifest.toJson();
+    json['scripts'] = <Map<String, dynamic>>[];
+    json['groups'] = [
+      <String, dynamic>{
+        ...(json['groups'] as List).last as Map<String, dynamic>,
+        'mainFilePath': null,
+      },
+    ];
+    json['files'] = [
+      'z.py',
+      'src/main.py',
+      'app.py',
+      'run.py',
+      '__main__.py',
+    ].map((p) => fileJson('projects/donor_project/$p')).toList();
+    native.manifest = BackupManifest.fromJson(json);
+    native.legacy = true;
+    await controller.pickAndStageLocal();
+    expect(controller.state.preview!.legacyEntryPoint, 'src/main.py');
+    expect(controller.state.preview!.legacyEntryPoints, [
+      'src/main.py',
+      'app.py',
+      'run.py',
+      '__main__.py',
+      'z.py',
+    ]);
+    await controller.updateLegacyEntryPoint('app.py');
+    expect(
+      controller.state.preview!.plan.groups.single.group.mainFilePath,
+      'app.py',
+    );
+    await controller.updateLegacyEntryPoint(null);
+    expect(
+      controller.state.preview!.plan.groups.single.group.mainFilePath,
+      isNull,
+    );
+    await controller.updateLegacyEntryPoint('../bad.py');
+    expect(controller.state.error!.code, 'INVALID_ENTRYPOINT');
+  });
+  test('selection and policy changes queued rapidly both survive', () async {
+    await controller.pickAndStageLocal();
+    final selected = controller.updateRestoreSelection(
+      BackupSelection(groupIds: {82}),
+    );
+    final policy = controller.updateRestorePolicy(
+      RestoreConflictPolicy.overwrite,
+    );
+    await Future.wait([selected, policy]);
+    expect(controller.state.preview!.selection.groupIds, {82});
+    expect(controller.state.preview!.policy, RestoreConflictPolicy.overwrite);
+  });
+  test(
+    'dispose and cancel cannot interrupt committed restore safe terminal state',
+    () async {
+      await controller.pickAndStageLocal();
+      native.commitWait = Completer<void>();
+      final restoring = controller.confirmRestore(confirmed: true);
+      while (!native.calls.contains('commit')) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(controller.state.operation!.cancellable, false);
+      await controller.cancel();
+      controller.dispose();
+      native.commitWait!.complete();
+      await restoring;
+      expect(native.calls, isNot(contains('cancel')));
+      expect(native.calls.sublist(native.calls.length - 2), [
+        'finalize',
+        'release',
+      ]);
+      expect(await db.committedRestoreIds(), isEmpty);
+      expect(await db.getAllScripts(), hasLength(2));
+    },
+  );
+  test(
+    'failed boot cleanup preserves commit proof and retries roll forward',
+    () async {
+      await (await db.database).insert('backup_restore_commits', {
+        'operationId': 'yes',
+        'committedAt': 1,
+      });
+      native.pending.add('yes');
+      native.failure = 'finalize';
+      final recovery = BackupRecovery(
+        database: db,
+        native: native,
+        workspaceAccess: gate,
+      );
+      await expectLater(
+        recovery.recover(),
+        throwsA(isA<BackupRecoveryException>()),
+      );
+      expect(gate.recoveryRequired, true);
+      expect(native.pending, ['yes']);
+      await gate.runExclusive(() async {
+        expect(await db.committedRestoreIds(), {'yes'});
+      }, recovery: true);
+      native.failure = null;
+      await recovery.recover();
+      expect(gate.recoveryRequired, false);
+      expect(await db.committedRestoreIds(), isEmpty);
+    },
+  );
+  test(
+    'failed native owner release blocks writes until recovery retries release',
+    () async {
+      await seed();
+      await controller.chooseLocalDirectory();
+      native.failure = 'release';
+      await controller.exportLocal();
+      expect(gate.recoveryRequired, true);
+      expect(native.owner, true);
+      native.failure = null;
+      await BackupRecovery(
+        database: db,
+        native: native,
+        workspaceAccess: gate,
+      ).recover();
+      expect(native.owner, false);
+      expect(gate.isBusy, false);
+    },
+  );
+  test(
+    'failed export temp cleanup can be retried without losing saved backup',
+    () async {
+      await seed();
+      await controller.chooseLocalDirectory();
+      native.failure = 'discard';
+      await controller.exportLocal();
+      expect(controller.state.lastResult!.kind, BackupResultKind.exportedLocal);
+      expect(gate.recoveryRequired, true);
+      native.failure = null;
+      await BackupRecovery(
+        database: db,
+        native: native,
+        workspaceAccess: gate,
+      ).recover();
+      expect(native.reservation, isNull);
+      expect(gate.isBusy, false);
+    },
+  );
+  test('recovery finalizes committed sessions and rolls back uncommitted before cleanup', () async {
+    final raw = await db.database;
+    await raw.insert('backup_restore_commits', {
+      'operationId': 'yes',
+      'committedAt': 1,
+    });
+    native.pending.addAll(['yes', 'no']);
+    gate.blockForRecovery();
+    await BackupRecovery(
+      database: db,
+      native: native,
+      workspaceAccess: gate,
+    ).recover();
+    expect(native.calls, ['pending', 'finalize', 'rollback', 'cleanup']);
+    expect(await db.committedRestoreIds(), isEmpty);
+    expect(gate.recoveryRequired, false);
+    await BackupRecovery(
+      database: db,
+      native: native,
+      workspaceAccess: gate,
+    ).recover();
+    expect(native.calls.last, 'cleanup');
+  });
+}

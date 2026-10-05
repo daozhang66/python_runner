@@ -9,6 +9,7 @@ import '../models/app_file_entry.dart';
 import '../models/script_project_file.dart';
 import 'project_path_validator.dart';
 import 'script_name_validator.dart';
+import 'workspace_access.dart';
 
 /// Test-only source override for native event streams.
 ///
@@ -45,13 +46,16 @@ class NativeBridge {
   final pigeon.FilePickerHostApi _filePickerHostApi;
   final pigeon.AppHostApi _appHostApi;
   final NativeBridgeEventStreamFactory _eventStreamFactory;
+  final WorkspaceAccess _workspaceAccess;
 
   NativeBridge.named({
+    WorkspaceAccess? workspaceAccess,
     pigeon.RuntimeHostApi? runtimeHostApi,
     pigeon.FilePickerHostApi? filePickerHostApi,
     pigeon.AppHostApi? appHostApi,
     @visibleForTesting NativeBridgeEventStreamFactory? eventStreamFactory,
-  })  : _runtimeHostApi = runtimeHostApi ?? pigeon.RuntimeHostApi(),
+  })  : _workspaceAccess = workspaceAccess ?? WorkspaceAccess.instance,
+        _runtimeHostApi = runtimeHostApi ?? pigeon.RuntimeHostApi(),
         _filePickerHostApi = filePickerHostApi ?? pigeon.FilePickerHostApi(),
         _appHostApi = appHostApi ?? pigeon.AppHostApi(),
         _eventStreamFactory = eventStreamFactory ?? _defaultEventStream;
@@ -863,7 +867,27 @@ class NativeBridge {
     return const <dynamic, dynamic>{};
   }
 
-  Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
+  static const _workspaceWrites = {
+    'createScript', 'deleteScript', 'renameScript', 'saveScript',
+    'executeScript', 'executeLinuxLikeScript', 'importScriptFromUri',
+    'exportLog', 'exportScript', 'createFileManagerDirectory',
+    'transferFileManagerEntry', 'renameFileManagerEntry', 'deleteFileManagerEntry',
+    'writeFileManagerFile', 'ensureFileManagerDirectory', 'createScriptProject',
+    'deleteScriptProject', 'saveProjectFile', 'createProjectDirectory',
+    'deleteProjectEntry', 'renameProjectEntry', 'importScriptProjectZip',
+    'exportScriptProjectZip', 'installPackage', 'uninstallPackage',
+    'installLinuxLikePackage', 'repairLinuxLikePackage',
+    'installLinuxLikeRequirements', 'uninstallLinuxLikePackage',
+  };
+
+  Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) {
+    if (_workspaceWrites.contains(method)) {
+      return _workspaceAccess.runMutation(() => _invokeAccepted(method, arguments));
+    }
+    return _invokeAccepted(method, arguments);
+  }
+
+  Future<dynamic> _invokeAccepted(String method, Map<String, dynamic> arguments) async {
     try {
       NativeBridgeContract.validate(method, arguments);
       return await _methodChannel.invokeMethod(method, arguments);

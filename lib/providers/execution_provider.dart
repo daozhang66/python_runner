@@ -13,6 +13,7 @@ import '../services/request_override_config.dart';
 import '../services/network_debug_config.dart';
 import '../services/project_path_validator.dart';
 import '../services/script_name_validator.dart';
+import '../services/workspace_access.dart';
 import '../runtime/runtime_manager.dart';
 import '../runtime/runtime_request.dart';
 import 'package:intl/intl.dart';
@@ -207,7 +208,9 @@ class ExecutionProvider extends ChangeNotifier {
   ExecutionProvider(
     this._bridge, {
     RuntimeManager? runtimeManager,
-  })  : _runtimeManager = runtimeManager ??
+    WorkspaceAccess? workspaceAccess,
+  })  : _workspaceAccess = workspaceAccess ?? WorkspaceAccess.instance,
+        _runtimeManager = runtimeManager ??
             RuntimeManager.fromPreferredBackend(
               _bridge,
               RuntimeManager.chaquopyBackendId,
@@ -215,6 +218,8 @@ class ExecutionProvider extends ChangeNotifier {
         _runtimeManagerLocked = runtimeManager != null {
     _listenStreams();
   }
+
+  final WorkspaceAccess _workspaceAccess;
 
   final _logger = AppLogger.instance;
 
@@ -580,7 +585,7 @@ class ExecutionProvider extends ChangeNotifier {
     return RuntimeManager.fallbackBackendId;
   }
 
-  Future<void> executeScript(String name) async {
+  Future<void> executeScript(String name) => _workspaceAccess.runMutation(() async {
     final safeName = ScriptNameValidator.normalize(name);
     // Reserve the new id before awaiting a stop. Terminal events from the old
     // run are then rejected by [_isCurrentExecutionState] instead of mutating
@@ -700,9 +705,9 @@ class ExecutionProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> executeScriptProject(ScriptGroup group) async {
+  Future<void> executeScriptProject(ScriptGroup group) => _workspaceAccess.runMutation(() async {
     if (!group.isProject) {
       throw StateError('普通分组不能作为项目运行');
     }
@@ -819,7 +824,7 @@ class ExecutionProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
-  }
+  });
 
   Future<void> sendStdin(
     String input, {

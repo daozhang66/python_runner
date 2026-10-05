@@ -13,7 +13,8 @@ import 'restore_plan.dart';
 /// project identities deterministic in tests; production uses random local keys.
 class RestorePlanner {
   final String Function() projectKeyFactory;
-  RestorePlanner({String Function()? projectKeyFactory})
+  final String Function(ScriptGroup source)? projectKeyForGroup;
+  RestorePlanner({String Function()? projectKeyFactory, this.projectKeyForGroup})
     : projectKeyFactory = projectKeyFactory ?? _randomProjectKey;
 
   RestorePlan plan({
@@ -122,7 +123,7 @@ class RestorePlanner {
                 ? _uniqueName(group.name, reservedGroupNames, script: false)
                 : group.name);
       final key = group.isProject
-          ? (overwrite ? target.projectKey : _newProjectKey(reservedKeys))
+          ? (overwrite ? target.projectKey : _newProjectKey(reservedKeys, group))
           : null;
       final destination = ScriptGroup(
         id: overwrite ? target.id : null,
@@ -295,9 +296,9 @@ class RestorePlanner {
     );
   }
 
-  String _newProjectKey(Set<String> reserved) {
+  String _newProjectKey(Set<String> reserved, ScriptGroup source) {
     for (var attempt = 0; attempt < 100; attempt++) {
-      final key = ProjectPathValidator.normalizeProjectKey(projectKeyFactory());
+      final key = ProjectPathValidator.normalizeProjectKey(projectKeyForGroup?.call(source) ?? projectKeyFactory());
       if (key.length > 255) throw const FormatException('Project key too long');
       if (reserved.add(key)) return key;
     }

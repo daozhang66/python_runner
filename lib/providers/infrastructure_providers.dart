@@ -4,6 +4,7 @@ import '../runtime/runtime_manager.dart';
 import '../services/database_service.dart';
 import '../services/http_inspector_store.dart';
 import '../services/native_bridge.dart';
+import '../services/workspace_access.dart';
 import 'theme_provider.dart' show sharedPreferencesProvider;
 
 /// 基础设施 Provider（对齐 `sharedPreferencesProvider` / `themeProvider` 的注入范式）。
@@ -16,12 +17,15 @@ import 'theme_provider.dart' show sharedPreferencesProvider;
 
 /// 原生桥（B3 已单例化）。全局唯一，直接复用 [NativeBridge.instance]。
 final nativeBridgeProvider = Provider<NativeBridge>(
-  (ref) => NativeBridge.instance,
+  (ref) {
+    final gate = ref.watch(workspaceAccessProvider);
+    return identical(gate, WorkspaceAccess.instance) ? NativeBridge.instance : NativeBridge.named(workspaceAccess: gate);
+  },
 );
 
 /// 脚本元数据持久化（SQLite）。无状态服务。
 final databaseServiceProvider = Provider<DatabaseService>(
-  (ref) => DatabaseService(),
+  (ref) => DatabaseService(workspaceAccess: ref.watch(workspaceAccessProvider)),
 );
 
 /// 网络抓包记录存储（自带磁盘持久化的进程级单例）。

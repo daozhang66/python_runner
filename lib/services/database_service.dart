@@ -9,13 +9,20 @@ import '../models/script_group.dart';
 import '../features/backup/domain/backup_manifest.dart';
 import '../features/backup/domain/restore_plan.dart';
 import 'script_name_validator.dart';
+import 'workspace_access.dart';
 
 class DatabaseService {
-  DatabaseService({String? databasePath}) : _databasePath = databasePath;
+  DatabaseService({String? databasePath, WorkspaceAccess? workspaceAccess})
+    : _databasePath = databasePath, _workspaceAccess = workspaceAccess ?? WorkspaceAccess.instance;
 
   @visibleForTesting
   DatabaseService.test({required String databasePath})
-    : _databasePath = databasePath;
+    : _databasePath = databasePath, _workspaceAccess = WorkspaceAccess.instance;
+
+  final WorkspaceAccess _workspaceAccess;
+  /// Set before opening metadata whenever native restore journals are pending.
+  /// An unreadable marker ledger must never be mistaken for an empty ledger.
+  bool preserveRestoreEvidence = false;
 
   static const int schemaVersion = 7;
   static const String databaseFileName = 'python_runner.db';
@@ -27,6 +34,7 @@ class DatabaseService {
   final String? _databasePath;
 
   Future<Database> get database async {
+    _workspaceAccess.assertReadable();
     if (_db != null) return Future.value(_db!);
     final existing = _dbFuture;
     if (existing != null) return existing;
@@ -114,6 +122,12 @@ class DatabaseService {
     required String reason,
     required Object cause,
   }) async {
+    if (preserveRestoreEvidence) {
+      throw DatabaseOpenException(
+        'Restore recovery cannot read its commit ledger. Original database and journal were preserved. Retry recovery after fixing storage.',
+        cause: cause,
+      );
+    }
     final backupPath = await _archiveDatabaseBundle(path, reason: reason);
     if (backupPath == null) {
       throw DatabaseOpenException('数据库恢复前无法归档原数据库。', cause: cause);
@@ -410,7 +424,7 @@ class DatabaseService {
     RestorePlan plan,
     String operationId,
     String localScriptsRoot,
-  ) async {
+  ) => _workspaceAccess.runMutation(() async {
     if (operationId.isEmpty ||
         operationId.trim() != operationId ||
         operationId.length > 255) {
@@ -536,7 +550,7 @@ class DatabaseService {
         'committedAt': DateTime.now().millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.abort);
     });
-  }
+  });
 
   Future<Set<String>> committedRestoreIds() async {
     final db = await database;
@@ -547,14 +561,14 @@ class DatabaseService {
     return Set.unmodifiable(rows.map((row) => row['operationId'] as String));
   }
 
-  Future<void> forgetRestoreCommit(String operationId) async {
+  Future<void> forgetRestoreCommit(String operationId) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.delete(
       'backup_restore_commits',
       where: 'operationId = ?',
       whereArgs: [operationId],
     );
-  }
+  });
 
   static Future<void> _addHomeSortOrder(Database db) async {
     await db.execute('ALTER TABLE scripts ADD COLUMN homeSortOrder INTEGER');
@@ -588,14 +602,14 @@ class DatabaseService {
     await batch.commit();
   }
 
-  Future<void> upsertScript(ScriptFile script) async {
+  Future<void> upsertScript(ScriptFile script) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.insert(
       'scripts',
       script.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-  }
+  });
 
   Future<List<ScriptFile>> getAllScripts() async {
     final db = await database;
@@ -617,16 +631,16 @@ class DatabaseService {
     return ScriptFile.fromMap(maps.first);
   }
 
-  Future<void> deleteScript(String name) async {
+  Future<void> deleteScript(String name) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.delete('scripts', where: 'name = ?', whereArgs: [name]);
-  }
+  });
 
   Future<void> renameScript(
     String oldName,
     String newName,
     String newPath,
-  ) async {
+  ) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.update(
       'scripts',
@@ -638,17 +652,17 @@ class DatabaseService {
       where: 'name = ?',
       whereArgs: [oldName],
     );
-  }
+  });
 
-  Future<void> incrementRunCount(String name) async {
+  Future<void> incrementRunCount(String name) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.rawUpdate(
       'UPDATE scripts SET runCount = runCount + 1, modifiedAt = ? WHERE name = ?',
       [DateTime.now().millisecondsSinceEpoch, name],
     );
-  }
+  });
 
-  Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) async {
+  Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) => _workspaceAccess.runMutation(() async {
     final db = await database;
     final batch = db.batch();
     for (int i = 0; i < scripts.length; i++) {
@@ -660,12 +674,12 @@ class DatabaseService {
       );
     }
     await batch.commit();
-  }
+  });
 
   Future<void> batchUpdateHomeSortOrders(
     List<ScriptFile> scripts,
     List<ScriptGroup> groups,
-  ) async {
+  ) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.transaction((txn) async {
       final batch = txn.batch();
@@ -690,7 +704,7 @@ class DatabaseService {
       }
       await batch.commit(noResult: true);
     });
-  }
+  });
 
   Future<List<ScriptGroup>> getAllGroups() async {
     final db = await database;
@@ -698,16 +712,16 @@ class DatabaseService {
     return maps.map((m) => ScriptGroup.fromMap(m)).toList();
   }
 
-  Future<int> createGroup(ScriptGroup group) async {
+  Future<int> createGroup(ScriptGroup group) => _workspaceAccess.runMutation(() async {
     final db = await database;
     return db.insert(
       'script_groups',
       group.toMap(),
       conflictAlgorithm: ConflictAlgorithm.abort,
     );
-  }
+  });
 
-  Future<void> renameGroup(int groupId, String name) async {
+  Future<void> renameGroup(int groupId, String name) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.update(
       'script_groups',
@@ -715,9 +729,9 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [groupId],
     );
-  }
+  });
 
-  Future<void> updateProjectMainFile(int groupId, String? mainFilePath) async {
+  Future<void> updateProjectMainFile(int groupId, String? mainFilePath) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.update(
       'script_groups',
@@ -728,9 +742,9 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [groupId],
     );
-  }
+  });
 
-  Future<void> touchGroup(int groupId) async {
+  Future<void> touchGroup(int groupId) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.update(
       'script_groups',
@@ -738,9 +752,9 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [groupId],
     );
-  }
+  });
 
-  Future<void> deleteGroup(int groupId) async {
+  Future<void> deleteGroup(int groupId) => _workspaceAccess.runMutation(() async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.update(
@@ -751,9 +765,9 @@ class DatabaseService {
       );
       await txn.delete('script_groups', where: 'id = ?', whereArgs: [groupId]);
     });
-  }
+  });
 
-  Future<void> moveScriptsToGroup(List<ScriptFile> scripts) async {
+  Future<void> moveScriptsToGroup(List<ScriptFile> scripts) => _workspaceAccess.runMutation(() async {
     final db = await database;
     final batch = db.batch();
     for (final script in scripts) {
@@ -770,7 +784,7 @@ class DatabaseService {
       );
     }
     await batch.commit();
-  }
+  });
 }
 
 class DatabaseOpenException implements Exception {
