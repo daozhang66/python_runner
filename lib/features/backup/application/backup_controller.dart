@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../../models/script_group.dart';
 import '../../../services/database_service.dart';
 import '../../../services/workspace_access.dart';
 import '../domain/backup_manifest.dart';
@@ -43,13 +44,15 @@ class BackupController extends ChangeNotifier {
     WebDavClientFactory? webDavFactory,
     bool Function()? isExecutionRunning,
     Future<void> Function()? reloadWorkspace,
+    Future<void> Function(Iterable<ScriptGroup> groups)? reloadRestoredProjects,
   }) : workspaceAccess = workspaceAccess ?? WorkspaceAccess.instance,
        _webDavFactory =
            webDavFactory ??
            ((config, password) =>
                WebDavClient(config: config, password: password)),
        _isExecutionRunning = isExecutionRunning ?? (() => false),
-       _reloadWorkspace = reloadWorkspace ?? (() async {}) {
+       _reloadWorkspace = reloadWorkspace ?? (() async {}),
+       _reloadRestoredProjects = reloadRestoredProjects ?? ((_) async {}) {
     _progress = native.progress.listen(_onNativeProgress, onError: (_) {});
   }
   final DatabaseService database;
@@ -59,6 +62,7 @@ class BackupController extends ChangeNotifier {
   final WebDavClientFactory _webDavFactory;
   final bool Function() _isExecutionRunning;
   final Future<void> Function() _reloadWorkspace;
+  final Future<void> Function(Iterable<ScriptGroup>) _reloadRestoredProjects;
   late final StreamSubscription<BackupProgress> _progress;
   BackupState _state = BackupState();
   BackupState get state => _state;
@@ -167,10 +171,27 @@ class BackupController extends ChangeNotifier {
     try {
       await action(op);
     } catch (error) {
-      if (error is BackupCancelledException || op.cancellation.isCancelled) {
+      final cancelled =
+          error is BackupCancelledException || op.cancellation.isCancelled;
+      final failure = _failure(error);
+      if (failure.code == 'RECOVERY_REQUIRED' ||
+          failure.code == 'TEMP_CLEANUP_PENDING') {
+        // Cancellation may initiate unwind, but failed release/discard still
+        // blocks the workspace and must retain the UI's recovery signal.
+        _set(
+          _state.copyWith(
+            error: failure,
+            lastResult:
+                _state.lastResult ??
+                (cancelled
+                    ? const BackupResult(BackupResultKind.cancelled)
+                    : null),
+          ),
+        );
+      } else if (cancelled) {
         _result(const BackupResult(BackupResultKind.cancelled));
       } else {
-        _set(_state.copyWith(error: _failure(error)));
+        _set(_state.copyWith(error: failure));
       }
     } finally {
       if (identical(_active, op)) {
@@ -697,6 +718,15 @@ class BackupController extends ChangeNotifier {
         });
         if (restored && !workspaceAccess.recoveryRequired && !_disposed) {
           await _reloadWorkspace();
+          await _reloadRestoredProjects(
+            preview.plan.groups
+                .where(
+                  (planned) =>
+                      planned.group.isProject &&
+                      planned.action == RestoreAction.overwrite,
+                )
+                .map((planned) => planned.group),
+          );
           await loadLibrary();
         }
       },

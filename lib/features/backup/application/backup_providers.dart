@@ -55,11 +55,7 @@ final backupControllerProvider = ChangeNotifierProvider<BackupController>((
     workspaceAccess: ref.watch(workspaceAccessProvider),
     webDavFactory: ref.watch(backupWebDavFactoryProvider),
     isExecutionRunning: () => ref.read(mcpExecutionOwnerProvider).isRunning,
-    reloadWorkspace: () async {
-      await workspace.load();
-      await ScriptProjectProvider.refreshAfterRestore(
-        (await database.readBackupSnapshot()).groups,
-      );
-    },
+    reloadWorkspace: workspace.load,
+    reloadRestoredProjects: ScriptProjectProvider.refreshAfterRestore,
   );
 });

@@ -8,6 +8,7 @@ import '../services/script_project_service.dart';
 class ScriptProjectProvider extends ChangeNotifier {
   static final Set<ScriptProjectProvider> _openProjects = {};
   bool _disposed = false;
+  int _stateRevision = 0;
   final ScriptProjectService _service;
   final AppLogger _logger = AppLogger.instance;
 
@@ -28,20 +29,22 @@ class ScriptProjectProvider extends ChangeNotifier {
     _openProjects.add(this);
   }
 
-  /// Pages own these legacy providers; refresh matching open projects after a
-  /// restore without forcing UI widgets to know the backup implementation.
+  /// [groups] contains only existing project targets replaced by the restore.
+  /// A changed provider state invalidates pending reads so later edits win.
   static Future<void> refreshAfterRestore(Iterable<ScriptGroup> groups) async {
     final byId = {for (final group in groups.where((g) => g.isProject)) group.id: group};
     await Future.wait(List.of(_openProjects).map((provider) async {
       final group = byId[provider.group.id];
       if (group == null || provider._disposed || group.projectKey != provider.group.projectKey) return;
+      final revision = provider._stateRevision;
+      final selected = provider._selectedPath;
+      bool canPublish() => !provider._disposed && provider._stateRevision == revision;
       try {
         final files = await provider._service.loadProjectFiles(group);
         files.sort((a, b) => a.isDirectory != b.isDirectory ? (a.isDirectory ? -1 : 1) : a.path.compareTo(b.path));
-        final selected = provider._selectedPath;
         final exists = selected != null && files.any((file) => file.path == selected && !file.isDirectory);
         final content = exists ? await provider._service.readProjectFile(group, selected) : '';
-        if (provider._disposed) return;
+        if (!canPublish()) return;
         provider._group = group;
         provider._files = files;
         provider._selectedPath = exists ? selected : null;
@@ -50,9 +53,15 @@ class ScriptProjectProvider extends ChangeNotifier {
         provider._error = null;
         provider.notifyListeners();
       } catch (error, stack) {
-        if (!provider._disposed) { provider._recordFailure('刷新恢复后的项目', error, stack); provider.notifyListeners(); }
+        if (canPublish()) { provider._recordFailure('刷新恢复后的项目', error, stack); provider.notifyListeners(); }
       }
     }));
+  }
+
+  @override
+  void notifyListeners() {
+    _stateRevision++;
+    super.notifyListeners();
   }
 
   @override

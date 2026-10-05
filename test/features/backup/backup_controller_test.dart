@@ -17,10 +17,14 @@ import 'package:python_runner/services/database_service.dart';
 import 'package:python_runner/services/native_bridge.dart';
 import 'package:python_runner/services/native_bridge_contract.dart';
 import 'package:python_runner/services/workspace_access.dart';
+import 'package:python_runner/models/script_group.dart';
+import 'package:python_runner/providers/script_project_provider.dart';
+import 'package:python_runner/services/script_project_service.dart';
 
 import 'backup_manifest_test.dart' show manifestFixture, fileJson;
 import 'backup_config_test.dart' show MemorySecrets;
 import 'restore_planner_test.dart' show localScript, localGroup;
+import 'project_restore_refresh_test.dart' show ProjectFiles;
 
 class FakeBackupNative extends BackupNativeBridge {
   FakeBackupNative(this.dir);
@@ -35,6 +39,7 @@ class FakeBackupNative extends BackupNativeBridge {
   BackupManifest manifest = BackupManifest.fromJson(manifestFixture());
   Completer<void>? stageWait;
   Completer<void>? commitWait;
+  Completer<void>? createWait;
   Future<void> Function()? onFinalize;
   Map<String, dynamic>? metadata;
   final progressEvents = StreamController<BackupProgress>.broadcast(sync: true);
@@ -86,6 +91,7 @@ class FakeBackupNative extends BackupNativeBridge {
     Map<String, dynamic> value,
   ) async {
     check('create');
+    await createWait?.future;
     expect(owner, true);
     reservation = id;
     metadata = value;
@@ -177,6 +183,7 @@ class FakeBackupNative extends BackupNativeBridge {
   Future<void> cancelOperation(String id) async {
     check('cancel');
     stageWait?.complete();
+    createWait?.complete();
   }
 
   @override
@@ -242,6 +249,7 @@ void main() {
   late MemoryDav dav;
   var running = false;
   var reloads = 0;
+  final refreshedProjects = <ScriptGroup>[];
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -264,6 +272,7 @@ void main() {
     );
     running = false;
     reloads = 0;
+    refreshedProjects.clear();
     controller = BackupController(
       database: db,
       native: native,
@@ -273,6 +282,10 @@ void main() {
       isExecutionRunning: () => running,
       reloadWorkspace: () async {
         reloads++;
+      },
+      reloadRestoredProjects: (groups) async {
+        refreshedProjects.addAll(groups);
+        await ScriptProjectProvider.refreshAfterRestore(groups);
       },
     );
   });
@@ -293,6 +306,99 @@ void main() {
 
   Future<void> cloudProfile() =>
       controller.saveWebDavProfile(dav.config, password: 'secret');
+
+  test(
+    'script-only restore preserves an unrelated open project dirty buffer',
+    () async {
+      final group = localGroup(7, 'Unrelated', project: true, key: 'unrelated');
+      await db.createGroup(group);
+      final bridge = ProjectFiles();
+      final project = ScriptProjectProvider(
+        group: group,
+        service: ScriptProjectService(bridge),
+      );
+      addTearDown(project.dispose);
+      await project.load();
+      await project.selectFile('main.py');
+      project.updateContent('unsaved unrelated');
+      await controller.pickAndStageLocal();
+      await controller.updateRestoreSelection(
+        BackupSelection(scriptNames: {'alone.py'}),
+      );
+      await controller.confirmRestore(confirmed: true);
+      expect(refreshedProjects, isEmpty);
+      expect(project.content, 'unsaved unrelated');
+      expect(project.dirty, true);
+      expect(project.selectedPath, 'main.py');
+      expect(bridge.loads, 1);
+    },
+  );
+  test(
+    'refresh callback receives only overwritten existing project targets',
+    () async {
+      await db.createGroup(
+        localGroup(7, 'Project', project: true, key: 'donor_project'),
+      );
+      await db.createGroup(
+        localGroup(8, 'Unrelated', project: true, key: 'unrelated'),
+      );
+      await controller.pickAndStageLocal();
+      await controller.updateRestorePolicy(RestoreConflictPolicy.overwrite);
+      await controller.confirmRestore(confirmed: true);
+      expect(refreshedProjects.map((g) => g.id), [7]);
+      expect(refreshedProjects.single.mainFilePath, 'src/main.py');
+    },
+  );
+  for (final releaseFailure in [false, true]) {
+    test(
+      'cancellation preserves ${releaseFailure ? 'release' : 'discard'} recovery error and retry ID',
+      () async {
+        late Future<void> operation;
+        if (releaseFailure) {
+          await seed();
+          await controller.chooseLocalDirectory();
+          native.createWait = Completer<void>();
+          native.failure = 'release';
+          operation = controller.exportLocal();
+        } else {
+          native.stageWait = Completer<void>();
+          native.failure = 'discard';
+          operation = controller.pickAndStageLocal();
+        }
+        while (!native.calls.contains(releaseFailure ? 'create' : 'stage')) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        final id = controller.state.operation!.id;
+        await controller.cancel();
+        await operation;
+        expect(
+          controller.state.error?.code,
+          releaseFailure ? 'RECOVERY_REQUIRED' : 'TEMP_CLEANUP_PENDING',
+        );
+        expect(controller.state.lastResult!.kind, BackupResultKind.cancelled);
+        expect(gate.recoveryRequired, true);
+        expect(
+          releaseFailure
+              ? gate.pendingNativeRelease
+              : gate.pendingNativeDiscard,
+          id,
+        );
+        await expectLater(
+          gate.runMutation(() async {}),
+          throwsA(isA<WorkspaceRecoveryRequired>()),
+        );
+        native.failure = null;
+        await BackupRecovery(
+          database: db,
+          native: native,
+          workspaceAccess: gate,
+        ).recover();
+        expect(gate.isBusy, false);
+        expect(native.reservation, null);
+        expect(native.owner, false);
+      },
+    );
+  }
 
   test('local export defaults to whole library including empty groups and releases before copy', () async {
     await seed();
