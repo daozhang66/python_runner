@@ -64,7 +64,7 @@ void main() {
     await tester.pumpWidget(_buildSettings(preferences));
     await tester.pumpAndSettle();
 
-    expect(find.byType(PopupMenuButton<Locale>), findsNothing);
+    expect(find.byWidgetPredicate((widget) => widget is PopupMenuButton<Locale>), findsNothing);
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('中文'), findsOneWidget);
 

@@ -406,6 +406,10 @@ class _FontGestureScriptRepository implements ScriptRepository {
   Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) async {}
 
   @override
+  Future<void> batchUpdateHomeSortOrders(
+      List<ScriptFile> scripts, List<ScriptGroup> groups) async {}
+
+  @override
   Future<List<ScriptGroup>> getAllGroups() async => const [];
 
   @override

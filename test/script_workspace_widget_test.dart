@@ -197,7 +197,7 @@ Future<ScriptWorkspaceHarness> _pumpWorkspace(
 }
 
 Future<void> _openWorkspaceMenu(WidgetTester tester) async {
-  await tester.tap(find.byType(PopupMenuButton<String>));
+  await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>));
   await tester.pump();
   await tester.pumpAndSettle();
 }

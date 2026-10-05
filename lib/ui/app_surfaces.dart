@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'app_design_tokens.dart';
 import 'app_settings_section.dart';
+import 'app_materials.dart';
+import 'app_glass_press.dart';
 
 /// 统一卡片表面组件。
 ///
@@ -24,7 +27,9 @@ class AppSurface extends StatelessWidget {
     this.selected = false,
     this.tonal = false,
     this.margin = const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      horizontal: AppSpacing.md,
+      vertical: AppSpacing.xs,
+    ),
     this.onTap,
     this.onLongPress,
     this.semanticLabel,
@@ -35,45 +40,91 @@ class AppSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final radius = tonal ? AppRadius.md : AppRadius.xl;
+    final native =
+        AppMaterials.of(context).liquid && AppMaterials.hasGlassHost(context);
 
     return Container(
       margin: margin,
-      decoration: BoxDecoration(
-        color: tonal
-            ? (selected
-                ? colors.secondaryContainer
-                : colors.surfaceContainerLow)
-            : AppThemeColors.scriptSurface(
-                context,
-                colors,
-                selected: selected,
-                pinned: pinned,
-              ),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: tonal
-              ? (selected
-                  ? colors.primary
-                  : colors.outlineVariant.withValues(alpha: 0.5))
-              : AppThemeColors.scriptBorder(
-                  context,
-                  colors,
-                  selected: selected,
-                  pinned: pinned,
+      decoration: native
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              boxShadow: [
+                BoxShadow(
+                  color: AppMaterials.of(context).shadow,
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
-          width: AppThemeColors.isDark(context) ? 0.8 : 1,
-        ),
-      ),
+              ],
+            )
+          : AppMaterials.of(context).liquid
+          ? AppMaterials.of(context).decoration(
+              context,
+              BorderRadius.circular(radius),
+              base: selected
+                  ? colors.secondaryContainer
+                  : pinned
+                  ? colors.primaryContainer
+                  : null,
+            )
+          : BoxDecoration(
+              color: tonal
+                  ? (selected
+                        ? colors.secondaryContainer
+                        : AppMaterials.of(context).liquid
+                        ? AppMaterials.of(context).content
+                        : colors.surfaceContainerLow)
+                  : AppThemeColors.scriptSurface(
+                      context,
+                      colors,
+                      selected: selected,
+                      pinned: pinned,
+                    ),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: tonal
+                    ? (selected
+                          ? colors.primary
+                          : colors.outlineVariant.withValues(alpha: 0.5))
+                    : AppThemeColors.scriptBorder(
+                        context,
+                        colors,
+                        selected: selected,
+                        pinned: pinned,
+                      ),
+                width: AppThemeColors.isDark(context) ? 0.8 : 1,
+              ),
+            ),
       clipBehavior: Clip.antiAlias,
-      child: Semantics(
-        button: onTap != null,
-        label: semanticLabel,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: child,
+      child: AppGlassPress(
+        feedbackInsideSurface: true,
+        enabled: onTap != null || onLongPress != null,
+        child: AppGlassSurface(
+          enabled: native,
+          cardSurface: true,
+          borderColor: AppThemeColors.scriptBorder(
+            context,
+            colors,
+            selected: selected,
+            pinned: pinned,
+          ),
+          interactive: onTap != null || onLongPress != null,
+          radius: BorderRadius.circular(radius),
+          baseColor: selected
+              ? colors.secondaryContainer
+              : pinned
+              ? colors.primaryContainer
+              : null,
+          child: Semantics(
+            button: onTap != null,
+            label: semanticLabel,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                onLongPress: onLongPress,
+                child: child,
+              ),
+            ),
           ),
         ),
       ),
@@ -96,10 +147,6 @@ class AppSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppSettingsSection(
-      icon: icon,
-      title: title,
-      children: children,
-    );
+    return AppSettingsSection(icon: icon, title: title, children: children);
   }
 }

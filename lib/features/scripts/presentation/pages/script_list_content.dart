@@ -21,7 +21,7 @@ extension _ScriptListContent on _ScriptListPageState {
       onRefresh: () => controller.load(),
       child: _reorderMode
           ? (showFolderHome
-              ? _buildFolderHome(controller, scripts)
+              ? _buildFolderHome(controller)
               : _isGridView
                   ? _buildGridView(scripts)
                   : _buildListView(scripts))
@@ -110,28 +110,6 @@ extension _ScriptListContent on _ScriptListPageState {
     );
   }
 
-  DateTime _homeRecentTime(dynamic item) {
-    if (item is ScriptGroup) return item.modifiedAt;
-    return item.modifiedAt as DateTime;
-  }
-
-  int _homeRecentSortOrder(dynamic item) {
-    if (item is ScriptGroup) return item.sortOrder;
-    return item.sortOrder as int;
-  }
-
-  int _compareHomeRecentItems(dynamic a, dynamic b) {
-    final timeCompare = _homeRecentTime(b).compareTo(_homeRecentTime(a));
-    if (timeCompare != 0) return timeCompare;
-    return _homeRecentSortOrder(a).compareTo(_homeRecentSortOrder(b));
-  }
-
-  double _homeItemExtent(dynamic item) {
-    return item is ScriptGroup
-        ? _ScriptListPageState._folderListItemExtent
-        : _ScriptListPageState._scriptListItemExtent;
-  }
-
   Widget _buildBrowseSlivers(
     ScriptWorkspaceController controller,
     List<dynamic> scripts,
@@ -145,7 +123,7 @@ extension _ScriptListContent on _ScriptListPageState {
       mainAxisSpacing: 10,
     );
     final items = showFolderHome
-        ? _buildHomeBrowseItems(controller, scripts)
+        ? _buildHomeBrowseItems(controller)
         : _buildScriptBrowseItems(scripts);
 
     return CustomScrollView(
@@ -174,77 +152,25 @@ extension _ScriptListContent on _ScriptListPageState {
 
   List<Widget> _buildHomeBrowseItems(
     ScriptWorkspaceController controller,
-    List<dynamic> scripts,
   ) {
-    final regularGroups =
-        controller.groups.where((group) => !group.isProject).toList();
-    final projectGroups =
-        controller.groups.where((group) => group.isProject).toList();
-    final visibleScripts =
-        scripts.where((script) => script.groupId == null).toList();
-    final pinnedScripts =
-        visibleScripts.where((script) => script.isPinned).toList();
-    final regularScripts =
-        visibleScripts.where((script) => !script.isPinned).toList();
-    final recentItems = <dynamic>[...regularScripts, ...projectGroups]
-      ..sort(_compareHomeRecentItems);
-    final items = <Widget>[];
-
-    for (var index = 0; index < pinnedScripts.length; index++) {
-      final script = pinnedScripts[index];
-      items.add(
-        _isGridView
-            ? _buildFolderHomeGridScriptCard(
-                script,
-                index,
-                draggable: false,
-              )
-            : _buildFolderHomeScriptListItem(
-                script,
-                index,
-                reorderIndex: null,
-              ),
+    final items = controller.homeItems;
+    return List.generate(items.length, (index) {
+      final item = items[index];
+      final group = item.group;
+      return KeyedSubtree(
+        key: ValueKey('home_item_${item.key}'),
+        child: group != null
+            ? _buildHomeGroupCard(controller, group,
+                keyPrefix:
+                    _isGridView ? 'sliver_group_grid' : 'sliver_group_list',
+                grid: _isGridView)
+            : _isGridView
+                ? _buildFolderHomeGridScriptCard(item.script!, index,
+                    draggable: false)
+                : _buildFolderHomeScriptListItem(item.script!, index,
+                    reorderIndex: null),
       );
-    }
-    for (final group in regularGroups) {
-      items.add(
-        _buildHomeGroupCard(
-          controller,
-          group,
-          keyPrefix: _isGridView ? 'sliver_group_grid' : 'sliver_group_list',
-          grid: _isGridView,
-        ),
-      );
-    }
-    for (var index = 0; index < recentItems.length; index++) {
-      final item = recentItems[index];
-      if (item is ScriptGroup) {
-        items.add(
-          _buildHomeGroupCard(
-            controller,
-            item,
-            keyPrefix:
-                _isGridView ? 'sliver_project_grid' : 'sliver_project_list',
-            grid: _isGridView,
-          ),
-        );
-      } else {
-        items.add(
-          _isGridView
-              ? _buildFolderHomeGridScriptCard(
-                  item,
-                  pinnedScripts.length + regularGroups.length + index,
-                  draggable: false,
-                )
-              : _buildFolderHomeScriptListItem(
-                  item,
-                  pinnedScripts.length + regularGroups.length + index,
-                  reorderIndex: null,
-                ),
-        );
-      }
-    }
-    return items;
+    });
   }
 
   List<Widget> _buildScriptBrowseItems(List<dynamic> scripts) {
@@ -378,85 +304,73 @@ extension _ScriptListContent on _ScriptListPageState {
     ScriptGroup group, {
     required String keyPrefix,
     required bool grid,
+    bool draggable = false,
   }) {
     final selected = group.id != null && _selectedGroupIds.contains(group.id);
-    return _ScriptFolderCard(
-      key: ValueKey('${keyPrefix}_${group.id}'),
-      name: _displayGroupName(group.name),
-      masked: _maskScriptNames,
-      count: group.id == null ? 0 : controller.scriptCountInGroup(group.id!),
-      isProject: group.isProject,
-      hasMainFile: group.mainFilePath != null,
-      grid: grid,
-      selected: _groupSelectMode ? selected : null,
-      onTap: _groupSelectMode
-          ? () => _toggleGroupSelection(group)
-          : (_multiSelectMode ? null : () => _openGroup(group)),
-      onLongPress: _multiSelectMode
-          ? null
-          : (_groupSelectMode ? null : () => _showGroupContextMenu(group)),
-    );
+    final dragKey = 'group:${group.id}';
+    Widget card({Widget? dragHandle, bool feedback = false}) =>
+        _ScriptFolderCard(
+          key: feedback ? null : ValueKey('${keyPrefix}_${group.id}'),
+          name: _displayGroupName(group.name),
+          masked: _maskScriptNames,
+          count:
+              group.id == null ? 0 : controller.scriptCountInGroup(group.id!),
+          isProject: group.isProject,
+          hasMainFile: group.mainFilePath != null,
+          grid: grid,
+          dragHandle: dragHandle,
+          selected: _groupSelectMode ? selected : null,
+          onTap: feedback
+              ? null
+              : _groupSelectMode
+                  ? () => _toggleGroupSelection(group)
+                  : (_multiSelectMode ? null : () => _openGroup(group)),
+          onLongPress: feedback || _multiSelectMode
+              ? null
+              : (_groupSelectMode ? null : () => _showGroupContextMenu(group)),
+        );
+    if (!draggable || group.id == null) return card();
+    final colors = Theme.of(context).colorScheme;
+    final handle = grid
+        ? Draggable<String>(
+            data: dragKey,
+            dragAnchorStrategy: (_, __, ___) => const Offset(90, 62.5),
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                  width: 180, height: 125, child: card(feedback: true)),
+            ),
+            childWhenDragging: Opacity(
+                opacity: 0.35,
+                child: _GridDragHandle(color: colors.onSurfaceVariant)),
+            child: _GridDragHandle(color: colors.onSurfaceVariant),
+          )
+        : _buildListDragHandle(dragKey, colors.onSurfaceVariant);
+    return _buildListDragTarget(
+        scriptName: dragKey, groupId: null, child: card(dragHandle: handle));
   }
 
-  Widget _buildHomeRecentGridItem(
-    ScriptWorkspaceController controller,
-    dynamic item,
-    int index,
-  ) {
-    if (item is ScriptGroup) {
-      return _buildHomeGroupCard(
-        controller,
-        item,
-        keyPrefix: 'home_project_grid',
-        grid: true,
+  Widget _buildFolderHome(ScriptWorkspaceController controller) {
+    final items = controller.homeItems;
+    final canDrag = !_multiSelectMode && !_searchMode && !_groupSelectMode;
+    Widget buildItem(int index) {
+      final item = items[index];
+      final group = item.group;
+      final draggable = canDrag && !item.isPinned;
+      return KeyedSubtree(
+        key: ValueKey('home_item_${item.key}'),
+        child: group != null
+            ? _buildHomeGroupCard(controller, group,
+                keyPrefix: 'home_group_reorder',
+                grid: _isGridView,
+                draggable: draggable)
+            : _isGridView
+                ? _buildFolderHomeGridScriptCard(item.script!, index,
+                    draggable: draggable)
+                : _buildFolderHomeScriptListItem(item.script!, index,
+                    reorderIndex: draggable ? index : null),
       );
     }
-    return _buildFolderHomeGridScriptCard(
-      item,
-      index,
-      draggable: !_multiSelectMode && !_searchMode,
-    );
-  }
-
-  Widget _buildHomeRecentListItem(
-    ScriptWorkspaceController controller,
-    dynamic item,
-    int index, {
-    required int? reorderIndex,
-    required String keyPrefix,
-  }) {
-    if (item is ScriptGroup) {
-      return _buildHomeGroupCard(
-        controller,
-        item,
-        keyPrefix: keyPrefix,
-        grid: false,
-      );
-    }
-    return _buildFolderHomeScriptListItem(
-      item,
-      index,
-      reorderIndex: reorderIndex,
-    );
-  }
-
-  Widget _buildFolderHome(
-      ScriptWorkspaceController controller, List<dynamic> scripts) {
-    final regularGroups =
-        controller.groups.where((group) => !group.isProject).toList();
-    final projectGroups =
-        controller.groups.where((group) => group.isProject).toList();
-    final visibleScripts =
-        scripts.where((script) => script.groupId == null).toList();
-    final pinnedScripts =
-        visibleScripts.where((script) => script.isPinned).toList();
-    final regularScripts =
-        visibleScripts.where((script) => !script.isPinned).toList();
-    final recentItems = <dynamic>[...regularScripts, ...projectGroups]
-      ..sort(_compareHomeRecentItems);
-    final firstFolderIndex = pinnedScripts.length;
-    final firstRecentIndex = pinnedScripts.length + regularGroups.length;
-    final itemCount = firstRecentIndex + recentItems.length;
 
     if (_isGridView) {
       return GridView.builder(
@@ -467,118 +381,18 @@ extension _ScriptListContent on _ScriptListPageState {
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
         ),
-        itemCount: itemCount,
-        itemBuilder: (context, index) {
-          if (index < firstFolderIndex) {
-            final script = pinnedScripts[index];
-            return _buildFolderHomeGridScriptCard(
-              script,
-              index,
-              draggable: false,
-            );
-          }
-
-          if (index < firstRecentIndex) {
-            return _buildHomeGroupCard(
-              controller,
-              regularGroups[index - firstFolderIndex],
-              keyPrefix: 'home_group_grid',
-              grid: true,
-            );
-          }
-
-          return _buildHomeRecentGridItem(
-            controller,
-            recentItems[index - firstRecentIndex],
-            index - regularGroups.length,
-          );
-        },
-      );
-    }
-
-    final canDrag = !_multiSelectMode && !_searchMode;
-    if (!canDrag) {
-      return ListView.builder(
-        itemExtentBuilder: (index, _) {
-          if (index < firstFolderIndex) {
-            return _ScriptListPageState._scriptListItemExtent;
-          }
-          if (index < firstRecentIndex) {
-            return _ScriptListPageState._folderListItemExtent;
-          }
-          return _homeItemExtent(recentItems[index - firstRecentIndex]);
-        },
-        padding: _reorderPadding,
-        itemCount: itemCount,
-        itemBuilder: (context, index) {
-          if (index < firstFolderIndex) {
-            return _buildFolderHomeScriptListItem(
-              pinnedScripts[index],
-              index,
-              reorderIndex: null,
-            );
-          }
-
-          if (index < firstRecentIndex) {
-            return _buildHomeGroupCard(
-              controller,
-              regularGroups[index - firstFolderIndex],
-              keyPrefix: 'home_group_list',
-              grid: false,
-            );
-          }
-
-          return _buildHomeRecentListItem(
-            controller,
-            recentItems[index - firstRecentIndex],
-            index - regularGroups.length,
-            reorderIndex: null,
-            keyPrefix: 'home_project_list',
-          );
-        },
+        itemCount: items.length,
+        itemBuilder: (context, index) => buildItem(index),
       );
     }
 
     return ListView.builder(
-      itemExtentBuilder: (index, _) {
-        if (index < firstFolderIndex) {
-          return _ScriptListPageState._scriptListItemExtent;
-        }
-        if (index < firstRecentIndex) {
-          return _ScriptListPageState._folderListItemExtent;
-        }
-        return _homeItemExtent(recentItems[index - firstRecentIndex]);
-      },
+      itemExtentBuilder: (index, _) => items[index].group != null
+          ? _ScriptListPageState._folderListItemExtent
+          : _ScriptListPageState._scriptListItemExtent,
       padding: _reorderPadding,
-      itemCount: itemCount,
-      itemBuilder: (context, index) {
-        if (index < firstFolderIndex) {
-          return _buildFolderHomeScriptListItem(
-            pinnedScripts[index],
-            index,
-            reorderIndex: null,
-          );
-        }
-
-        if (index < firstRecentIndex) {
-          return _buildHomeGroupCard(
-            controller,
-            regularGroups[index - firstFolderIndex],
-            keyPrefix: 'home_group_reorder',
-            grid: false,
-          );
-        }
-
-        return _buildHomeRecentListItem(
-          controller,
-          recentItems[index - firstRecentIndex],
-          index - regularGroups.length,
-          reorderIndex: recentItems[index - firstRecentIndex] is ScriptGroup
-              ? null
-              : index,
-          keyPrefix: 'home_project_reorder',
-        );
-      },
+      itemCount: items.length,
+      itemBuilder: (context, index) => buildItem(index),
     );
   }
 
@@ -755,8 +569,7 @@ extension _ScriptListContent on _ScriptListPageState {
 
         final dragHandle = Draggable<String>(
           data: script.name,
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedbackOffset: const Offset(90, 62.5),
+          dragAnchorStrategy: (_, __, ___) => const Offset(90, 62.5),
           feedback: Material(
             color: Colors.transparent,
             child: SizedBox(
@@ -784,25 +597,10 @@ extension _ScriptListContent on _ScriptListPageState {
         return DragTarget<String>(
           key: ValueKey('home_script_grid_target_${script.name}'),
           onWillAcceptWithDetails: (details) {
-            final draggedName = details.data;
-            if (draggedName == script.name) return true;
-            final controller =
-                ref.read(scriptWorkspaceControllerProvider.notifier);
-            final dragged = controller.ungroupedScripts
-                .where((s) => s.name == draggedName)
-                .cast<dynamic>()
-                .toList();
-            return dragged.isNotEmpty && dragged.first.isPinned == false;
+            return _canAcceptListDrop(details.data, script.name, null);
           },
           onAcceptWithDetails: (details) {
-            if (details.data == script.name) return;
-            ref
-                .read(scriptWorkspaceControllerProvider.notifier)
-                .swapScriptPositionsByName(
-                  details.data,
-                  script.name,
-                  groupId: null,
-                );
+            _commitListDragTarget(details.data, script.name, null);
           },
           builder: (context, candidateData, rejectedData) {
             return AnimatedScale(
@@ -822,6 +620,7 @@ extension _ScriptListContent on _ScriptListPageState {
   }
 
   void _endGridDrag() {
+    if (!mounted) return;
     if (_gridDraggingScriptName == null && _gridDragPreviewTargetName == null) {
       return;
     }
@@ -832,13 +631,21 @@ extension _ScriptListContent on _ScriptListPageState {
   }
 
   void _previewGridDragTarget(String draggedName, String targetName) {
-    if (_gridDraggingScriptName != draggedName) return;
-    final nextTargetName = draggedName == targetName ? null : targetName;
+    if (!mounted || _gridDraggingScriptName != draggedName) return;
+    final nextTargetName =
+        _canAcceptListDrop(draggedName, targetName, _activeGroupId)
+            ? targetName
+            : null;
     if (_gridDragPreviewTargetName == nextTargetName) return;
 
     setState(() {
       _gridDragPreviewTargetName = nextTargetName;
     });
+  }
+
+  void _leaveGridDragTarget(String targetName) {
+    if (!mounted || _gridDragPreviewTargetName != targetName) return;
+    setState(() => _gridDragPreviewTargetName = null);
   }
 
   void _commitGridDragTarget(String draggedName, String targetName) {
@@ -1049,15 +856,13 @@ extension _ScriptListContent on _ScriptListPageState {
       final selected = displayScript == null
           ? false
           : _selectedScripts.contains(displayScript.name);
-      final canDragScript = displayScript != null &&
-          _gridDraggingScriptName == null &&
-          canDrag &&
-          !displayScript.isPinned;
+      final canDragScript =
+          displayScript != null && canDrag && !slotScript.isPinned;
       final targetKey = _gridItemKey(slotScript.name);
 
       if (displayScript == null) {
         return DragTarget<String>(
-          key: ValueKey('script_grid_placeholder_${slotScript.name}'),
+          key: ValueKey('script_grid_target_${slotScript.name}'),
           onWillAcceptWithDetails: (details) {
             final draggedName = details.data;
             if (draggedName == slotScript.name) return true;
@@ -1071,11 +876,16 @@ extension _ScriptListContent on _ScriptListPageState {
           onAcceptWithDetails: (details) {
             _commitGridDragTarget(details.data, slotScript.name);
           },
+          onLeave: (_) => _leaveGridDragTarget(slotScript.name),
           builder: (context, candidateData, rejectedData) {
-            return KeyedSubtree(
-              key: targetKey,
-              child: _ScriptGridPlaceholder(
-                colors: Theme.of(context).colorScheme,
+            return AnimatedScale(
+              scale: candidateData.isEmpty ? 1 : 0.98,
+              duration: const Duration(milliseconds: 120),
+              child: KeyedSubtree(
+                key: targetKey,
+                child: _ScriptGridPlaceholder(
+                  colors: Theme.of(context).colorScheme,
+                ),
               ),
             );
           },
@@ -1084,7 +894,7 @@ extension _ScriptListContent on _ScriptListPageState {
 
       Widget card({Widget? dragHandle, bool feedback = false}) {
         return _ScriptGridCard(
-          key: feedback ? null : ValueKey('script_grid_${displayScript.name}'),
+          key: feedback ? null : ValueKey('script_grid_${slotScript.name}'),
           name: _displayScriptName(displayScript.name, index),
           masked: _maskScriptNames,
           modifiedAt: displayScript.modifiedAt,
@@ -1118,10 +928,14 @@ extension _ScriptListContent on _ScriptListPageState {
 
       final dragHandle = canDragScript
           ? Draggable<String>(
-              data: displayScript.name,
-              dragAnchorStrategy: pointerDragAnchorStrategy,
-              feedbackOffset: const Offset(90, 62.5),
-              onDragStarted: () => _beginGridDrag(displayScript.name),
+              key: ValueKey('script_grid_handle_${slotScript.name}'),
+              data: slotScript.name,
+              maxSimultaneousDrags: _gridDraggingScriptName == null ||
+                      _gridDraggingScriptName == slotScript.name
+                  ? 1
+                  : 0,
+              dragAnchorStrategy: (_, __, ___) => const Offset(90, 62.5),
+              onDragStarted: () => _beginGridDrag(slotScript.name),
               onDragEnd: (_) => _endGridDrag(),
               onDraggableCanceled: (_, __) => _endGridDrag(),
               onDragCompleted: _endGridDrag,
@@ -1151,7 +965,7 @@ extension _ScriptListContent on _ScriptListPageState {
           : null;
 
       return DragTarget<String>(
-        key: ValueKey('script_grid_target_${displayScript.name}'),
+        key: ValueKey('script_grid_target_${slotScript.name}'),
         onWillAcceptWithDetails: (details) {
           final draggedName = details.data;
           if (draggedName == slotScript.name) return true;
@@ -1165,6 +979,7 @@ extension _ScriptListContent on _ScriptListPageState {
         onAcceptWithDetails: (details) {
           _commitGridDragTarget(details.data, slotScript.name);
         },
+        onLeave: (_) => _leaveGridDragTarget(slotScript.name),
         builder: (context, candidateData, rejectedData) {
           return AnimatedScale(
             scale: candidateData.isEmpty ? 1 : 0.98,

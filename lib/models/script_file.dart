@@ -7,6 +7,7 @@ class ScriptFile {
   final bool isPinned;
   final int sortOrder;
   final int? groupId;
+  final int? homeSortOrder;
 
   ScriptFile({
     required this.name,
@@ -17,6 +18,7 @@ class ScriptFile {
     this.isPinned = false,
     this.sortOrder = 0,
     this.groupId,
+    this.homeSortOrder,
   });
 
   ScriptFile copyWith({
@@ -29,6 +31,8 @@ class ScriptFile {
     int? sortOrder,
     int? groupId,
     bool clearGroup = false,
+    int? homeSortOrder,
+    bool clearHomeSortOrder = false,
   }) {
     return ScriptFile(
       name: name ?? this.name,
@@ -39,6 +43,8 @@ class ScriptFile {
       isPinned: isPinned ?? this.isPinned,
       sortOrder: sortOrder ?? this.sortOrder,
       groupId: clearGroup ? null : groupId ?? this.groupId,
+      homeSortOrder:
+          clearHomeSortOrder ? null : homeSortOrder ?? this.homeSortOrder,
     );
   }
 
@@ -52,6 +58,7 @@ class ScriptFile {
       'isPinned': isPinned ? 1 : 0,
       'sortOrder': sortOrder,
       'groupId': groupId,
+      'homeSortOrder': homeSortOrder,
     };
   }
 
@@ -67,6 +74,7 @@ class ScriptFile {
       isPinned: (map['isPinned'] as int? ?? 0) == 1,
       sortOrder: (map['sortOrder'] as int?) ?? 0,
       groupId: (map['groupId'] as num?)?.toInt(),
+      homeSortOrder: (map['homeSortOrder'] as num?)?.toInt(),
     );
   }
 }

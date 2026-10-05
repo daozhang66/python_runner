@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../ui/app_theme_palette.dart';
+import '../ui/app_visual_style.dart';
+export '../ui/app_visual_style.dart';
 
 /// Color 转 ARGB32 扩展方法
 extension ColorExt on Color {
@@ -41,6 +43,12 @@ class ThemeState {
 
   /// 启用对话框毛玻璃效果（需要配色算法支持）
   final bool enableBlurEffect;
+  final AppVisualStyle visualStyle;
+  final NavigationStyle navigationStyle;
+  bool get liquidNavigation =>
+      navigationStyle == NavigationStyle.liquid ||
+      (navigationStyle == NavigationStyle.followInterface &&
+          visualStyle == AppVisualStyle.liquid);
 
   const ThemeState({
     required this.mode,
@@ -52,6 +60,8 @@ class ThemeState {
     this.dynamicPrimary,
     this.selectedPreset,
     this.enableBlurEffect = false,
+    this.visualStyle = AppVisualStyle.classic,
+    this.navigationStyle = NavigationStyle.followInterface,
   });
 
   /// 获取实际用于 ThemeData 的 fontFamily 字符串
@@ -75,6 +85,8 @@ class ThemeState {
     AppThemePalette? selectedPreset,
     bool clearPreset = false,
     bool? enableBlurEffect,
+    AppVisualStyle? visualStyle,
+    NavigationStyle? navigationStyle,
   }) {
     return ThemeState(
       mode: mode ?? this.mode,
@@ -87,6 +99,8 @@ class ThemeState {
       selectedPreset:
           clearPreset ? null : (selectedPreset ?? this.selectedPreset),
       enableBlurEffect: enableBlurEffect ?? this.enableBlurEffect,
+      visualStyle: visualStyle ?? this.visualStyle,
+      navigationStyle: navigationStyle ?? this.navigationStyle,
     );
   }
 }
@@ -101,6 +115,9 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
   static const String _customColorsKey = 'custom_colors';
   static const String _selectedPresetKey = 'selected_preset';
   static const String _enableBlurEffectKey = 'enable_blur_effect';
+  static const String _liquidNavigationKey = 'liquid_navigation';
+  static const String _visualStyleKey = 'app_visual_style';
+  static const String _navigationStyleKey = 'navigation_style';
 
   final SharedPreferences _prefs;
 
@@ -192,6 +209,24 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
 
     // Load Blur Effect
     final enableBlurEffect = prefs.getBool(_enableBlurEffectKey) ?? false;
+    final savedStyle = prefs.get(_visualStyleKey);
+    final visualStyle =
+        AppVisualStyle.values.where((v) => v.name == savedStyle).firstOrNull ??
+            AppVisualStyle.classic;
+    final savedNavigation = prefs.get(_navigationStyleKey);
+    var navigationStyle = NavigationStyle.values
+            .where((v) => v.name == savedNavigation)
+            .firstOrNull ??
+        NavigationStyle.followInterface;
+    if (!prefs.containsKey(_navigationStyleKey)) {
+      final legacy = prefs.get(_liquidNavigationKey);
+      if (legacy is bool) {
+        navigationStyle =
+            legacy ? NavigationStyle.liquid : NavigationStyle.classic;
+        // Keep the old key for older installations; the new key takes precedence.
+        prefs.setString(_navigationStyleKey, navigationStyle.name);
+      }
+    }
 
     return ThemeState(
       mode: mode,
@@ -202,7 +237,25 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
       customColors: customColors,
       selectedPreset: selectedPreset,
       enableBlurEffect: enableBlurEffect,
+      visualStyle: visualStyle,
+      navigationStyle: navigationStyle,
     );
+  }
+
+  Future<void> setLiquidNavigation(bool enabled) async {
+    await setNavigationStyle(
+        enabled ? NavigationStyle.liquid : NavigationStyle.classic);
+    await _prefs.setBool(_liquidNavigationKey, enabled);
+  }
+
+  Future<void> setVisualStyle(AppVisualStyle style) async {
+    state = state.copyWith(visualStyle: style);
+    await _prefs.setString(_visualStyleKey, style.name);
+  }
+
+  Future<void> setNavigationStyle(NavigationStyle style) async {
+    state = state.copyWith(navigationStyle: style);
+    await _prefs.setString(_navigationStyleKey, style.name);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

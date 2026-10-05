@@ -1,3 +1,6 @@
+import '../widgets/code_find_panel.dart';
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -279,7 +282,8 @@ class _ScriptEditorPageState extends ConsumerState<ScriptEditorPage> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
+            popUpAnimationStyle: appMenuAnimation(context),
             tooltip: l10n.editorActions,
             onSelected: (value) {
               switch (value) {
@@ -422,6 +426,7 @@ class _ScriptEditorPageState extends ConsumerState<ScriptEditorPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(_displayName),
         actions: [
           if (_modified)
@@ -436,7 +441,8 @@ class _ScriptEditorPageState extends ConsumerState<ScriptEditorPage> {
                 : _run,
             tooltip: isThisRunning ? l10n.stop : l10n.run,
           ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
+            popUpAnimationStyle: appMenuAnimation(context),
             tooltip: l10n.more,
             onSelected: (value) {
               switch (value) {
@@ -530,6 +536,7 @@ class _ScriptEditorPageState extends ConsumerState<ScriptEditorPage> {
                         },
                         findBuilder: (context, controller, readOnly) {
                           return CodeFindPanelView(
+                            textScaler: MediaQuery.textScalerOf(context),
                             controller: controller,
                             readOnly: readOnly,
                           );
@@ -550,91 +557,5 @@ class _ScriptEditorPageState extends ConsumerState<ScriptEditorPage> {
     _controller.dispose();
     _findController?.close();
     super.dispose();
-  }
-}
-
-/// Search/replace panel for CodeEditor.
-class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
-  final CodeFindController controller;
-  final bool readOnly;
-
-  const CodeFindPanelView({
-    super.key,
-    required this.controller,
-    required this.readOnly,
-  });
-
-  @override
-  Size get preferredSize => Size(
-        double.infinity,
-        controller.value == null ? 0 : 40,
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller.value == null) {
-      return const SizedBox(width: 0, height: 0);
-    }
-    final value = controller.value!;
-    final result = value.result == null
-        ? 'No results'
-        : '${value.result!.index + 1}/${value.result!.matches.length}';
-    return Container(
-      margin: const EdgeInsets.only(right: 10),
-      alignment: Alignment.topRight,
-      height: preferredSize.height,
-      child: SizedBox(
-        width: 320,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 150,
-              height: 32,
-              child: TextField(
-                maxLines: 1,
-                focusNode: controller.findInputFocusNode,
-                controller: controller.findInputController,
-                style: const TextStyle(fontSize: 12),
-                decoration: InputDecoration(
-                  hintText: AppLocalizations.of(context)!.search,
-                  filled: true,
-                  isDense: true,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  border: OutlineInputBorder(gapPadding: 0),
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(result, style: const TextStyle(fontSize: 11)),
-            const Spacer(),
-            IconButton(
-              onPressed: value.result == null
-                  ? null
-                  : () => controller.previousMatch(),
-              icon: const Icon(Icons.arrow_upward, size: 14),
-              constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
-              splashRadius: 14,
-              tooltip: AppLocalizations.of(context)!.previous,
-            ),
-            IconButton(
-              onPressed:
-                  value.result == null ? null : () => controller.nextMatch(),
-              icon: const Icon(Icons.arrow_downward, size: 14),
-              constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
-              splashRadius: 14,
-              tooltip: AppLocalizations.of(context)!.next,
-            ),
-            IconButton(
-              onPressed: () => controller.close(),
-              icon: const Icon(Icons.close, size: 14),
-              constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
-              splashRadius: 14,
-              tooltip: AppLocalizations.of(context)!.close,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

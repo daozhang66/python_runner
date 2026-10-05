@@ -12,7 +12,7 @@ void main() {
   });
 
   group('DatabaseService migrations', () {
-    for (final version in [1, 2, 3, 4, 5]) {
+    for (var version = 1; version <= DatabaseService.schemaVersion; version++) {
       test('opens schema v$version and migrates to current schema', () async {
         final tempDir = await Directory.systemTemp.createTemp(
           'database_service_migration_v${version}_',
@@ -42,8 +42,10 @@ void main() {
           );
           expect(
             groupColumns.map((row) => row['name']),
-            containsAll(['projectKey', 'mainFilePath', 'isProject']),
+            containsAll(
+                ['projectKey', 'mainFilePath', 'isProject', 'homeSortOrder']),
           );
+          expect(scripts.single.homeSortOrder, isNull);
         } finally {
           await service.closeForTest();
           await tempDir.delete(recursive: true);
@@ -75,11 +77,12 @@ void main() {
             .list()
             .where((entity) => entity is File)
             .map((entity) => entity.path)
-            .where((path) => path.contains('.backup.future_v6.'))
+            .where((path) => path.contains(
+                '.backup.future_v${DatabaseService.schemaVersion + 1}.'))
             .toList();
         final primaryBackup = backups.singleWhere((path) =>
             path.endsWith('.db') ||
-            RegExp(r'\.db\.backup\.future_v6\.\d+$').hasMatch(path));
+            RegExp(r'\.db\.backup\.future_v\d+\.\d+$').hasMatch(path));
         expect(await File(primaryBackup).exists(), isTrue);
         expect(
           await File('$primaryBackup-wal').readAsString(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_card.dart';
 
 /// A quiet section without changing the order or behavior of its controls.
 class AppSettingsSection extends StatelessWidget {
@@ -15,6 +16,7 @@ class AppSettingsSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
   final EdgeInsetsGeometry contentPadding;
+
   /// Settings can retain card grouping without changing other detail screens.
   final bool framed;
 
@@ -70,7 +72,7 @@ class AppSettingsSection extends StatelessWidget {
     );
     const margin = EdgeInsets.symmetric(horizontal: 12, vertical: 6);
     return framed
-        ? Card(
+        ? AppCard(
             margin: margin,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),

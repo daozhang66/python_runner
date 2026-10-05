@@ -1,3 +1,4 @@
+import '../widgets/app_dialogs.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -139,7 +140,7 @@ class AppUpdateManager {
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => AppAlertDialog(
           title: const Text('安全警告'),
           content: const Text(
             '当前已启用网络代理或"允许不安全证书"调试选项。\n\n'
@@ -170,7 +171,7 @@ class AppUpdateManager {
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => AppAlertDialog(
           title: const Text('安全警告'),
           content: const Text(
             '该版本缺少完整性校验信息（SHA-256）。\n\n'
@@ -233,7 +234,7 @@ class AppUpdateManager {
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (progressContext) => AlertDialog(
+      builder: (progressContext) => AppAlertDialog(
         title: const Center(child: Text('更新')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -360,8 +361,9 @@ class AppUpdateManager {
         break;
       case DownloadStatus.retrying:
         statusTitleNotifier.value = '网络中断，正在重试 (${progress.retryCount})';
-        progressTextNotifier.value =
-            progress.errorMessage.isNotEmpty ? progress.errorMessage : '准备重试...';
+        progressTextNotifier.value = progress.errorMessage.isNotEmpty
+            ? progress.errorMessage
+            : '准备重试...';
         break;
       case DownloadStatus.completed:
         statusTitleNotifier.value = '下载完成，正在打开安装器';
@@ -376,8 +378,9 @@ class AppUpdateManager {
       case DownloadStatus.failed:
         closeDialog();
         if (context.mounted) {
-          final detail =
-              progress.errorMessage.isNotEmpty ? progress.errorMessage : '请稍后重试';
+          final detail = progress.errorMessage.isNotEmpty
+              ? progress.errorMessage
+              : '请稍后重试';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Python Runner 更新失败：$detail'),

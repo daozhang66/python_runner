@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,16 +86,16 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// No description provided for @appTitle.
@@ -1340,6 +1340,42 @@ abstract class AppLocalizations {
   /// **'Theme and colors'**
   String get themeAndColors;
 
+  /// No description provided for @liquidNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Liquid glass navigation bar'**
+  String get liquidNavigation;
+
+  /// No description provided for @interfaceStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface style'**
+  String get interfaceStyle;
+
+  /// No description provided for @classicMaterial.
+  ///
+  /// In en, this message translates to:
+  /// **'Classic Material'**
+  String get classicMaterial;
+
+  /// No description provided for @liquidGlass.
+  ///
+  /// In en, this message translates to:
+  /// **'Liquid glass'**
+  String get liquidGlass;
+
+  /// No description provided for @navigationStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation style'**
+  String get navigationStyle;
+
+  /// No description provided for @followInterface.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow interface'**
+  String get followInterface;
+
   /// No description provided for @appLogsDescription.
   ///
   /// In en, this message translates to:
@@ -2173,6 +2209,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select theme mode'**
   String get selectThemeMode;
+
+  /// No description provided for @selectNavigationStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select navigation style'**
+  String get selectNavigationStyle;
 
   /// No description provided for @light.
   ///
@@ -3330,8 +3372,13 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{method} request, {domain}, {status}, duration {duration}, time {time}'**
-  String networkRequestSemantics(Object method, Object domain, Object status,
-      Object duration, Object time);
+  String networkRequestSemantics(
+    Object method,
+    Object domain,
+    Object status,
+    Object duration,
+    Object time,
+  );
 
   /// No description provided for @requestOverrideSettings.
   ///
@@ -4075,8 +4122,9 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   }
 
   throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

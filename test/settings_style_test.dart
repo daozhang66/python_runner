@@ -1,3 +1,5 @@
+import 'package:python_runner/ui/app_liquid_host.dart';
+import 'package:g1455/g1455.dart' as glass;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,11 +25,45 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
+    testWidgets('liquid settings ${brightness.name} appearance', (
+      tester,
+    ) async {
+      await _pumpSettings(
+        tester,
+        brightness: brightness,
+        visualStyle: AppVisualStyle.liquid,
+      );
+      final dynamic host = tester.state(find.byType(glass.GlassHost));
+      final captured = host.recorded as int;
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        host.recorded as int,
+        captured,
+        reason: 'An idle page with closed dropdowns must retain its atlas',
+      );
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          'goldens/global_liquid_settings_${brightness.name}.png',
+        ),
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -260));
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsOneWidget);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          'goldens/settings_header_scrolled_${brightness.name}.png',
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    }, tags: const ['golden']);
     testWidgets('settings ${brightness.name} appearance', (tester) async {
       await _pumpSettings(tester, brightness: brightness);
       expect(find.byType(Card), findsWidgets);
-      for (final section in tester
-          .widgetList<AppSettingsSection>(find.byType(AppSettingsSection))) {
+      for (final section in tester.widgetList<AppSettingsSection>(
+        find.byType(AppSettingsSection),
+      )) {
         expect(section.framed, isTrue);
       }
       await expectLater(
@@ -38,49 +74,71 @@ void main() {
   }
 
   for (final locale in ['zh', 'en']) {
-    testWidgets('settings stay usable at 320 width and 2x text: $locale',
-        (tester) async {
-      await _pumpSettings(tester,
-          width: 320, textScale: 2, locale: Locale(locale));
+    testWidgets('settings stay usable at 320 width and 2x text: $locale', (
+      tester,
+    ) async {
+      await _pumpSettings(
+        tester,
+        width: 320,
+        textScale: 2,
+        locale: Locale(locale),
+      );
       expect(tester.takeException(), isNull);
       for (var step = 0; step < 28; step++) {
         await tester.drag(
-            find.byType(CustomScrollView).first, const Offset(0, -400));
+          find.byType(CustomScrollView).first,
+          const Offset(0, -400),
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       }
-      final position =
-          tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
       expect(position.pixels, closeTo(position.maxScrollExtent, 1));
     });
   }
 
-  testWidgets('wide settings constrain forms without moving their sections',
-      (tester) async {
+  testWidgets('wide settings constrain forms without moving their sections', (
+    tester,
+  ) async {
     await _pumpSettings(tester, width: 1024);
-    expect(tester.getSize(find.byType(AppSettingsSection).first).width,
-        lessThanOrEqualTo(760));
+    expect(
+      tester.getSize(find.byType(AppSettingsSection).first).width,
+      lessThanOrEqualTo(760),
+    );
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('主题与配色'), findsOneWidget);
   });
 
-  testWidgets('proxy fields use readable rows on narrow screens',
-      (tester) async {
-    await _pumpSettings(tester,
-        width: 320,
-        textScale: 2,
-        initialPreferences: const {'net_debug_mode': true});
-    final host = find.byWidgetPredicate((widget) =>
-        widget is TextField && widget.decoration?.hintText == '192.168.1.100');
-    await tester.scrollUntilVisible(host, 300,
-        scrollable: find.byType(Scrollable).first);
+  testWidgets('proxy fields use readable rows on narrow screens', (
+    tester,
+  ) async {
+    await _pumpSettings(
+      tester,
+      width: 320,
+      textScale: 2,
+      initialPreferences: const {'net_debug_mode': true},
+    );
+    final host = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.hintText == '192.168.1.100',
+    );
+    await tester.scrollUntilVisible(
+      host,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(tester.getSize(host).width, greaterThan(230));
-    final port = find.byWidgetPredicate((widget) =>
-        widget is TextField && widget.decoration?.hintText == '8888');
+    final port = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.hintText == '8888',
+    );
     expect(
-        tester.getTopLeft(port).dy, greaterThan(tester.getBottomLeft(host).dy));
+      tester.getTopLeft(port).dy,
+      greaterThan(tester.getBottomLeft(host).dy),
+    );
     expect(tester.getSize(port).width, greaterThan(180));
   });
 }
@@ -92,6 +150,7 @@ Future<void> _pumpSettings(
   double textScale = 1,
   Locale locale = const Locale('zh'),
   Map<String, Object> initialPreferences = const {},
+  AppVisualStyle visualStyle = AppVisualStyle.classic,
 }) async {
   SharedPreferences.setMockInitialValues(initialPreferences);
   final preferences = await SharedPreferences.getInstance();
@@ -99,25 +158,27 @@ Future<void> _pumpSettings(
   tester.view.physicalSize = Size(width, 844);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
-    child: MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.build(
-        ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness),
-        fontFamily: 'MiSans',
-      ),
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.linear(textScale),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.build(
+          ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness),
+          fontFamily: 'MiSans',
+          visualStyle: visualStyle,
         ),
-        child: child!,
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: AppLiquidHost(child: child!),
+        ),
+        home: const SettingsPage(currentThemeMode: ThemeMode.system),
       ),
-      home: const SettingsPage(currentThemeMode: ThemeMode.system),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }

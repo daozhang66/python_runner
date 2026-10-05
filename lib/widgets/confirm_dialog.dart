@@ -1,3 +1,4 @@
+import '../widgets/app_dialogs.dart';
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 
@@ -41,7 +42,7 @@ class ConfirmDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
+    return AppAlertDialog(
       scrollable: true,
       title: Text(title),
       content: Text(content),

@@ -12,6 +12,7 @@ class _HttpRecordDetailPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text('${record.method} ${record.statusText}',
             style: const TextStyle(fontSize: 15)),
         actions: [
@@ -704,7 +705,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => AppAlertDialog(
           contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -889,6 +890,7 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Row(
           children: [
             Text(widget.title, style: const TextStyle(fontSize: 15)),
@@ -924,7 +926,8 @@ class _BodyFullViewPageState extends State<_BodyFullViewPage> {
               ),
               tooltip: AppLocalizations.of(context)!.treeView,
             ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
+            popUpAnimationStyle: appMenuAnimation(context),
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: AppLocalizations.of(context)!.more,
             position: PopupMenuPosition.under,
@@ -1242,6 +1245,7 @@ class _JsonTreePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(AppLocalizations.of(context)!.jsonTreeView,
             style: const TextStyle(fontSize: 15)),
       ),
@@ -1555,6 +1559,7 @@ class _ImageFullViewPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.surface,
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(
           AppLocalizations.of(context)!.imagePreview,
           style: const TextStyle(fontSize: 15),

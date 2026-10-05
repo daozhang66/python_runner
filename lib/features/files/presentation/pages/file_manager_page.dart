@@ -1,3 +1,6 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../widgets/app_dialogs.dart';
+import '../../../../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -106,7 +109,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(l10n.newFolder),
         content: TextField(
           controller: controller,
@@ -139,7 +142,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final controller = TextEditingController(text: entry.name);
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(l10n.rename),
         content: TextField(
           controller: controller,
@@ -173,7 +176,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(l10n.delete),
         content: Text(l10n.deleteItemConfirm(entry.name)),
         actions: [
@@ -260,7 +263,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       case 'details':
         showDialog<void>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (context) => AppAlertDialog(
                   title: Text(entry.name),
                   content: SingleChildScrollView(
                       child: SelectableText(
@@ -277,7 +280,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   Future<void> _showEntryActions(AppFileEntry entry) async {
-    final action = await showModalBottomSheet<String>(
+    final action = await showAppModalBottomSheet<String>(
         context: context,
         builder: (sheetContext) => SafeArea(
                 child: SingleChildScrollView(
@@ -327,6 +330,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       },
       child: Scaffold(
         appBar: AppBar(
+          flexibleSpace: appGlassBarBackground(context),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _goUpOrExit,
@@ -339,7 +343,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
               tooltip: l10n.upOneLevel,
               onPressed: _controller.canGoUp ? _controller.goUp : null,
             ),
-            PopupMenuButton<String>(
+            AppPopupMenuButton<String>(
+              popUpAnimationStyle: appMenuAnimation(context),
               key: const ValueKey('file-manager-actions'),
               tooltip: l10n.more,
               shape: RoundedRectangleBorder(
@@ -357,13 +362,27 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 }
               },
               itemBuilder: (context) => [
-                PopupMenuItem(value: 'refresh', child: ListTile(
-                  leading: const Icon(Icons.refresh), title: Text(l10n.refresh), contentPadding: EdgeInsets.zero)),
-                PopupMenuItem(value: 'search', child: ListTile(
-                  leading: Icon(_searchVisible ? Icons.search_off : Icons.search), title: Text(l10n.search), contentPadding: EdgeInsets.zero)),
+                PopupMenuItem(
+                    value: 'refresh',
+                    child: ListTile(
+                        leading: const Icon(Icons.refresh),
+                        title: Text(l10n.refresh),
+                        contentPadding: EdgeInsets.zero)),
+                PopupMenuItem(
+                    value: 'search',
+                    child: ListTile(
+                        leading: Icon(
+                            _searchVisible ? Icons.search_off : Icons.search),
+                        title: Text(l10n.search),
+                        contentPadding: EdgeInsets.zero)),
                 if (_controller.clipboardEntry != null)
-                  PopupMenuItem(value: 'paste', enabled: _controller.canPaste, child: ListTile(
-                    leading: const Icon(Icons.content_paste), title: Text(_label('粘贴', 'Paste')), contentPadding: EdgeInsets.zero)),
+                  PopupMenuItem(
+                      value: 'paste',
+                      enabled: _controller.canPaste,
+                      child: ListTile(
+                          leading: const Icon(Icons.content_paste),
+                          title: Text(_label('粘贴', 'Paste')),
+                          contentPadding: EdgeInsets.zero)),
                 PopupMenuItem(
                   value: 'new_folder',
                   enabled: !_controller.transferring && location.path != '/',
@@ -389,7 +408,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   Row(
                     children: [
                       IconButton(
-                        icon: Icon(location.isRoot ? Icons.folder_special_outlined : Icons.my_location_outlined),
+                        icon: Icon(location.isRoot
+                            ? Icons.folder_special_outlined
+                            : Icons.my_location_outlined),
                         tooltip: switchLabel,
                         onPressed: _switchMode,
                       ),
@@ -466,12 +487,19 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             : Icons.copy,
                         size: 20),
                     const SizedBox(width: 8),
-                    Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_controller.clipboardEntry!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(_controller.clipboardMove ? _label('待移动', 'Ready to move') : _label('待复制', 'Ready to copy'),
-                          style: Theme.of(context).textTheme.labelSmall),
-                      ])),
+                    Expanded(
+                        child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(_controller.clipboardEntry!.name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                              _controller.clipboardMove
+                                  ? _label('待移动', 'Ready to move')
+                                  : _label('待复制', 'Ready to copy'),
+                              style: Theme.of(context).textTheme.labelSmall),
+                        ])),
                     if (_controller.transferring)
                       const SizedBox(
                           width: 24,

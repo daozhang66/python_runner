@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_materials.dart';
 
 /// 统一间距常量，基于 4px 网格。
 abstract final class AppSpacing {
@@ -170,6 +171,15 @@ abstract final class AppThemeColors {
     required bool selected,
     required bool pinned,
   }) {
+    final material = AppMaterials.of(context);
+    if (material.liquid) {
+      return selected
+          ? colors.secondaryContainer
+          : pinned
+              ? Color.alphaBlend(
+                  colors.primary.withValues(alpha: 0.10), material.content)
+              : material.content;
+    }
     if (!isDark(context)) {
       return selected
           ? navigationIndicator(colors)
@@ -188,6 +198,12 @@ abstract final class AppThemeColors {
     required bool selected,
     required bool pinned,
   }) {
+    final material = AppMaterials.of(context);
+    if (material.liquid) {
+      return selected || pinned
+          ? colors.primary.withValues(alpha: 0.5)
+          : material.edge;
+    }
     if (!isDark(context)) {
       return pinned
           ? colors.primary.withValues(alpha: 0.42)

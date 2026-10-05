@@ -4,10 +4,7 @@ part of 'script_list_page.dart';
 
 /// 仅监听指定脚本的数据变化，避免修改时间或运行次数变化触发整个 Sliver 重建。
 class _ScriptDataScope extends ConsumerWidget {
-  const _ScriptDataScope({
-    required this.scriptName,
-    required this.builder,
-  });
+  const _ScriptDataScope({required this.scriptName, required this.builder});
 
   final String scriptName;
   final Widget Function(BuildContext context, ScriptFile script) builder;
@@ -34,6 +31,7 @@ class _ScriptFolderCard extends StatelessWidget {
   final bool? selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Widget? dragHandle;
 
   const _ScriptFolderCard({
     super.key,
@@ -46,6 +44,7 @@ class _ScriptFolderCard extends StatelessWidget {
     this.selected,
     this.onTap,
     this.onLongPress,
+    this.dragHandle,
   });
 
   @override
@@ -55,8 +54,8 @@ class _ScriptFolderCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final subtitle = isProject
         ? (hasMainFile
-            ? l10n.projectMainProgramSet
-            : l10n.projectMainProgramNotSet)
+              ? l10n.projectMainProgramSet
+              : l10n.projectMainProgramNotSet)
         : l10n.scriptsCount(count);
     final content = InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -76,6 +75,7 @@ class _ScriptFolderCard extends StatelessWidget {
                         color: AppThemeColors.softIconColor(context, colors),
                       ),
                       const Spacer(),
+                      if (dragHandle != null) dragHandle!,
                       if (selected != null)
                         Icon(
                           selected!
@@ -102,13 +102,20 @@ class _ScriptFolderCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Text(
                     subtitle,
-                    style:
-                        TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               )
             : Row(
                 children: [
+                  if (dragHandle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: dragHandle,
+                    ),
                   Container(
                     width: 48,
                     height: 48,
@@ -186,8 +193,10 @@ class _ScriptFolderCard extends StatelessWidget {
                       color: selected! ? colors.primary : colors.outline,
                     )
                   else
-                    Icon(Icons.chevron_right_rounded,
-                        color: colors.onSurfaceVariant),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: colors.onSurfaceVariant,
+                    ),
                 ],
               ),
       ),
@@ -263,10 +272,11 @@ class _ScriptGridCard extends StatelessWidget {
                     Row(
                       children: [
                         _ScriptIcon(
-                            colors: colors,
-                            size: 36,
-                            fontSize: 13,
-                            pinned: pinned),
+                          colors: colors,
+                          size: 36,
+                          fontSize: 13,
+                          pinned: pinned,
+                        ),
                         const Spacer(),
                         if (pinned && selected == null)
                           _PinnedBadge(colors: colors),
@@ -274,27 +284,30 @@ class _ScriptGridCard extends StatelessWidget {
                           const SizedBox(width: 6),
                         if (selected != null)
                           Icon(
-                              selected!
-                                  ? Icons.check_circle_rounded
-                                  : Icons.radio_button_unchecked,
-                              size: 22,
-                              color:
-                                  selected! ? colors.primary : colors.outline)
+                            selected!
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked,
+                            size: 22,
+                            color: selected! ? colors.primary : colors.outline,
+                          )
                         else if (onRun != null)
                           _QuickRunButton(onPressed: onRun!),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Text(displayName,
-                        style: TextStyle(
-                            fontSize: 14,
-                            height: 1.2,
-                            fontWeight: FontWeight.w600,
-                            color: masked
-                                ? AppThemeColors.maskedText(context)
-                                : colors.onSurface),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      displayName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.2,
+                        fontWeight: FontWeight.w600,
+                        color: masked
+                            ? AppThemeColors.maskedText(context)
+                            : colors.onSurface,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const Spacer(),
                     Row(
                       children: [
@@ -309,19 +322,17 @@ class _ScriptGridCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 5),
-                    Text(runLabel,
-                        style: TextStyle(fontSize: 11, color: colors.primary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      runLabel,
+                      style: TextStyle(fontSize: 11, color: colors.primary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
               if (dragHandle != null)
-                Positioned(
-                  right: 8,
-                  bottom: 20,
-                  child: dragHandle!,
-                ),
+                Positioned(right: 8, bottom: 20, child: dragHandle!),
             ],
           ),
         ),
@@ -339,9 +350,7 @@ class _GridDragHandle extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox.square(
       dimension: 28,
-      child: Center(
-        child: Icon(Icons.drag_indicator, size: 18, color: color),
-      ),
+      child: Center(child: Icon(Icons.drag_indicator, size: 18, color: color)),
     );
   }
 }
@@ -413,10 +422,12 @@ class _ScriptDetailsPanel extends StatelessWidget {
                   title: localizations.scriptDetails,
                   icon: Icons.description_outlined,
                   trailing: AppStatusBadge(
-                    label:
-                        isRunning ? localizations.running : localizations.idle,
-                    tone:
-                        isRunning ? AppBadgeTone.success : AppBadgeTone.neutral,
+                    label: isRunning
+                        ? localizations.running
+                        : localizations.idle,
+                    tone: isRunning
+                        ? AppBadgeTone.success
+                        : AppBadgeTone.neutral,
                     icon: isRunning
                         ? Icons.play_circle_outline
                         : Icons.circle_outlined,
@@ -427,9 +438,8 @@ class _ScriptDetailsPanel extends StatelessWidget {
                   displayName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -502,8 +512,10 @@ class _ScriptDetailsPanel extends StatelessWidget {
                       button: true,
                       label: localizations.openConsole,
                       child: IconButton.filledTonal(
-                        constraints:
-                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
                         onPressed: onOpenConsole,
                         tooltip: localizations.openConsole,
                         icon: const Icon(Icons.terminal_rounded),
@@ -515,8 +527,10 @@ class _ScriptDetailsPanel extends StatelessWidget {
                           ? localizations.unpin
                           : localizations.pin,
                       child: IconButton.filledTonal(
-                        constraints:
-                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
                         onPressed: onTogglePinned,
                         tooltip: script.isPinned
                             ? localizations.unpin
@@ -589,39 +603,81 @@ class _ScriptCardSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(14);
+    final native =
+        AppMaterials.of(context).liquid && AppMaterials.hasGlassHost(context);
     return RepaintBoundary(
       child: Container(
         margin: margin,
-        decoration: BoxDecoration(
-          color: AppThemeColors.scriptSurface(
-            context,
-            colors,
-            selected: selected,
-            pinned: pinned,
-          ),
-          borderRadius: radius,
-          border: Border.all(
-            color: AppThemeColors.scriptBorder(
+        decoration: native
+            ? BoxDecoration(
+                borderRadius: radius,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppMaterials.of(context).shadow,
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              )
+            : AppMaterials.of(context).liquid
+            ? AppMaterials.of(context).decoration(
+                context,
+                radius,
+                base: AppThemeColors.scriptSurface(
+                  context,
+                  colors,
+                  selected: selected,
+                  pinned: pinned,
+                ),
+              )
+            : BoxDecoration(
+                color: AppThemeColors.scriptSurface(
+                  context,
+                  colors,
+                  selected: selected,
+                  pinned: pinned,
+                ),
+                borderRadius: radius,
+                border: Border.all(
+                  color: AppThemeColors.scriptBorder(
+                    context,
+                    colors,
+                    selected: selected,
+                    pinned: pinned,
+                  ),
+                  width: AppThemeColors.isDark(context) ? 0.8 : 1,
+                ),
+                boxShadow: [
+                  if (!AppThemeColors.isDark(context))
+                    BoxShadow(
+                      color: colors.shadow.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
+              ),
+        clipBehavior: Clip.antiAlias,
+        child: AppGlassPress(
+          feedbackInsideSurface: true,
+          child: AppGlassSurface(
+            enabled: native,
+            cardSurface: true,
+            borderColor: AppThemeColors.scriptBorder(
               context,
               colors,
               selected: selected,
               pinned: pinned,
             ),
-            width: AppThemeColors.isDark(context) ? 0.8 : 1,
+            interactive: true,
+            radius: radius,
+            baseColor: AppThemeColors.scriptSurface(
+              context,
+              colors,
+              selected: selected,
+              pinned: pinned,
+            ),
+            child: Material(color: Colors.transparent, child: child),
           ),
-          boxShadow: [
-            if (!AppThemeColors.isDark(context))
-              BoxShadow(
-                color: colors.shadow.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Material(
-          color: Colors.transparent,
-          child: child,
         ),
       ),
     );
@@ -661,22 +717,22 @@ class _ScriptIcon extends StatelessWidget {
                   ],
           )
         : (isDark
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  colors.surfaceContainerHigh,
-                  colors.surfaceContainer,
-                ],
-              )
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  colors.primaryContainer,
-                  colors.primaryContainer.withValues(alpha: 0.8),
-                ],
-              ));
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colors.surfaceContainerHigh,
+                    colors.surfaceContainer,
+                  ],
+                )
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colors.primaryContainer,
+                    colors.primaryContainer.withValues(alpha: 0.8),
+                  ],
+                ));
 
     return Container(
       width: size,
@@ -701,8 +757,8 @@ class _ScriptIcon extends StatelessWidget {
           color: pinned
               ? colors.primary.withValues(alpha: 0.95)
               : (isDark
-                  ? colors.primary.withValues(alpha: 0.88)
-                  : colors.onPrimaryContainer),
+                    ? colors.primary.withValues(alpha: 0.88)
+                    : colors.onPrimaryContainer),
         ),
       ),
     );
@@ -744,8 +800,9 @@ class _ScriptMetaChip extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize:
-                    compact ? AppTextSize.compactEmphasis : AppTextSize.label,
+                fontSize: compact
+                    ? AppTextSize.compactEmphasis
+                    : AppTextSize.label,
                 color: colors.onSurfaceVariant,
                 height: 1,
               ),
@@ -818,9 +875,10 @@ class _QuickRunButtonState extends State<_QuickRunButton>
       vsync: this,
       duration: const Duration(milliseconds: 100),
     );
-    _scale = Tween<double>(begin: 1.0, end: 0.88).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.88,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override

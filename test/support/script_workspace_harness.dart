@@ -1,3 +1,4 @@
+import 'package:python_runner/ui/app_liquid_host.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,7 +23,8 @@ class ScriptWorkspaceHarness {
     required this.preferences,
     required this.bridge,
     required this.database,
-  })  : scriptRepository = _HarnessScriptRepository(database: database, bridge: bridge),
+  })  : scriptRepository =
+            _HarnessScriptRepository(database: database, bridge: bridge),
         executionProvider = ExecutionProvider(bridge);
 
   final SharedPreferences preferences;
@@ -88,7 +90,7 @@ class ScriptWorkspaceHarness {
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScaleFactor),
             ),
-            child: child ?? const SizedBox.shrink(),
+            child: AppLiquidHost(child: child ?? const SizedBox.shrink()),
           ),
           home: home,
         ),
@@ -123,8 +125,7 @@ class _HarnessScriptRepository implements ScriptRepository {
   Future<void> deleteScript(String name) => database.deleteScript(name);
 
   @override
-  Future<void> renameScript(
-          String oldName, String newName, String newPath) =>
+  Future<void> renameScript(String oldName, String newName, String newPath) =>
       database.renameScript(oldName, newName, newPath);
 
   @override
@@ -134,6 +135,11 @@ class _HarnessScriptRepository implements ScriptRepository {
   @override
   Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) =>
       database.batchUpdateSortOrders(scripts);
+
+  @override
+  Future<void> batchUpdateHomeSortOrders(
+          List<ScriptFile> scripts, List<ScriptGroup> groups) =>
+      database.batchUpdateHomeSortOrders(scripts, groups);
 
   @override
   Future<List<ScriptGroup>> getAllGroups() => database.getAllGroups();
@@ -346,6 +352,16 @@ class InMemoryScriptDatabase extends DatabaseService {
   Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) async {
     for (final script in scripts) {
       await upsertScript(script);
+    }
+  }
+
+  @override
+  Future<void> batchUpdateHomeSortOrders(
+      List<ScriptFile> scripts, List<ScriptGroup> groups) async {
+    await batchUpdateSortOrders(scripts);
+    for (final group in groups) {
+      final index = _groups.indexWhere((item) => item.id == group.id);
+      if (index >= 0) _groups[index] = group;
     }
   }
 }

@@ -1,3 +1,5 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
@@ -624,7 +626,8 @@ class TerminalViewState extends State<TerminalView> {
               }),
               tooltip: localizations.showAll,
             ),
-          PopupMenuButton<TerminalColorMode>(
+          AppPopupMenuButton<TerminalColorMode>(
+            popUpAnimationStyle: appMenuAnimation(context),
             tooltip: localizations.terminalTheme,
             icon: Icon(_colorMode.icon, size: 18, color: toolbarMuted),
             onSelected: _setColorMode,

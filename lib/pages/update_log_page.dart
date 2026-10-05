@@ -1,3 +1,5 @@
+import '../ui/app_card.dart';
+import '../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -97,7 +99,9 @@ class _UpdateLogPageState extends State<UpdateLogPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.updateLog)),
+      appBar: AppBar(
+          flexibleSpace: appGlassBarBackground(context),
+          title: Text(l10n.updateLog)),
       body: Column(
         children: [
           Padding(
@@ -231,7 +235,7 @@ class _ReleaseLogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
+    return AppCard(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(

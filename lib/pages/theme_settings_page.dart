@@ -1,3 +1,5 @@
+import '../ui/app_card.dart';
+import '../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +22,7 @@ class ThemeSettingsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(AppLocalizations.of(context)!.themeAndColors),
       ),
       body: ListView(
@@ -35,6 +38,53 @@ class ThemeSettingsPage extends ConsumerWidget {
           _MaterialYouSection(
             enabled: themeState.useDynamicColor,
             onChanged: themeNotifier.setUseDynamicColor,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(AppLocalizations.of(context)!.interfaceStyle,
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  SegmentedButton<AppVisualStyle>(
+                    key: const ValueKey('interface-style'),
+                    direction: MediaQuery.textScalerOf(context).scale(14) > 20
+                        ? Axis.vertical
+                        : Axis.horizontal,
+                    segments: [
+                      ButtonSegment(
+                          value: AppVisualStyle.classic,
+                          icon: const Icon(Icons.palette_outlined),
+                          label: Text(
+                              AppLocalizations.of(context)!.classicMaterial)),
+                      ButtonSegment(
+                          value: AppVisualStyle.liquid,
+                          icon: const Icon(Icons.blur_on),
+                          label:
+                              Text(AppLocalizations.of(context)!.liquidGlass)),
+                    ],
+                    selected: {themeState.visualStyle},
+                    onSelectionChanged: (selection) =>
+                        themeNotifier.setVisualStyle(selection.single),
+                  ),
+                ]),
+          ),
+          ListTile(
+            title: Text(AppLocalizations.of(context)!.navigationStyle),
+            subtitle: Text(
+                _navigationStyleLabel(context, themeState.navigationStyle)),
+            key: const ValueKey('navigation-style'),
+            trailing: const Icon(Icons.arrow_drop_down),
+            onTap: () async {
+              final selected = await _showNavigationStylePicker(
+                context,
+                themeState.navigationStyle,
+              );
+              if (selected != null && selected != themeState.navigationStyle) {
+                await themeNotifier.setNavigationStyle(selected);
+              }
+            },
           ),
 
           // 配色方案
@@ -68,12 +118,82 @@ class ThemeSettingsPage extends ConsumerWidget {
     );
   }
 
+  String _navigationStyleLabel(BuildContext context, NavigationStyle style) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (style) {
+      case NavigationStyle.followInterface:
+        return l10n.followInterface;
+      case NavigationStyle.classic:
+        return l10n.classicMaterial;
+      case NavigationStyle.liquid:
+        return l10n.liquidGlass;
+    }
+  }
+
+  Future<NavigationStyle?> _showNavigationStylePicker(
+    BuildContext context,
+    NavigationStyle current,
+  ) async {
+    final selected = await showDialog<NavigationStyle>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          final enableBlur =
+              ref.watch(themeProvider.select((s) => s.enableBlurEffect));
+          final dialog = AppAlertDialog(
+            backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
+            surfaceTintColor: Colors.transparent,
+            title: Text(AppLocalizations.of(ctx)!.selectNavigationStyle),
+            scrollable: true,
+            contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RadioListTile<NavigationStyle>(
+                  value: NavigationStyle.followInterface,
+                  groupValue: current,
+                  title: Text(AppLocalizations.of(ctx)!.followInterface),
+                  secondary: const Icon(Icons.brightness_auto_outlined),
+                  onChanged: (value) => Navigator.pop(ctx, value),
+                ),
+                RadioListTile<NavigationStyle>(
+                  value: NavigationStyle.classic,
+                  groupValue: current,
+                  title: Text(AppLocalizations.of(ctx)!.classicMaterial),
+                  secondary: const Icon(Icons.style_outlined),
+                  onChanged: (value) => Navigator.pop(ctx, value),
+                ),
+                RadioListTile<NavigationStyle>(
+                  value: NavigationStyle.liquid,
+                  groupValue: current,
+                  title: Text(AppLocalizations.of(ctx)!.liquidGlass),
+                  secondary: const Icon(Icons.blur_on),
+                  onChanged: (value) => Navigator.pop(ctx, value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(AppLocalizations.of(ctx)!.cancel),
+              ),
+            ],
+          );
+
+          return appDialogFrame(enableBlur: enableBlur, child: dialog);
+        },
+      ),
+    );
+    return selected;
+  }
+
   Future<void> _showColorPicker(
       BuildContext context, ThemeNotifier notifier) async {
     Color? selectedColor;
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.selectColor),
         content: SingleChildScrollView(
           child: ColorPicker(
@@ -116,7 +236,7 @@ class _ThemeModeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -128,14 +248,15 @@ class _ThemeModeSection extends StatelessWidget {
                 Icon(Icons.brightness_6_outlined,
                     size: 20, color: colors.primary),
                 const SizedBox(width: 10),
-                Text(
+                Expanded(
+                    child: Text(
                   AppLocalizations.of(context)!.themeMode,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: colors.primary,
                   ),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: 12),
@@ -213,7 +334,7 @@ class _ThemeModeSection extends StatelessWidget {
         builder: (context, ref, _) {
           final enableBlur =
               ref.watch(themeProvider.select((s) => s.enableBlurEffect));
-          final dialog = AlertDialog(
+          final dialog = AppAlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
             title: Text(AppLocalizations.of(ctx)!.selectThemeMode),
@@ -279,7 +400,7 @@ class _MaterialYouSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -292,14 +413,15 @@ class _MaterialYouSection extends StatelessWidget {
                   Icon(Icons.color_lens_outlined,
                       size: 20, color: colors.primary),
                   const SizedBox(width: 10),
-                  Text(
+                  Expanded(
+                      child: Text(
                     'Material You',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: colors.primary,
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),
@@ -345,7 +467,7 @@ class _PresetThemesSection extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final presets = AppThemePalette.values.where((p) => p.isSeedBased).toList();
 
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -356,14 +478,15 @@ class _PresetThemesSection extends StatelessWidget {
               children: [
                 Icon(Icons.palette_outlined, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
-                Text(
+                Expanded(
+                    child: Text(
                   AppLocalizations.of(context)!.presetThemes,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: colors.primary,
                   ),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: 12),
@@ -434,7 +557,7 @@ class _FluxdoColorsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -445,14 +568,15 @@ class _FluxdoColorsSection extends StatelessWidget {
               children: [
                 Icon(Icons.palette, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
-                Text(
+                Expanded(
+                    child: Text(
                   AppLocalizations.of(context)!.moreColors,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: colors.primary,
                   ),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: 12),
@@ -539,7 +663,7 @@ class _FluxdoColorsSection extends StatelessWidget {
   Future<void> _confirmRemove(BuildContext context, Color color) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.deleteColor),
         content: Text(AppLocalizations.of(ctx)!.deleteColorConfirm),
         actions: [
@@ -691,7 +815,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -702,14 +826,15 @@ class _AdvancedOptionsSection extends StatelessWidget {
               children: [
                 Icon(Icons.tune, size: 20, color: colors.primary),
                 const SizedBox(width: 10),
-                Text(
+                Expanded(
+                    child: Text(
                   AppLocalizations.of(context)!.advancedOptions,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: colors.primary,
                   ),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: 16),
@@ -761,7 +886,8 @@ class _AdvancedOptionsSection extends StatelessWidget {
             // 毛玻璃效果
             SwitchListTile(
               value: enableBlurEffect,
-              onChanged: onBlurEffectChanged,
+              onChanged:
+                  AppMaterials.of(context).liquid ? null : onBlurEffectChanged,
               title: Text(
                 AppLocalizations.of(context)!.blurEffect,
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
@@ -893,7 +1019,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
         builder: (context, ref, _) {
           final enableBlur =
               ref.watch(themeProvider.select((s) => s.enableBlurEffect));
-          final dialog = AlertDialog(
+          final dialog = AppAlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
             title: Text(AppLocalizations.of(ctx)!.selectColorSchemeAlgorithm),
@@ -946,7 +1072,7 @@ class _AdvancedOptionsSection extends StatelessWidget {
         builder: (context, ref, _) {
           final enableBlur =
               ref.watch(themeProvider.select((s) => s.enableBlurEffect));
-          final dialog = AlertDialog(
+          final dialog = AppAlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
             title: Text(AppLocalizations.of(ctx)!.selectFont),

@@ -2,16 +2,19 @@ name: python_runner
 description: "Python运行器 - Android端Python脚本运行环境"
 publish_to: 'none'
 
-version: 1.5.9+35
+version: 1.6.0+36
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.13.5
+  flutter: '>=3.47.6'
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  g1455:
+    path: third_party/g1455
 
   cupertino_icons: ^1.0.9
   # 代码编辑器（虚拟化渲染，高性能）
@@ -53,8 +56,11 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  shaders:
+    - assets/shaders/navigation_glass.frag
   assets:
     - assets/python_hooks/
+    - IMG_20260802_014149.png
 
   fonts:
     - family: MiSans

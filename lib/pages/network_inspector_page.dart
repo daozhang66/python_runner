@@ -1,3 +1,6 @@
+import '../ui/app_popup_menu.dart';
+import '../widgets/app_dialogs.dart';
+import '../ui/app_materials.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/gestures.dart';
@@ -70,6 +73,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
 
     return Scaffold(
       appBar: AppBar(
+          flexibleSpace: appGlassBarBackground(context),
           title: Text(localizations.networkRequests,
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
       body: ListenableBuilder(
@@ -249,7 +253,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
 
   void _showFilterSheet(BuildContext context) {
     final domainCtrl = TextEditingController(text: _store.filterDomain);
-    showModalBottomSheet(
+    showAppModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -413,7 +417,7 @@ class _NetworkInspectorPageState extends State<NetworkInspectorPage> {
   void _confirmClear(BuildContext context) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.clearNetworkRequests),
         content: Text(AppLocalizations.of(ctx)!.clearNetworkRequestsConfirm),
         actions: [

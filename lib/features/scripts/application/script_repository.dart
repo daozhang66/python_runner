@@ -36,6 +36,9 @@ abstract class ScriptRepository {
 
   Future<void> batchUpdateSortOrders(List<ScriptFile> scripts);
 
+  Future<void> batchUpdateHomeSortOrders(
+      List<ScriptFile> scripts, List<ScriptGroup> groups);
+
   // --- DatabaseService：分组 ---
 
   Future<List<ScriptGroup>> getAllGroups();
@@ -98,8 +101,7 @@ class DatabaseScriptRepository implements ScriptRepository {
   Future<void> deleteScript(String name) => _database.deleteScript(name);
 
   @override
-  Future<void> renameScript(
-          String oldName, String newName, String newPath) =>
+  Future<void> renameScript(String oldName, String newName, String newPath) =>
       _database.renameScript(oldName, newName, newPath);
 
   @override
@@ -109,6 +111,11 @@ class DatabaseScriptRepository implements ScriptRepository {
   @override
   Future<void> batchUpdateSortOrders(List<ScriptFile> scripts) =>
       _database.batchUpdateSortOrders(scripts);
+
+  @override
+  Future<void> batchUpdateHomeSortOrders(
+          List<ScriptFile> scripts, List<ScriptGroup> groups) =>
+      _database.batchUpdateHomeSortOrders(scripts, groups);
 
   @override
   Future<List<ScriptGroup>> getAllGroups() => _database.getAllGroups();

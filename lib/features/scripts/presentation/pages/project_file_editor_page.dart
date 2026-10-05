@@ -1,3 +1,5 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,7 +19,7 @@ import '../../../../services/native_bridge.dart';
 import '../../../../services/script_project_service.dart';
 import '../../../../utils/app_page_transitions.dart';
 import '../../../console/presentation/pages/run_console_page.dart';
-import 'script_editor_page.dart';
+import '../widgets/code_find_panel.dart';
 import '../../../../l10n/app_localizations.dart';
 
 class ProjectFileEditorPage extends ConsumerStatefulWidget {
@@ -326,7 +328,8 @@ class _ProjectFileEditorPageState extends ConsumerState<ProjectFileEditorPage> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
+            popUpAnimationStyle: appMenuAnimation(context),
             tooltip: l10n.editorActions,
             onSelected: (value) {
               switch (value) {
@@ -461,6 +464,7 @@ class _ProjectFileEditorPageState extends ConsumerState<ProjectFileEditorPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(_title),
         actions: [
           if (_modified)
@@ -477,7 +481,8 @@ class _ProjectFileEditorPageState extends ConsumerState<ProjectFileEditorPage> {
                   : _runProject,
               tooltip: isThisProjectRunning ? l10n.stop : l10n.runProject,
             ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
+            popUpAnimationStyle: appMenuAnimation(context),
             tooltip: l10n.more,
             onSelected: (value) {
               switch (value) {
@@ -575,6 +580,7 @@ class _ProjectFileEditorPageState extends ConsumerState<ProjectFileEditorPage> {
                       },
                       findBuilder: (context, controller, readOnly) {
                         return CodeFindPanelView(
+                          textScaler: MediaQuery.textScalerOf(context),
                           controller: controller,
                           readOnly: readOnly,
                         );

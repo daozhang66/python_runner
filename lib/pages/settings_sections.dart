@@ -328,7 +328,7 @@ extension _SettingsSections on _SettingsPageState {
                 if (v && mounted) {
                   final confirmed = await showDialog<bool>(
                     context: context,
-                    builder: (ctx) => AlertDialog(
+                    builder: (ctx) => AppAlertDialog(
                       scrollable: true,
                       backgroundColor:
                           Theme.of(ctx).colorScheme.surfaceContainerHigh,
@@ -583,7 +583,7 @@ extension _SettingsSections on _SettingsPageState {
   }
 
   Future<void> _showLanguagePicker(Locale locale) async {
-    final selected = await showModalBottomSheet<Locale>(
+    final selected = await showAppModalBottomSheet<Locale>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {

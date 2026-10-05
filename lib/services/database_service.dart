@@ -13,7 +13,7 @@ class DatabaseService {
   DatabaseService.test({required String databasePath})
       : _databasePath = databasePath;
 
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
   static const String databaseFileName = 'python_runner.db';
   static const int maxBackupBundles = 5;
 
@@ -286,6 +286,9 @@ class DatabaseService {
         WHERE projectKey IS NOT NULL
       ''');
     }
+    if (version >= 6) {
+      await _addHomeSortOrder(db);
+    }
     await db.setVersion(version);
   }
 
@@ -330,6 +333,7 @@ class DatabaseService {
       )
     ''');
     await _createProjectGroupIndexes(db);
+    await _addHomeSortOrder(db);
   }
 
   static Future<void> _onUpgrade(
@@ -366,6 +370,15 @@ class DatabaseService {
           'ALTER TABLE script_groups ADD COLUMN isProject INTEGER DEFAULT 0');
       await _createProjectGroupIndexes(db);
     }
+    if (oldVersion < 6) {
+      await _addHomeSortOrder(db);
+    }
+  }
+
+  static Future<void> _addHomeSortOrder(Database db) async {
+    await db.execute('ALTER TABLE scripts ADD COLUMN homeSortOrder INTEGER');
+    await db
+        .execute('ALTER TABLE script_groups ADD COLUMN homeSortOrder INTEGER');
   }
 
   static Future<void> _createProjectGroupIndexes(Database db) async {
@@ -457,6 +470,35 @@ class DatabaseService {
     await batch.commit();
   }
 
+  Future<void> batchUpdateHomeSortOrders(
+      List<ScriptFile> scripts, List<ScriptGroup> groups) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final script in scripts) {
+        batch.update(
+            'scripts',
+            {
+              'sortOrder': script.sortOrder,
+              'homeSortOrder': script.homeSortOrder,
+            },
+            where: 'name = ?',
+            whereArgs: [script.name]);
+      }
+      for (final group in groups) {
+        batch.update(
+            'script_groups',
+            {
+              'sortOrder': group.sortOrder,
+              'homeSortOrder': group.homeSortOrder,
+            },
+            where: 'id = ?',
+            whereArgs: [group.id]);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   Future<List<ScriptGroup>> getAllGroups() async {
     final db = await database;
     final maps = await db.query('script_groups', orderBy: 'sortOrder ASC');
@@ -513,7 +555,7 @@ class DatabaseService {
     await db.transaction((txn) async {
       await txn.update(
         'scripts',
-        {'groupId': null},
+        {'groupId': null, 'homeSortOrder': null},
         where: 'groupId = ?',
         whereArgs: [groupId],
       );
@@ -534,6 +576,7 @@ class DatabaseService {
         {
           'groupId': script.groupId,
           'sortOrder': script.sortOrder,
+          'homeSortOrder': script.homeSortOrder,
           'modifiedAt': script.modifiedAt.millisecondsSinceEpoch,
         },
         where: 'name = ?',

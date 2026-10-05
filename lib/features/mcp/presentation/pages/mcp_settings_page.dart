@@ -1,3 +1,5 @@
+import '../../../../widgets/app_dialogs.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -94,7 +96,9 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     }
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.mcpPageTitle)),
+      appBar: AppBar(
+          flexibleSpace: appGlassBarBackground(context),
+          title: Text(l10n.mcpPageTitle)),
       body: LayoutBuilder(builder: (context, constraints) {
         final inset =
             ((constraints.maxWidth - 760) / 2).clamp(0.0, double.infinity);
@@ -460,7 +464,7 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     if (ref.read(mcpTokenStoreProvider).hasToken) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => AppAlertDialog(
           scrollable: true,
           title: Text(l10n.mcpRegenerateTokenTitle),
           content: Text(l10n.mcpRegenerateTokenConfirm),
@@ -547,7 +551,7 @@ class _CustomTokenDialogState extends State<_CustomTokenDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
+    return AppAlertDialog(
       scrollable: true,
       title: Text(l10n.mcpCustomToken),
       content: Column(mainAxisSize: MainAxisSize.min, children: [

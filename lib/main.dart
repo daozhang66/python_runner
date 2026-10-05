@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as legacy_provider;
@@ -8,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+
 import 'services/native_bridge.dart';
 import 'features/files/domain/file_manager_location.dart'
     show defaultScriptWorkingDirectory;
@@ -32,6 +34,8 @@ import 'ui/app_navigation_pages.dart';
 import 'ui/app_responsive.dart';
 import 'ui/app_theme_palette.dart';
 import 'ui/app_theme.dart';
+import 'ui/app_liquid_host.dart';
+import 'ui/classic_bottom_navigation.dart';
 import 'l10n/app_localizations.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
@@ -63,8 +67,9 @@ void main() async {
   // Failures (e.g. storage permission not granted yet) are non-fatal: the
   // file manager and the script runtime create it again when needed.
   try {
-    await NativeBridge()
-        .ensureFileManagerDirectory(defaultScriptWorkingDirectory);
+    await NativeBridge().ensureFileManagerDirectory(
+      defaultScriptWorkingDirectory,
+    );
   } catch (_) {}
 
   // Global Flutter framework error handler
@@ -105,7 +110,8 @@ void main() async {
         providers: [
           legacy_provider.ChangeNotifierProvider.value(value: execution),
           legacy_provider.ChangeNotifierProvider.value(
-              value: httpInspectorStore),
+            value: httpInspectorStore,
+          ),
         ],
         child: const PythonRunnerApp(),
       ),
@@ -147,6 +153,8 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
   AppThemePalette? _cachedDarkPreset;
   String? _cachedLightFontFamily;
   String? _cachedDarkFontFamily;
+  AppVisualStyle? _cachedLightVisualStyle;
+  AppVisualStyle? _cachedDarkVisualStyle;
 
   @override
   void initState() {
@@ -178,32 +186,42 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
     ColorScheme colorScheme,
     AppThemePalette? selectedPreset,
     String? fontFamily,
+    AppVisualStyle visualStyle,
   ) {
     final isDark = colorScheme.brightness == Brightness.dark;
     final cachedTheme = isDark ? _cachedDarkTheme : _cachedLightTheme;
     final cachedScheme = isDark ? _cachedDarkScheme : _cachedLightScheme;
     final cachedPreset = isDark ? _cachedDarkPreset : _cachedLightPreset;
-    final cachedFontFamily =
-        isDark ? _cachedDarkFontFamily : _cachedLightFontFamily;
+    final cachedFontFamily = isDark
+        ? _cachedDarkFontFamily
+        : _cachedLightFontFamily;
     if (cachedTheme != null &&
         (identical(cachedScheme, colorScheme) || cachedScheme == colorScheme) &&
         cachedPreset == selectedPreset &&
-        cachedFontFamily == fontFamily) {
+        cachedFontFamily == fontFamily &&
+        (isDark ? _cachedDarkVisualStyle : _cachedLightVisualStyle) ==
+            visualStyle) {
       return cachedTheme;
     }
 
-    final theme = AppTheme.build(colorScheme, fontFamily: fontFamily);
+    final theme = AppTheme.build(
+      colorScheme,
+      fontFamily: fontFamily,
+      visualStyle: visualStyle,
+    );
 
     if (isDark) {
       _cachedDarkTheme = theme;
       _cachedDarkScheme = colorScheme;
       _cachedDarkPreset = selectedPreset;
       _cachedDarkFontFamily = fontFamily;
+      _cachedDarkVisualStyle = visualStyle;
     } else {
       _cachedLightTheme = theme;
       _cachedLightScheme = colorScheme;
       _cachedLightPreset = selectedPreset;
       _cachedLightFontFamily = fontFamily;
+      _cachedLightVisualStyle = visualStyle;
     }
     return theme;
   }
@@ -236,10 +254,12 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
         } else if (themeState.selectedPreset != null &&
             !themeState.selectedPreset!.isSeedBased) {
           // 手工主题（VS Code、GitHub Dark 等）
-          lightScheme =
-              themeState.selectedPreset!.handCraftedScheme(Brightness.light)!;
-          darkScheme =
-              themeState.selectedPreset!.handCraftedScheme(Brightness.dark)!;
+          lightScheme = themeState.selectedPreset!.handCraftedScheme(
+            Brightness.light,
+          )!;
+          darkScheme = themeState.selectedPreset!.handCraftedScheme(
+            Brightness.dark,
+          )!;
         } else {
           // Seed-based 主题
           lightScheme = ColorScheme.fromSeed(
@@ -267,7 +287,9 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
               value: isDark
                   ? _darkSystemUiOverlayStyle
                   : _lightSystemUiOverlayStyle,
-              child: McpOverlayTheme(child: child ?? const SizedBox.shrink()),
+              child: AppLiquidHost(
+                child: McpOverlayTheme(child: child ?? const SizedBox.shrink()),
+              ),
             );
           },
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -277,11 +299,13 @@ class _PythonRunnerAppState extends ConsumerState<PythonRunnerApp>
             lightScheme,
             themeState.selectedPreset,
             themeState.fontFamilyName,
+            themeState.visualStyle,
           ),
           darkTheme: _buildTheme(
             darkScheme,
             themeState.selectedPreset,
             themeState.fontFamilyName,
+            themeState.visualStyle,
           ),
           home: SplashGate(
             child: HomePage(
@@ -354,15 +378,18 @@ class _SplashGateState extends State<SplashGate>
             Permission.videos,
             Permission.audio,
           ].request().timeout(
-                const Duration(seconds: 5),
-                onTimeout: () => <Permission, PermissionStatus>{},
-              );
+            const Duration(seconds: 5),
+            onTimeout: () => <Permission, PermissionStatus>{},
+          );
           await Permission.notification.request().timeout(
-              const Duration(seconds: 5),
-              onTimeout: () => PermissionStatus.denied);
+            const Duration(seconds: 5),
+            onTimeout: () => PermissionStatus.denied,
+          );
         } else {
-          await Permission.storage.request().timeout(const Duration(seconds: 5),
-              onTimeout: () => PermissionStatus.denied);
+          await Permission.storage.request().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => PermissionStatus.denied,
+          );
         }
 
         // MANAGE_EXTERNAL_STORAGE is only relevant on Android 11+ and can jump
@@ -371,8 +398,9 @@ class _SplashGateState extends State<SplashGate>
             !await Permission.manageExternalStorage.isGranted) {
           unawaited(
             Permission.manageExternalStorage.request().timeout(
-                const Duration(seconds: 5),
-                onTimeout: () => PermissionStatus.denied),
+              const Duration(seconds: 5),
+              onTimeout: () => PermissionStatus.denied,
+            ),
           );
         }
 
@@ -382,15 +410,18 @@ class _SplashGateState extends State<SplashGate>
         await _ensureDefaultWorkingDirectory();
       }
     } catch (e) {
-      AppLogger.instance
-          .warn('Permission request error: $e', source: 'SplashGate');
+      AppLogger.instance.warn(
+        'Permission request error: $e',
+        source: 'SplashGate',
+      );
     }
   }
 
   Future<void> _ensureDefaultWorkingDirectory() async {
     try {
-      await NativeBridge()
-          .ensureFileManagerDirectory(defaultScriptWorkingDirectory);
+      await NativeBridge().ensureFileManagerDirectory(
+        defaultScriptWorkingDirectory,
+      );
     } catch (e) {
       // Non-fatal: the file manager and the script runtime retry creation
       // when they need the directory.
@@ -403,13 +434,15 @@ class _SplashGateState extends State<SplashGate>
 
   Future<int> _safeAndroidVersion() async {
     try {
-      return int.parse(Platform.operatingSystemVersion
-          .split('Android ')
-          .last
-          .split(' ')
-          .first
-          .split('.')
-          .first);
+      return int.parse(
+        Platform.operatingSystemVersion
+            .split('Android ')
+            .last
+            .split(' ')
+            .first
+            .split('.')
+            .first,
+      );
     } catch (_) {
       return 0;
     }
@@ -421,15 +454,8 @@ class _SplashGateState extends State<SplashGate>
     super.dispose();
   }
 
-  Widget _buildSplashText(
-    String text, {
-    required TextStyle style,
-  }) {
-    return Text(
-      text,
-      textAlign: TextAlign.center,
-      style: style,
-    );
+  Widget _buildSplashText(String text, {required TextStyle style}) {
+    return Text(text, textAlign: TextAlign.center, style: style);
   }
 
   Widget _buildSplashContent(
@@ -450,10 +476,7 @@ class _SplashGateState extends State<SplashGate>
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                primaryColor,
-                primaryColor.withValues(alpha: 0.4),
-              ],
+              colors: [primaryColor, primaryColor.withValues(alpha: 0.4)],
             ),
           ),
           child: Container(
@@ -548,10 +571,7 @@ class _SplashGateState extends State<SplashGate>
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       child: _ready
-          ? KeyedSubtree(
-              key: const ValueKey('home'),
-              child: widget.child,
-            )
+          ? KeyedSubtree(key: const ValueKey('home'), child: widget.child)
           : splash,
     );
   }
@@ -560,10 +580,7 @@ class _SplashGateState extends State<SplashGate>
 class HomePage extends ConsumerStatefulWidget {
   final ThemeMode currentThemeMode;
 
-  const HomePage({
-    super.key,
-    required this.currentThemeMode,
-  });
+  const HomePage({super.key, required this.currentThemeMode});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -571,6 +588,7 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
+  int _beforeSettingsIndex = 0;
   final _appUpdateManager = AppUpdateManager();
   final _scriptListController = ScriptListPageController();
 
@@ -584,11 +602,11 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   void _selectTab(int index) {
     if (_currentIndex == index) return;
+    if (index == 3) _beforeSettingsIndex = _currentIndex;
+    if (_currentIndex == 3) _scriptListController.refreshRuntimePreference();
     FocusManager.instance.primaryFocus?.unfocus();
     if (index == 2) {
-      unawaited(
-        ref.read(packageControllerProvider.notifier).ensureLoaded(),
-      );
+      unawaited(ref.read(packageControllerProvider.notifier).ensureLoaded());
     }
     setState(() => _currentIndex = index);
   }
@@ -615,6 +633,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           selectedIcon: const Icon(Icons.inventory_2),
           label: Text(localizations.packageManager),
         ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.settings_outlined),
+          selectedIcon: const Icon(Icons.settings),
+          label: Text(localizations.settings),
+        ),
       ],
     );
   }
@@ -624,20 +647,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       index: _currentIndex,
       animate: animate,
       children: [
-        ScriptListPage(
-          controller: _scriptListController,
-          onSettingsTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SettingsPage(
-                currentThemeMode: widget.currentThemeMode,
-              ),
-              fullscreenDialog: true,
-            ),
-          ).then((_) => _scriptListController.refreshRuntimePreference()),
-        ),
+        ScriptListPage(controller: _scriptListController),
         const NetworkInspectorPage(),
         const PackageManagerPage(),
+        SettingsPage(currentThemeMode: widget.currentThemeMode),
       ],
     );
   }
@@ -645,10 +658,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _checkForUpdatesOnLaunch() async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
-    await _appUpdateManager.checkForUpdates(
-      context,
-      manual: false,
-    );
+    await _appUpdateManager.checkForUpdates(context, manual: false);
   }
 
   @override
@@ -657,6 +667,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
+          if (_currentIndex == 3) {
+            _selectTab(_beforeSettingsIndex);
+            return;
+          }
           if (_currentIndex == 0 && _scriptListController.handleBack()) {
             return;
           }
@@ -687,10 +701,18 @@ class _HomePageState extends ConsumerState<HomePage> {
               bottom: false,
               child: _buildPageStack(animate: true),
             ),
-            bottomNavigationBar: AppBottomNavigation(
-              selectedIndex: _currentIndex,
-              onDestinationSelected: _selectTab,
-            ),
+            bottomNavigationBar:
+                ref.watch(
+                  themeProvider.select((state) => state.liquidNavigation),
+                )
+                ? AppBottomNavigation(
+                    selectedIndex: _currentIndex,
+                    onDestinationSelected: _selectTab,
+                  )
+                : ClassicBottomNavigation(
+                    selectedIndex: _currentIndex,
+                    onDestinationSelected: _selectTab,
+                  ),
           );
         },
       ),

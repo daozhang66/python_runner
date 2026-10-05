@@ -105,7 +105,8 @@ class FakeScriptRepository implements ScriptRepository {
   }
 
   @override
-  Future<void> renameScript(String oldName, String newName, String newPath) async {
+  Future<void> renameScript(
+      String oldName, String newName, String newPath) async {
     final index = _scripts.indexWhere((s) => s.name == oldName);
     if (index >= 0) {
       _scripts[index] = _scripts[index].copyWith(name: newName, path: newPath);
@@ -135,6 +136,19 @@ class FakeScriptRepository implements ScriptRepository {
   }
 
   // --- DatabaseService：分组 ---
+
+  @override
+  Future<void> batchUpdateHomeSortOrders(
+      List<ScriptFile> scripts, List<ScriptGroup> groups) async {
+    for (final script in scripts) {
+      final index = _scripts.indexWhere((item) => item.name == script.name);
+      if (index >= 0) _scripts[index] = script;
+    }
+    for (final group in groups) {
+      final index = _groups.indexWhere((item) => item.id == group.id);
+      if (index >= 0) _groups[index] = group;
+    }
+  }
 
   @override
   Future<List<ScriptGroup>> getAllGroups() async {
@@ -190,7 +204,8 @@ class FakeScriptRepository implements ScriptRepository {
     _groups.removeWhere((g) => g.id == groupId);
     for (var i = 0; i < _scripts.length; i++) {
       if (_scripts[i].groupId == groupId) {
-        _scripts[i] = _scripts[i].copyWith(clearGroup: true);
+        _scripts[i] =
+            _scripts[i].copyWith(clearGroup: true, clearHomeSortOrder: true);
       }
     }
   }
@@ -206,6 +221,8 @@ class FakeScriptRepository implements ScriptRepository {
           groupId: script.groupId,
           sortOrder: script.sortOrder,
           clearGroup: script.groupId == null,
+          homeSortOrder: script.homeSortOrder,
+          clearHomeSortOrder: script.homeSortOrder == null,
         );
       }
     }

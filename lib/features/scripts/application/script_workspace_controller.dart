@@ -5,6 +5,7 @@ import '../../../models/script_group.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/project_path_validator.dart';
 import '../../../services/script_name_validator.dart';
+import 'script_home_item.dart';
 import 'script_repository.dart';
 import 'script_workspace_state.dart';
 
@@ -46,6 +47,7 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
 
   List<ScriptFile> get scripts => state.scripts;
   List<ScriptGroup> get groups => state.groups;
+  List<ScriptHomeItem> get homeItems => ScriptHomeItem.ordered(scripts, groups);
   bool get loading => state.isLoading;
 
   List<ScriptFile> get ungroupedScripts =>
@@ -152,6 +154,62 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
       generation: ++_generation,
       layoutRevision: layoutChanged ? ++_layoutRevision : state.layoutRevision,
     );
+  }
+
+  bool canSwapHomeItems(String firstKey, String secondKey) {
+    if (firstKey == secondKey) return false;
+    final entries = {for (final item in homeItems) item.key: item};
+    return entries.containsKey(firstKey) &&
+        entries.containsKey(secondKey) &&
+        !entries[firstKey]!.isPinned &&
+        !entries[secondKey]!.isPinned;
+  }
+
+  Future<void> swapHomeItems(String firstKey, String secondKey) {
+    return _enqueue(() async {
+      if (!canSwapHomeItems(firstKey, secondKey)) return;
+      final items = homeItems.where((item) => !item.isPinned).toList();
+      final first = items.indexWhere((item) => item.key == firstKey);
+      final second = items.indexWhere((item) => item.key == secondKey);
+      final temp = items[first];
+      items[first] = items[second];
+      items[second] = temp;
+      final scriptUpdates = <ScriptFile>[];
+      final groupUpdates = <ScriptGroup>[];
+      var scriptOrder = _scripts
+              .where((s) => s.groupId == null && s.isPinned)
+              .fold<int>(
+                  -1, (max, s) => s.sortOrder > max ? s.sortOrder : max) +
+          1;
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        if (item.script case final script?) {
+          scriptUpdates
+              .add(script.copyWith(homeSortOrder: i, sortOrder: scriptOrder++));
+        } else {
+          groupUpdates.add(item.group!
+              .copyWith(homeSortOrder: i, sortOrder: groupUpdates.length));
+        }
+      }
+      try {
+        await _repository.batchUpdateHomeSortOrders(
+            scriptUpdates, groupUpdates);
+        final scriptsByName = {for (final s in scriptUpdates) s.name: s};
+        final groupsById = {for (final g in groupUpdates) g.id: g};
+        for (var i = 0; i < _scripts.length; i++) {
+          _scripts[i] = scriptsByName[_scripts[i].name] ?? _scripts[i];
+        }
+        for (var i = 0; i < _groups.length; i++) {
+          _groups[i] = groupsById[_groups[i].id] ?? _groups[i];
+        }
+        _sortScripts();
+        _sortGroups();
+        _commit();
+      } catch (e, stackTrace) {
+        _logger.error('Home reorder failed: $e',
+            source: 'ScriptWorkspace', detail: stackTrace.toString());
+      }
+    });
   }
 
   // --- 命令：加载 ---
@@ -303,7 +361,9 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
     }
   }
 
-  Future<bool> saveScript(String name, String content, {
+  Future<bool> saveScript(
+    String name,
+    String content, {
     Future<void> Function()? beforeSave,
   }) {
     return _enqueue(() async {
@@ -620,7 +680,8 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
         _groups.removeWhere((group) => group.id == groupId);
         for (int i = 0; i < _scripts.length; i++) {
           if (_scripts[i].groupId == groupId) {
-            _scripts[i] = _scripts[i].copyWith(clearGroup: true);
+            _scripts[i] = _scripts[i]
+                .copyWith(clearGroup: true, clearHomeSortOrder: true);
           }
         }
         _sortScripts();
@@ -653,6 +714,7 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
           final updated = script.copyWith(
             groupId: groupId,
             clearGroup: groupId == null,
+            clearHomeSortOrder: script.groupId != groupId,
             sortOrder: maxOrder,
             modifiedAt: now,
           );

@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -672,6 +673,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeAndColors => 'Theme and colors';
 
   @override
+  String get liquidNavigation => 'Liquid glass navigation bar';
+
+  @override
+  String get interfaceStyle => 'Interface style';
+
+  @override
+  String get classicMaterial => 'Classic Material';
+
+  @override
+  String get liquidGlass => 'Liquid glass';
+
+  @override
+  String get navigationStyle => 'Navigation style';
+
+  @override
+  String get followInterface => 'Follow interface';
+
+  @override
   String get appLogsDescription =>
       'View and filter system logs, crash logs, and script errors';
 
@@ -1128,6 +1147,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectThemeMode => 'Select theme mode';
+
+  @override
+  String get selectNavigationStyle => 'Select navigation style';
 
   @override
   String get light => 'Light';
@@ -1804,8 +1826,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String networkRequestSemantics(Object method, Object domain, Object status,
-      Object duration, Object time) {
+  String networkRequestSemantics(
+    Object method,
+    Object domain,
+    Object status,
+    Object duration,
+    Object time,
+  ) {
     return '$method request, $domain, $status, duration $duration, time $time';
   }
 

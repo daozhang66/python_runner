@@ -1,3 +1,7 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../widgets/app_dialogs.dart';
+import '../../../../ui/app_materials.dart';
+import '../../../../ui/app_glass_press.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,12 +61,10 @@ class ScriptListPageController {
 }
 
 class ScriptListPage extends ConsumerStatefulWidget {
-  final VoidCallback? onSettingsTap;
   final ScriptListPageController? controller;
 
   const ScriptListPage({
     super.key,
-    this.onSettingsTap,
     this.controller,
   });
 
@@ -162,7 +164,9 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
 
   Widget _buildScriptMenu() {
     final l10n = AppLocalizations.of(context)!;
-    return PopupMenuButton<String>(
+    return AppPopupMenuButton<String>(
+      constraints: const BoxConstraints(minWidth: 112, maxWidth: 280),
+      popUpAnimationStyle: appMenuAnimation(context),
       onSelected: _handleMoreAction,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -311,6 +315,7 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
     return Scaffold(
       appBar: _groupSelectMode
           ? AppBar(
+              flexibleSpace: appGlassBarBackground(context),
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => setState(() {
@@ -344,6 +349,7 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
             )
           : _multiSelectMode
               ? AppBar(
+                  flexibleSpace: appGlassBarBackground(context),
                   leading: IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => setState(() {
@@ -388,10 +394,11 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                 )
               : _reorderMode
                   ? AppBar(
+                      flexibleSpace: appGlassBarBackground(context),
                       leading: IconButton(
                         icon: const Icon(Icons.close),
                         tooltip: l10n.finishReordering,
-                        onPressed: () => setState(() => _reorderMode = false),
+                        onPressed: _finishReordering,
                       ),
                       title: Text(l10n.reorderScripts),
                       actions: [
@@ -408,6 +415,7 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                     )
                   : _searchMode
                       ? AppBar(
+                          flexibleSpace: appGlassBarBackground(context),
                           leading: IconButton(
                             icon: const Icon(Icons.arrow_back),
                             onPressed: _exitSearch,
@@ -449,6 +457,7 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                           ],
                         )
                       : AppBar(
+                          flexibleSpace: appGlassBarBackground(context),
                           leading: _activeGroupId == null
                               ? null
                               : IconButton(
@@ -465,10 +474,6 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                           actions: _activeGroupId == null
                               ? [
                                   _buildScriptNameVisibilityButton(),
-                                  IconButton(
-                                    icon: const Icon(Icons.settings_outlined),
-                                    onPressed: widget.onSettingsTap,
-                                  ),
                                   _buildScriptMenu(),
                                 ]
                               : [

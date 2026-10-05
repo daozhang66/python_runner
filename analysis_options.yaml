@@ -12,6 +12,10 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - third_party/re_editor/**
+    - third_party/g1455/**
+    - .tooling/**
+    - build/**
+    - android/**
 
 linter:
   # The lint rules applied to this project can be customized in the
@@ -25,6 +29,10 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
+    # Preserve the existing source style during the Dart 3.13 migration.
+    prefer_initializing_formals: false
+    unnecessary_underscores: false
+    use_null_aware_elements: false
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 

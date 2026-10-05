@@ -8,6 +8,8 @@ import 'package:re_editor/re_editor.dart';
 import 'package:python_runner/models/app_file_entry.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:python_runner/ui/app_theme.dart';
+import 'package:python_runner/ui/app_visual_style.dart';
 
 import 'support/script_workspace_harness.dart';
 
@@ -64,6 +66,7 @@ Future<FileManagerController> _pumpManager(
   WidgetTester tester,
   _FakeBridge bridge, {
   String? configuredWorkingDir = '/work',
+  bool liquid = false,
 }) async {
   final controller = FileManagerController(
     listDirectory: bridge.list,
@@ -80,6 +83,10 @@ Future<FileManagerController> _pumpManager(
   addTearDown(controller.dispose);
   await tester.pumpWidget(
     MaterialApp(
+      theme: liquid
+          ? AppTheme.build(ColorScheme.fromSeed(seedColor: Colors.blue),
+              visualStyle: AppVisualStyle.liquid)
+          : null,
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -96,23 +103,42 @@ Future<FileManagerController> _pumpManager(
 }
 
 void main() {
+  testWidgets('liquid file manager preserves entry actions and sheet layout',
+      (tester) async {
+    final bridge = _FakeBridge({
+      '/work': [_file('/work/a.txt')]
+    });
+    await _pumpManager(tester, bridge, liquid: true);
+    await tester.longPress(find.text('a.txt'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('goldens/global_liquid_file_actions.png'));
+  }, tags: const ['golden']);
   menuTests();
   viewerTests();
 
-  testWidgets('compact toolbar keeps title visible at 320px and menus work', (tester) async {
+  testWidgets('compact toolbar keeps title visible at 320px and menus work',
+      (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(320, 720);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final bridge = _FakeBridge({'/work': [_file('/work/a.txt')]});
+    final bridge = _FakeBridge({
+      '/work': [_file('/work/a.txt')]
+    });
     await _pumpManager(tester, bridge);
     final title = find.text('文件管理');
     expect(title, findsOneWidget);
     final titleSize = tester.getSize(title);
     final text = tester.widget<Text>(title);
-    final style = DefaultTextStyle.of(tester.element(title)).style.merge(text.style);
-    final painter = TextPainter(text: TextSpan(text: '文件管理', style: style),
-      textDirection: TextDirection.ltr)..layout();
+    final style =
+        DefaultTextStyle.of(tester.element(title)).style.merge(text.style);
+    final painter = TextPainter(
+        text: TextSpan(text: '文件管理', style: style),
+        textDirection: TextDirection.ltr)
+      ..layout();
     expect(titleSize.width, greaterThanOrEqualTo(painter.width));
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const ValueKey('file-manager-actions')));
@@ -281,7 +307,7 @@ Future<ScriptWorkspaceHarness> _pumpWorkspace(WidgetTester tester) async {
 }
 
 Future<void> _openScriptMenu(WidgetTester tester) async {
-  await tester.tap(find.byType(PopupMenuButton<String>).first);
+  await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>).first);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }

@@ -1,3 +1,6 @@
+import '../ui/app_card.dart';
+import '../widgets/app_dialogs.dart';
+import '../ui/app_materials.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -108,7 +111,7 @@ class _RequestOverrideEditorPageState extends State<RequestOverrideEditorPage> {
     final controller = TextEditingController(text: data?.text ?? '');
     final shouldImport = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AppAlertDialog(
         title: Text(l10n.importOverrideConfig),
         content: TextField(
           controller: controller,
@@ -165,7 +168,7 @@ class _RequestOverrideEditorPageState extends State<RequestOverrideEditorPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
+          return AppAlertDialog(
             title:
                 Text(index == null ? l10n.addDomainRule : l10n.editDomainRule),
             content: SingleChildScrollView(
@@ -281,6 +284,7 @@ class _RequestOverrideEditorPageState extends State<RequestOverrideEditorPage> {
     );
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(l10n.requestOverrideSettings),
         actions: [
           IconButton(
@@ -484,7 +488,7 @@ class _EditorSection extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => AppCard(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

@@ -109,7 +109,7 @@ extension _SettingsActions on _SettingsPageState {
         builder: (context, ref, _) {
           final enableBlur =
               ref.watch(themeProvider.select((s) => s.enableBlurEffect));
-          final dialog = AlertDialog(
+          final dialog = AppAlertDialog(
             backgroundColor: appDialogBackgroundColor(ctx, enableBlur),
             surfaceTintColor: Colors.transparent,
             title: Text(AppLocalizations.of(ctx)!.selectRuntimeEngine),
@@ -225,7 +225,7 @@ extension _SettingsActions on _SettingsPageState {
         TextEditingController(text: _githubMirrorController.text);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
@@ -345,7 +345,7 @@ extension _SettingsActions on _SettingsPageState {
     if (value && mounted) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => AppAlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,

@@ -1,3 +1,4 @@
+import '../../../widgets/app_dialogs.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -114,7 +115,7 @@ class _McpConfirmationDialogState extends State<_McpConfirmationDialog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
+    return AppAlertDialog(
       title: Text(l10n.mcpConfirmationTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,

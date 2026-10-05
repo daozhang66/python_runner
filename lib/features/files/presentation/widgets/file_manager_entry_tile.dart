@@ -1,3 +1,5 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../models/app_file_entry.dart';
@@ -57,7 +59,8 @@ class FileManagerEntryTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (menuBuilder != null)
-            PopupMenuButton<String>(
+            AppPopupMenuButton<String>(
+              popUpAnimationStyle: appMenuAnimation(context),
               icon: const Icon(Icons.more_vert, size: 20),
               itemBuilder: menuBuilder!,
               onSelected: onMenuSelected,

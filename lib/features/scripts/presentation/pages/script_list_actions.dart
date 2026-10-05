@@ -68,6 +68,11 @@ extension _ScriptListActions on _ScriptListPageState {
       : null;
 
   bool _canAcceptListDrop(String draggedName, String targetName, int? groupId) {
+    if (groupId == null) {
+      return ref
+          .read(scriptWorkspaceControllerProvider.notifier)
+          .canSwapHomeItems(draggedName, targetName);
+    }
     if (draggedName == targetName) return false;
     final groupScripts = ref
         .read(scriptWorkspaceControllerProvider.notifier)
@@ -87,6 +92,12 @@ extension _ScriptListActions on _ScriptListPageState {
     int? groupId,
   ) {
     if (!_canAcceptListDrop(draggedName, targetName, groupId)) return;
+    if (groupId == null) {
+      ref
+          .read(scriptWorkspaceControllerProvider.notifier)
+          .swapHomeItems(draggedName, targetName);
+      return;
+    }
     ref
         .read(scriptWorkspaceControllerProvider.notifier)
         .swapScriptPositionsByName(
@@ -151,11 +162,23 @@ extension _ScriptListActions on _ScriptListPageState {
       _exitSearch();
       return true;
     }
+    if (_reorderMode) {
+      _finishReordering();
+      return true;
+    }
     if (_activeGroupId != null) {
       _closeGroup();
       return true;
     }
     return false;
+  }
+
+  void _finishReordering() {
+    setState(() {
+      _reorderMode = false;
+      _gridDraggingScriptName = null;
+      _gridDragPreviewTargetName = null;
+    });
   }
 
   Widget _buildMaskedScriptNameText(
@@ -306,7 +329,7 @@ extension _ScriptListActions on _ScriptListPageState {
       : AppLocalizations.of(context)!.notRun;
 
   void _showAddScriptOptions() {
-    showModalBottomSheet(
+    showAppModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -345,7 +368,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.addGroup),
         content: TextField(
           controller: controller,
@@ -394,7 +417,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.newProject),
         content: TextField(
           controller: controller,
@@ -576,7 +599,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final controller = TextEditingController(text: defaultName);
     return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.projectName),
         content: TextField(
           controller: controller,
@@ -602,7 +625,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.newFile),
         content: TextField(
           controller: controller,
@@ -681,7 +704,7 @@ extension _ScriptListActions on _ScriptListPageState {
     if (exists) {
       final overwrite = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => AppAlertDialog(
           title: Text(AppLocalizations.of(ctx)!.scriptExists),
           content: Text(AppLocalizations.of(ctx)!.scriptExistsConfirm(name)),
           actions: [
@@ -888,7 +911,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final names = singleName == null ? _selectedScripts.toSet() : {singleName};
     if (names.isEmpty) return;
 
-    showModalBottomSheet(
+    showAppModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -998,7 +1021,7 @@ extension _ScriptListActions on _ScriptListPageState {
   }
 
   void _showContextMenu(String name, bool isPinned, {int? groupId}) {
-    showModalBottomSheet(
+    showAppModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1075,7 +1098,7 @@ extension _ScriptListActions on _ScriptListPageState {
         TextEditingController(text: oldName.replaceAll('.py', ''));
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.rename),
         content: TextField(
           controller: controller,
@@ -1135,7 +1158,7 @@ extension _ScriptListActions on _ScriptListPageState {
 
   void _showGroupContextMenu(ScriptGroup group) {
     if (group.id == null) return;
-    showModalBottomSheet(
+    showAppModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1184,7 +1207,7 @@ extension _ScriptListActions on _ScriptListPageState {
     final controller = TextEditingController(text: group.name);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.rename),
         content: TextField(
           controller: controller,

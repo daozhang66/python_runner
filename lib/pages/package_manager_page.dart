@@ -1,3 +1,5 @@
+import '../ui/app_materials.dart';
+
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -45,7 +47,8 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     _tabController = TabController(length: 2, vsync: this);
     _searchController.addListener(() {
       setState(
-          () => _searchQuery = _searchController.text.trim().toLowerCase());
+        () => _searchQuery = _searchController.text.trim().toLowerCase(),
+      );
     });
     Future.microtask(() {
       ref.read(packageControllerProvider.notifier).ensureLoaded();
@@ -67,7 +70,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
       return;
     }
     final version = _versionController.text.trim();
-    ref.read(packageControllerProvider.notifier).install(
+    ref
+        .read(packageControllerProvider.notifier)
+        .install(
           name,
           version: version.isEmpty ? null : version,
           indexUrl: _indexUrl,
@@ -181,10 +186,7 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     );
   }
 
-  Future<void> _repairPackage(
-    WidgetRef ref,
-    PackageInfo pkg,
-  ) async {
+  Future<void> _repairPackage(WidgetRef ref, PackageInfo pkg) async {
     final confirmed = await ConfirmDialog.show(
       context,
       title: AppLocalizations.of(context)!.repairPackage,
@@ -193,11 +195,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
       confirmColor: Theme.of(context).colorScheme.primary,
     );
     if (!confirmed || !mounted) return;
-    await ref.read(packageControllerProvider.notifier).repair(
-          pkg.name,
-          version: pkg.version,
-          indexUrl: _indexUrl,
-        );
+    await ref
+        .read(packageControllerProvider.notifier)
+        .repair(pkg.name, version: pkg.version, indexUrl: _indexUrl);
   }
 
   @override
@@ -246,6 +246,7 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(
           localizations.packageManager,
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -263,11 +264,15 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
                   tabs: [
                     Tab(text: localizations.userPackages(userPackages.length)),
                     Tab(
-                        text: localizations
-                            .builtInPackages(builtinPackages.length)),
+                      text: localizations.builtInPackages(
+                        builtinPackages.length,
+                      ),
+                    ),
                   ],
                   labelStyle: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                   unselectedLabelStyle: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -277,22 +282,23 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
             child: isInitialLoading
                 ? const AppListSkeleton()
                 : loadError != null && packages.isEmpty
-                    ? AppErrorState(
-                        message: localizations.loadPackagesFailed,
-                        retryLabel: localizations.retry,
-                        onRetry: () => ref
-                            .read(packageControllerProvider.notifier)
-                            .refresh(),
-                      )
-                    : TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildPackageList(context, userPackages,
-                              canDelete: true),
-                          _buildPackageList(context, builtinPackages,
-                              canDelete: false),
-                        ],
+                ? AppErrorState(
+                    message: localizations.loadPackagesFailed,
+                    retryLabel: localizations.retry,
+                    onRetry: () =>
+                        ref.read(packageControllerProvider.notifier).refresh(),
+                  )
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildPackageList(context, userPackages, canDelete: true),
+                      _buildPackageList(
+                        context,
+                        builtinPackages,
+                        canDelete: false,
                       ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -334,10 +340,7 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     );
   }
 
-  Widget _buildCompactInstallLog(
-    PackageState state,
-    _InstallResult? result,
-  ) {
+  Widget _buildCompactInstallLog(PackageState state, _InstallResult? result) {
     final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
     final statusBadge = !state.isInstalling && result != null
@@ -357,8 +360,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
       decoration: BoxDecoration(
         color: AppThemeColors.softSurface(colors),
         borderRadius: BorderRadius.circular(8),
-        border:
-            Border.all(color: colors.outlineVariant.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
@@ -401,12 +405,13 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
           width: 40,
           height: 40,
           child: AppControlBackground(
+            enabled: !AppMaterials.of(context).liquid,
             child: IconButton(
               icon: const Icon(Icons.refresh, size: 20),
               onPressed: state.isRefreshing
                   ? null
                   : () =>
-                      ref.read(packageControllerProvider.notifier).refresh(),
+                        ref.read(packageControllerProvider.notifier).refresh(),
               visualDensity: VisualDensity.compact,
               tooltip: l10n.refresh,
             ),
@@ -428,8 +433,11 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
           SizedBox(
             width: 36,
             height: 36,
-            child: Icon(Icons.add_box_outlined,
-                size: 22, color: Theme.of(context).colorScheme.primary),
+            child: Icon(
+              Icons.add_box_outlined,
+              size: 22,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -472,8 +480,8 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
                 icon: const Icon(Icons.description_outlined, size: 20),
                 onPressed:
                     state.isInstalling || !state.supportsRequirementsInstall
-                        ? null
-                        : () => _installRequirementsFromFile(state),
+                    ? null
+                    : () => _installRequirementsFromFile(state),
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -505,8 +513,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
       autocorrect: false,
       style: const TextStyle(fontSize: 14, height: 1.2),
       textAlignVertical: TextAlignVertical.center,
-      decoration:
-          _installFieldDecoration(AppLocalizations.of(context)!.version),
+      decoration: _installFieldDecoration(
+        AppLocalizations.of(context)!.version,
+      ),
       onSubmitted: (_) => _install(),
     );
   }
@@ -543,8 +552,9 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     if (packages.isEmpty) {
       return AppEmptyState(
         icon: Icons.inventory_2_outlined,
-        title:
-            _searchQuery.isNotEmpty ? l10n.noMatchingPackages : l10n.noPackages,
+        title: _searchQuery.isNotEmpty
+            ? l10n.noMatchingPackages
+            : l10n.noPackages,
         subtitle: canDelete
             ? l10n.installPythonPackage
             : l10n.noBuiltinPackagesReturned,
@@ -555,11 +565,7 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
       itemCount: packages.length,
       itemBuilder: (context, index) {
         final pkg = packages[index];
-        return _buildPackageListTile(
-          context,
-          pkg,
-          canDelete: canDelete,
-        );
+        return _buildPackageListTile(context, pkg, canDelete: canDelete);
       },
     );
   }
@@ -601,16 +607,18 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
               label: pkg.isUserPackage
                   ? AppLocalizations.of(context)!.user
                   : AppLocalizations.of(context)!.builtIn,
-              tone:
-                  pkg.isUserPackage ? AppBadgeTone.info : AppBadgeTone.neutral,
+              tone: pkg.isUserPackage
+                  ? AppBadgeTone.info
+                  : AppBadgeTone.neutral,
             ),
             if (canDelete) ...[
               const SizedBox(width: 4),
               if (pkg.hasBrokenIntegrity) ...[
                 IconButton(
                   icon: const Icon(Icons.build_outlined, size: 20),
-                  onPressed:
-                      isInstalling ? null : () => _repairPackage(ref, pkg),
+                  onPressed: isInstalling
+                      ? null
+                      : () => _repairPackage(ref, pkg),
                   visualDensity: VisualDensity.compact,
                   tooltip: AppLocalizations.of(context)!.reinstallRepair,
                 ),

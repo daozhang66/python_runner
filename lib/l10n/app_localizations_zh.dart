@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -663,6 +664,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeAndColors => '主题与配色';
 
   @override
+  String get liquidNavigation => '液态玻璃导航栏';
+
+  @override
+  String get interfaceStyle => '界面风格';
+
+  @override
+  String get classicMaterial => '经典 Material';
+
+  @override
+  String get liquidGlass => '液态玻璃';
+
+  @override
+  String get navigationStyle => '导航栏风格';
+
+  @override
+  String get followInterface => '跟随界面';
+
+  @override
   String get appLogsDescription => '查看和筛选系统日志、崩溃日志、脚本错误';
 
   @override
@@ -1109,6 +1128,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectThemeMode => '选择主题模式';
+
+  @override
+  String get selectNavigationStyle => '选择导航栏风格';
 
   @override
   String get light => '浅色';
@@ -1764,8 +1786,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String networkRequestSemantics(Object method, Object domain, Object status,
-      Object duration, Object time) {
+  String networkRequestSemantics(
+    Object method,
+    Object domain,
+    Object status,
+    Object duration,
+    Object time,
+  ) {
     return '$method 请求，$domain，$status，耗时 $duration，时间 $time';
   }
 

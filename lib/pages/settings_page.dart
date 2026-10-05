@@ -1,3 +1,4 @@
+import '../ui/app_materials.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -74,6 +75,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            flexibleSpace: appGlassBarBackground(context, sampleBackdrop: true),
             pinned: true,
             title: Text(AppLocalizations.of(context)!.settings),
           ),
@@ -96,7 +98,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ))
                 .toList()),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          SliverToBoxAdapter(
+              child:
+                  SizedBox(height: 8 + MediaQuery.paddingOf(context).bottom)),
         ],
       ),
     );

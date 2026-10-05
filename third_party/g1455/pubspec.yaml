@@ -1,0 +1,71 @@
+name: g1455
+description: >-
+  Liquid Glass for Flutter: refraction, blur and rim over the live backdrop,
+  with the capture priced, held and shared rather than taken per surface.
+version: 0.1.1
+homepage: https://github.com/PlugFox/g1455
+repository: https://github.com/PlugFox/g1455
+issue_tracker: https://github.com/PlugFox/g1455/issues
+
+topics:
+  - liquid-glass
+  - glassmorphism
+  - shader
+  - ui
+  - widget
+
+# Half-size loops shot by `tool/showcase.sh` (SHOWCASE_DPR=1): pub ships every
+# file listed here, and the README's full-size ones stay in the repository.
+screenshots:
+  - description: 'GlassGroup: three clear glass blobs orbit and fuse into one silhouette where they meet.'
+    path: doc/screenshots/group.webp
+  - description: 'GlassFinish: regular, clear and frosted glass side by side over the same backdrop.'
+    path: doc/screenshots/finishes.webp
+  - description: 'GlassRipple: taps and a drag send viscous waves across a clear glass panel.'
+    path: doc/screenshots/ripple.webp
+  - description: 'GlassSurface.materialize: a bar and two buttons arrive, blur first and tint last, and leave.'
+    path: doc/screenshots/materialize.webp
+  - description: 'GlassSwitch: switches on a glass card, the knob turning into a clear drop while held.'
+    path: doc/screenshots/switch.webp
+  - description: 'GlassSlider: two sliders dragged, the knob a clear drop while held.'
+    path: doc/screenshots/slider.webp
+  - description: 'GlassTabBar: the selection lifts into a drop that magnifies the bar and is dragged between tabs.'
+    path: doc/screenshots/tab_bar.webp
+  - description: 'GlassSegmentedControl: the selected segment lifts into a drop and slides to another.'
+    path: doc/screenshots/segmented.webp
+  - description: 'GlassMenuAnchor and GlassButtonGroup: a button grows into a glass menu, and toolbar cells are pressed.'
+    path: doc/screenshots/menu.webp
+  - description: 'GlassAlert: an alert materializes over the screen, blur first and tint last, and is dismissed.'
+    path: doc/screenshots/alert.webp
+
+environment:
+  sdk: ^3.13.1
+  # Every number the package bakes in was measured on 3.47; below that the
+  # engine paths it relies on (D200's anti-alias flag, the uber-SDF split on
+  # desktop) are other code.
+  flutter: '>=3.47.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  shaders:
+    # Declared through `packages/g1455/` and kept under `lib/`, so the asset key
+    # is the same string whether this package is the root (its own
+    # `flutter test`) or a dependency: a `packages/<name>/` entry that is not a
+    # file below the pubspec resolves through the package config to that
+    # package's `lib/`, and keeps its URI as the key
+    # (`flutter_tools/lib/src/asset.dart`, `_parseAssetFromFile` →
+    # `_resolvePackageAsset`). A plain `shaders/<file>` would be keyed as
+    # written here and with a `packages/g1455/` prefix in an application — two
+    # names, and a fallback load to paper over them. (No shader file is named
+    # in this comment: the shader gates count the extension across the file.)
+    - packages/g1455/shaders/glass_surface.frag
+    - packages/g1455/shaders/glass_group.frag
+    - packages/g1455/shaders/glass_surface_ripple.frag

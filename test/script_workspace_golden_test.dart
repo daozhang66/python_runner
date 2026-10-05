@@ -55,7 +55,7 @@ void main() {
       ],
     );
     addTearDown(harness.dispose);
-    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>));
     await tester.pump();
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ListTile, '排序脚本'));

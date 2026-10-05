@@ -65,6 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('请求覆盖配置无效'), findsOneWidget);
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is AlertDialog),
+        findsOneWidget);
   });
 }

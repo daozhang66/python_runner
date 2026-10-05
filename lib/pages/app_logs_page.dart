@@ -1,3 +1,7 @@
+import '../ui/app_card.dart';
+import '../ui/app_popup_menu.dart';
+import '../widgets/app_dialogs.dart';
+import '../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -76,6 +80,7 @@ class _AppLogsPageState extends State<AppLogsPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(l10n.appLogs),
         actions: [
           IconButton(
@@ -83,7 +88,8 @@ class _AppLogsPageState extends State<AppLogsPage> {
             tooltip: l10n.refresh,
             onPressed: () => setState(_refreshLogSnapshot),
           ),
-          PopupMenuButton(
+          AppPopupMenuButton(
+            popUpAnimationStyle: appMenuAnimation(context),
             icon: const Icon(Icons.more_vert),
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -247,7 +253,7 @@ class _AppLogsPageState extends State<AppLogsPage> {
   Future<void> _clearLogs() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(AppLocalizations.of(ctx)!.clearLogs),
         content: Text(AppLocalizations.of(ctx)!.clearLogsConfirm),
         actions: [
@@ -530,7 +536,7 @@ class _LogCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final levelColor = _getLevelColor();
 
-    return Card(
+    return AppCard(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(

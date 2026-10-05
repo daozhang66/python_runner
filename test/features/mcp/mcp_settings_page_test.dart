@@ -1,3 +1,4 @@
+import 'package:python_runner/ui/app_liquid_host.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -173,6 +174,16 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
+    testWidgets('liquid MCP settings ${brightness.name}', (tester) async {
+      await _pumpMcp(tester,
+          brightness: brightness,
+          locale: const Locale('zh'),
+          visualStyle: AppVisualStyle.liquid);
+      await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+              '../../goldens/global_liquid_mcp_${brightness.name}.png'));
+    }, tags: const ['golden']);
     testWidgets('MCP settings ${brightness.name} appearance', (tester) async {
       await _pumpMcp(tester,
           brightness: brightness, locale: const Locale('zh'));
@@ -215,6 +226,7 @@ Future<ProviderContainer> _pumpMcp(
   double width = 390,
   double textScale = 1,
   ProviderContainer? existing,
+  AppVisualStyle visualStyle = AppVisualStyle.classic,
 }) async {
   final container = existing ?? await _makeContainer(storage);
   addTearDown(container.dispose);
@@ -232,11 +244,12 @@ Future<ProviderContainer> _pumpMcp(
       theme: AppTheme.build(
         ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness),
         fontFamily: 'MiSans',
+        visualStyle: visualStyle,
       ),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context)
             .copyWith(textScaler: TextScaler.linear(textScale)),
-        child: child!,
+        child: AppLiquidHost(child: child!),
       ),
       home: const McpSettingsPage(),
     ),

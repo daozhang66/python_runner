@@ -1,0 +1,40 @@
+Navigation glass optical model
+==============================
+
+assets/shaders/navigation_glass.frag adapts the curved-bevel refraction and
+rounded-rectangle pinch model from liquid_glass_widgets, commit
+c35d7e115a52e05389dd8d98c6b32d4582931c33:
+https://github.com/sdegenaar/liquid_glass_widgets/blob/c35d7e115a52e05389dd8d98c6b32d4582931c33/shaders/liquid_glass_render.frag
+https://github.com/sdegenaar/liquid_glass_widgets/blob/c35d7e115a52e05389dd8d98c6b32d4582931c33/shaders/liquid_glass_geometry_blended.frag
+
+Local changes: analytic single-capsule geometry, a single backdrop pass,
+bounded pinch reach, shared logical-pixel coordinate mapping, and no synthetic
+dark groove or colored rim overlays. Press intensity drives pinch strength;
+the sampled scene determines the color and shape of apparent recesses.
+
+The generic refraction and opposing-light approach was also reviewed in
+oc_liquid_glass (no source copied):
+https://github.com/heyarny/oc_liquid_glass/blob/27ac5b30daaf982b3ad2cedb196f09d1377328e1/shaders/liquid_glass.frag
+
+MIT License
+
+Copyright 2025 Tim Lehmann for whynotmake.it
+Copyright 2026 Sebastian Degenaar for pixel-innovations.com (liquid_glass_widgets)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

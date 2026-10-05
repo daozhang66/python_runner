@@ -130,7 +130,7 @@ void main() {
     });
     addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
     await _pumpViewerWithEditor(tester, harness, _file('/work/a.txt'), editor);
-    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('进入编辑'));
     await tester.pumpAndSettle();
@@ -193,7 +193,7 @@ void main() {
       editorController,
     );
 
-    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('进入编辑'));
     await tester.pumpAndSettle();
@@ -245,7 +245,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.tap(find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>));
     await tester.pumpAndSettle();
 
     expect(find.text('进入编辑模式'), findsNothing);

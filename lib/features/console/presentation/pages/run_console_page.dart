@@ -1,3 +1,4 @@
+import '../../../../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
@@ -205,6 +206,7 @@ class _RunConsoleAppBar extends StatelessWidget implements PreferredSizeWidget {
         _statusColor(context, isRunning, selectedWaiting, status);
 
     return AppBar(
+      flexibleSpace: appGlassBarBackground(context),
       backgroundColor: appBarBg,
       foregroundColor: AppThemeColors.terminalText(colors, isDark),
       elevation: 0,

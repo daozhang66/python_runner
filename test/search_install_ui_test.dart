@@ -1,3 +1,5 @@
+import 'package:python_runner/ui/app_liquid_host.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -21,7 +23,9 @@ import 'support/package_test_helper.dart';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
 Finder get _search => find.descendant(
-    of: find.byType(AppSearchBar), matching: find.byType(TextField));
+  of: find.byType(AppSearchBar),
+  matching: find.byType(TextField),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -38,126 +42,145 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets(
-      'search actions share its background without adding layout padding',
-      (tester) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
-    await _pump(
+    'search actions share its background without adding layout padding',
+    (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await _pump(
         tester,
         Scaffold(
-            body: AppSearchBar(
-          controller: controller,
-          onChanged: (_) {},
-          onClear: controller.clear,
-          trailingActions: [
-            for (var i = 0; i < 3; i++)
-              IconButton(
-                key: ValueKey('test-action-$i'),
-                onPressed: () {},
-                icon: const Icon(Icons.tune),
-              ),
-          ],
-        )));
-    final fieldContainer = find
-        .descendant(
-          of: find.byType(AppSearchBar),
-          matching: find.byWidgetPredicate((widget) =>
-              widget is Container && widget.decoration is BoxDecoration),
-        )
-        .first;
-    final groupDecoration = tester
-        .widget<DecoratedBox>(find
-            .descendant(
+          body: AppSearchBar(
+            controller: controller,
+            onChanged: (_) {},
+            onClear: controller.clear,
+            trailingActions: [
+              for (var i = 0; i < 3; i++)
+                IconButton(
+                  key: ValueKey('test-action-$i'),
+                  onPressed: () {},
+                  icon: const Icon(Icons.tune),
+                ),
+            ],
+          ),
+        ),
+      );
+      final fieldContainer = find
+          .descendant(
+            of: find.byType(AppSearchBar),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.decoration is BoxDecoration,
+            ),
+          )
+          .first;
+      final groupDecorations = tester
+          .widgetList<DecoratedBox>(
+            find.descendant(
               of: _key('search-actions-background'),
               matching: find.byType(DecoratedBox),
-            )
-            .first)
-        .decoration;
-    expect(
-        groupDecoration, tester.widget<Container>(fieldContainer).decoration);
-    final controlsWidth =
-        List.generate(3, (i) => tester.getSize(_key('test-action-$i')).width)
-            .reduce((a, b) => a + b);
-    expect(
-        tester.getSize(_key('search-actions-background')).width, controlsWidth);
-    expect(find.byTooltip('Clear'), findsNothing);
-    controller.text = 'requests';
-    await tester.pump();
-    expect(find.byTooltip('Clear'), findsOneWidget);
-    await tester.tap(find.byTooltip('Clear'));
-    await tester.pump();
-    expect(controller.text, isEmpty);
-    expect(find.byTooltip('Clear'), findsNothing);
-  });
+            ),
+          )
+          .map((box) => box.decoration);
+      expect(
+        groupDecorations,
+        contains(tester.widget<Container>(fieldContainer).decoration),
+      );
+      final controlsWidth = List.generate(
+        3,
+        (i) => tester.getSize(_key('test-action-$i')).width,
+      ).reduce((a, b) => a + b);
+      expect(
+        tester.getSize(_key('search-actions-background')).width,
+        controlsWidth,
+      );
+      expect(find.byTooltip('Clear'), findsNothing);
+      controller.text = 'requests';
+      await tester.pump();
+      expect(find.byTooltip('Clear'), findsOneWidget);
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pump();
+      expect(controller.text, isEmpty);
+      expect(find.byTooltip('Clear'), findsNothing);
+    },
+  );
 
   testWidgets(
-      'package search clears and refreshes without changing installation fields',
-      (tester) async {
-    final repo = await _pumpPackages(tester);
-    await tester.enterText(_key('install-package-name'), 'rich');
-    await tester.enterText(_search, 'requests');
-    await tester.pump();
-    expect(find.text('requests'), findsWidgets);
-    expect(find.text('numpy'), findsNothing);
-    await tester.tap(find.byTooltip('Clear'));
-    await tester.pump();
-    expect(find.text('numpy'), findsOneWidget);
-    expect(
+    'package search clears and refreshes without changing installation fields',
+    (tester) async {
+      final repo = await _pumpPackages(tester);
+      await tester.enterText(_key('install-package-name'), 'rich');
+      await tester.enterText(_search, 'requests');
+      await tester.pump();
+      expect(find.text('requests'), findsWidgets);
+      expect(find.text('numpy'), findsNothing);
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pump();
+      expect(find.text('numpy'), findsOneWidget);
+      expect(
         tester.widget<TextField>(_key('install-package-name')).controller!.text,
-        'rich');
-    await tester.tap(find.byTooltip('Refresh'));
-    await tester.pumpAndSettle();
-    expect(repo.listPackagesCallCount, greaterThan(1));
-  });
+        'rich',
+      );
+      await tester.tap(find.byTooltip('Refresh'));
+      await tester.pumpAndSettle();
+      expect(repo.listPackagesCallCount, greaterThan(1));
+    },
+  );
 
   testWidgets(
-      'install form preserves parameters and rejects duplicate submissions',
-      (tester) async {
-    final repo = _WaitingPackageRepository();
-    await _pumpPackages(tester, repository: repo);
-    await tester.tap(_key('install-package'));
-    await tester.pump();
-    expect(repo.installCallCount, 0);
-    await tester.enterText(_key('install-package-name'), 'rich');
-    await tester.enterText(_key('install-package-version'), '13.9.0');
-    await tester.pump();
-    await tester.tap(_key('install-package'));
-    await tester.pump();
-    expect(repo.installCallCount, 1);
-    expect(repo.lastInstallRequest!.packageName, 'rich');
-    expect(repo.lastInstallRequest!.version, '13.9.0');
-    expect(
-        tester.widget<FilledButton>(_key('install-package')).onPressed, isNull);
-    await tester.enterText(_key('install-package-name'), 'second-package');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
-    expect(repo.installCallCount, 1);
-    expect(
+    'install form preserves parameters and rejects duplicate submissions',
+    (tester) async {
+      final repo = _WaitingPackageRepository();
+      await _pumpPackages(tester, repository: repo);
+      await tester.tap(_key('install-package'));
+      await tester.pump();
+      expect(repo.installCallCount, 0);
+      await tester.enterText(_key('install-package-name'), 'rich');
+      await tester.enterText(_key('install-package-version'), '13.9.0');
+      await tester.pump();
+      await tester.tap(_key('install-package'));
+      await tester.pump();
+      expect(repo.installCallCount, 1);
+      expect(repo.lastInstallRequest!.packageName, 'rich');
+      expect(repo.lastInstallRequest!.version, '13.9.0');
+      expect(
+        tester.widget<FilledButton>(_key('install-package')).onPressed,
+        isNull,
+      );
+      await tester.enterText(_key('install-package-name'), 'second-package');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(repo.installCallCount, 1);
+      expect(
         tester.widget<TextField>(_key('install-package-name')).controller!.text,
-        'second-package');
-    repo.pending.complete(const PackageInstallResult(success: true));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+        'second-package',
+      );
+      repo.pending.complete(const PackageInstallResult(success: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
-  testWidgets('install inputs use the shared background without nested frames',
-      (tester) async {
-    await _pumpPackages(tester);
-    for (final key in ['install-package-name', 'install-package-version']) {
-      final field = tester.widget<TextField>(_key(key));
-      expect(field.decoration!.filled, isFalse);
-      expect(field.decoration!.enabledBorder, InputBorder.none);
-      expect(field.decoration!.disabledBorder, InputBorder.none);
-      expect(field.decoration!.focusedBorder, isA<UnderlineInputBorder>());
-      expect(field.style!.fontSize, 14);
-      expect(field.textAlignVertical, TextAlignVertical.center);
-    }
-    expect(find.byType(VerticalDivider), findsOneWidget);
-  });
+  testWidgets(
+    'install inputs use the shared background without nested frames',
+    (tester) async {
+      await _pumpPackages(tester);
+      for (final key in ['install-package-name', 'install-package-version']) {
+        final field = tester.widget<TextField>(_key(key));
+        expect(field.decoration!.filled, isFalse);
+        expect(field.decoration!.enabledBorder, InputBorder.none);
+        expect(field.decoration!.disabledBorder, InputBorder.none);
+        expect(field.decoration!.focusedBorder, isA<UnderlineInputBorder>());
+        expect(field.style!.fontSize, 14);
+        expect(field.textAlignVertical, TextAlignVertical.center);
+      }
+      expect(find.byType(VerticalDivider), findsOneWidget);
+    },
+  );
 
-  testWidgets('network filters and the visible search text stay synchronized',
-      (tester) async {
+  testWidgets('network filters and the visible search text stay synchronized', (
+    tester,
+  ) async {
     final store = await _pumpNetwork(tester);
     await tester.enterText(_search, 'alpha');
     await tester.pump();
@@ -176,58 +199,106 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    testWidgets('package controls ${brightness.name} appearance',
-        (tester) async {
-      await _pumpPackages(tester,
-          brightness: brightness, locale: const Locale('zh'));
+    testWidgets('liquid package and network operations ${brightness.name}', (
+      tester,
+    ) async {
+      await _pumpPackages(
+        tester,
+        brightness: brightness,
+        locale: const Locale('zh'),
+        visualStyle: AppVisualStyle.liquid,
+      );
+      expect(tester.getSize(_key('install-controls-background')).height, 38);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          'goldens/global_liquid_packages_${brightness.name}.png',
+        ),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpNetwork(
+        tester,
+        brightness: brightness,
+        locale: const Locale('zh'),
+        visualStyle: AppVisualStyle.liquid,
+      );
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          'goldens/global_liquid_network_${brightness.name}.png',
+        ),
+      );
+    }, tags: const ['golden']);
+    testWidgets('package controls ${brightness.name} appearance', (
+      tester,
+    ) async {
+      await _pumpPackages(
+        tester,
+        brightness: brightness,
+        locale: const Locale('zh'),
+      );
       final button = _key('install-package');
       final colors = Theme.of(tester.element(button)).colorScheme;
       final material = tester.widget<Material>(
         find.descendant(of: button, matching: find.byType(Material)).first,
       );
       expect(material.color, colors.secondaryContainer);
-      await expectLater(find.byType(MaterialApp),
-          matchesGoldenFile('goldens/package_controls_${brightness.name}.png'));
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/package_controls_${brightness.name}.png'),
+      );
     }, tags: const ['golden']);
 
     testWidgets('network search ${brightness.name} appearance', (tester) async {
-      await _pumpNetwork(tester,
-          brightness: brightness, locale: const Locale('zh'));
-      await expectLater(find.byType(MaterialApp),
-          matchesGoldenFile('goldens/network_search_${brightness.name}.png'));
+      await _pumpNetwork(
+        tester,
+        brightness: brightness,
+        locale: const Locale('zh'),
+      );
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/network_search_${brightness.name}.png'),
+      );
     }, tags: const ['golden']);
   }
 
   for (final locale in ['en', 'zh']) {
-    testWidgets('package installation retains the original single row: $locale',
-        (tester) async {
-      await _pumpPackages(tester, locale: Locale(locale));
-      expect(tester.takeException(), isNull);
-      final name = tester.getRect(_key('install-package-name'));
-      final version = tester.getRect(_key('install-package-version'));
-      final install = tester.getRect(_key('install-package'));
-      expect(name.top, version.top);
-      expect(name.top, install.top);
-      expect(version.size, const Size(82, 38));
-      expect(install.size, const Size(72, 38));
-      expect(tester.getSize(_key('install-controls-background')).height, 38);
-    });
     testWidgets(
-        'network tools keep their original horizontal arrangement: $locale',
-        (tester) async {
-      await _pumpNetwork(tester, locale: Locale(locale));
-      final buttons = find.descendant(
+      'package installation retains the original single row: $locale',
+      (tester) async {
+        await _pumpPackages(tester, locale: Locale(locale));
+        expect(tester.takeException(), isNull);
+        final name = tester.getRect(_key('install-package-name'));
+        final version = tester.getRect(_key('install-package-version'));
+        final install = tester.getRect(_key('install-package'));
+        expect(name.top, version.top);
+        expect(name.top, install.top);
+        expect(version.size, const Size(82, 38));
+        expect(install.size, const Size(72, 38));
+        expect(tester.getSize(_key('install-controls-background')).height, 38);
+      },
+    );
+    testWidgets(
+      'network tools keep their original horizontal arrangement: $locale',
+      (tester) async {
+        await _pumpNetwork(tester, locale: Locale(locale));
+        final buttons = find.descendant(
           of: _key('search-actions-background'),
-          matching: find.byType(IconButton));
-      expect(buttons, findsNWidgets(3));
-      final top = tester.getTopLeft(buttons.first).dy;
-      for (var i = 1; i < 3; i++) {
-        expect(tester.getTopLeft(buttons.at(i)).dy, top);
-        expect(tester.getTopLeft(buttons.at(i)).dx,
-            greaterThan(tester.getTopLeft(buttons.at(i - 1)).dx));
-      }
-      expect(tester.takeException(), isNull);
-    });
+          matching: find.byType(IconButton),
+        );
+        expect(buttons, findsNWidgets(3));
+        final top = tester.getTopLeft(buttons.first).dy;
+        for (var i = 1; i < 3; i++) {
+          expect(tester.getTopLeft(buttons.at(i)).dy, top);
+          expect(
+            tester.getTopLeft(buttons.at(i)).dx,
+            greaterThan(tester.getTopLeft(buttons.at(i - 1)).dx),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }
 
@@ -245,21 +316,27 @@ Future<FakePackageRepository> _pumpPackages(
   double width = 390,
   double scale = 1,
   double keyboard = 0,
+  AppVisualStyle visualStyle = AppVisualStyle.classic,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   final repo = repository ?? FakePackageRepository(packages: _packages);
   addTearDown(repo.dispose);
   await _pump(
-      tester,
-      ProviderScope(overrides: [
+    tester,
+    ProviderScope(
+      overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         packageRepositoryProvider.overrideWithValue(repo),
-      ], child: const PackageManagerPage()),
-      brightness: brightness,
-      locale: locale,
-      width: width,
-      scale: scale,
-      keyboard: keyboard);
+      ],
+      child: const PackageManagerPage(),
+    ),
+    brightness: brightness,
+    locale: locale,
+    width: width,
+    scale: scale,
+    keyboard: keyboard,
+    visualStyle: visualStyle,
+  );
   return repo;
 }
 
@@ -270,10 +347,12 @@ Future<HttpInspectorStore> _pumpNetwork(
   double width = 390,
   double scale = 1,
   double keyboard = 0,
+  AppVisualStyle visualStyle = AppVisualStyle.classic,
 }) async {
   final directory = Directory.systemTemp.createTempSync('pyrunner-search-ui-');
-  final store =
-      HttpInspectorStore.test(supportDirectoryProvider: () async => directory);
+  final store = HttpInspectorStore.test(
+    supportDirectoryProvider: () async => directory,
+  );
   await tester.runAsync(() async {
     await store.ensureLoaded();
     for (final host in ['alpha', 'beta']) {
@@ -292,20 +371,25 @@ Future<HttpInspectorStore> _pumpNetwork(
   addTearDown(() {
     store.dispose();
     final root = Directory.systemTemp.absolute.path;
-    if (directory.absolute.path
-        .startsWith('$root${Platform.pathSeparator}pyrunner-search-ui-')) {
+    if (directory.absolute.path.startsWith(
+      '$root${Platform.pathSeparator}pyrunner-search-ui-',
+    )) {
       directory.deleteSync(recursive: true);
     }
   });
   await _pump(
-      tester,
-      legacy.ChangeNotifierProvider<HttpInspectorStore>.value(
-          value: store, child: const NetworkInspectorPage()),
-      brightness: brightness,
-      locale: locale,
-      width: width,
-      scale: scale,
-      keyboard: keyboard);
+    tester,
+    legacy.ChangeNotifierProvider<HttpInspectorStore>.value(
+      value: store,
+      child: const NetworkInspectorPage(),
+    ),
+    brightness: brightness,
+    locale: locale,
+    width: width,
+    scale: scale,
+    keyboard: keyboard,
+    visualStyle: visualStyle,
+  );
   return store;
 }
 
@@ -317,28 +401,33 @@ Future<void> _pump(
   double width = 390,
   double scale = 1,
   double keyboard = 0,
+  AppVisualStyle visualStyle = AppVisualStyle.classic,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 844);
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
-  await tester.pumpWidget(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.build(
+  await tester.pumpWidget(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.build(
         ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness),
-        fontFamily: 'MiSans'),
-    locale: locale,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: TextScaler.linear(scale),
-        viewInsets: EdgeInsets.only(bottom: keyboard),
+        fontFamily: 'MiSans',
+        visualStyle: visualStyle,
       ),
-      child: child!,
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(scale),
+          viewInsets: EdgeInsets.only(bottom: keyboard),
+        ),
+        child: AppLiquidHost(child: child!),
+      ),
+      home: page,
     ),
-    home: page,
-  ));
+  );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }

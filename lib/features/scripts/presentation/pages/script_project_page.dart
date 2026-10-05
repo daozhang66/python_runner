@@ -1,3 +1,6 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../widgets/app_dialogs.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -95,7 +98,7 @@ class _ScriptProjectPageState extends ConsumerState<ScriptProjectPage> {
     final controller = TextEditingController();
     final path = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(directory ? l10n.newDirectory : l10n.newFile),
         content: TextField(
           controller: controller,
@@ -166,7 +169,7 @@ class _ScriptProjectPageState extends ConsumerState<ScriptProjectPage> {
     final controller = TextEditingController(text: file.path);
     final newPath = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: Text(l10n.rename),
         content: TextField(
           controller: controller,
@@ -390,6 +393,7 @@ class _ScriptProjectPageState extends ConsumerState<ScriptProjectPage> {
             },
             child: Scaffold(
               appBar: AppBar(
+                flexibleSpace: appGlassBarBackground(context),
                 title: Text(project.group.name),
                 actions: [
                   if (canRun)
@@ -398,7 +402,8 @@ class _ScriptProjectPageState extends ConsumerState<ScriptProjectPage> {
                       tooltip: AppLocalizations.of(context)!.runProject,
                       onPressed: () => _runProject(project),
                     ),
-                  PopupMenuButton<String>(
+                  AppPopupMenuButton<String>(
+                    popUpAnimationStyle: appMenuAnimation(context),
                     onSelected: (action) => _handleMenuAction(action, project),
                     itemBuilder: (context) => [
                       PopupMenuItem(
@@ -531,7 +536,7 @@ class _RequirementsInstallDialogState
             ? AppLocalizations.of(context)!.waitingForInstallLog
             : AppLocalizations.of(context)!.installationComplete)
         : state.installLog.reversed.take(8).join('\n');
-    return AlertDialog(
+    return AppAlertDialog(
       title: Text(AppLocalizations.of(context)!.installDependencies),
       content: SizedBox(
         width: 420,
@@ -756,7 +761,8 @@ class _ProjectFileList extends StatelessWidget {
                           onTap: file.isDirectory
                               ? () => onEnterDirectory(file.path)
                               : () => onSelect(file.path),
-                          trailing: PopupMenuButton<String>(
+                          trailing: AppPopupMenuButton<String>(
+                            popUpAnimationStyle: appMenuAnimation(context),
                             onSelected: (action) {
                               if (action == 'rename') onRename(file);
                               if (action == 'delete') onDelete(file);
@@ -835,7 +841,7 @@ class _MainFileDialogState extends State<MainFileDialog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final ranked = _rankedFiles;
-    return AlertDialog(
+    return AppAlertDialog(
       title: Text(AppLocalizations.of(context)!.selectMainProgram),
       content: SizedBox(
         width: 420,

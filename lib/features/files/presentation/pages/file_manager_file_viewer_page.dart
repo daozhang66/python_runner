@@ -1,3 +1,5 @@
+import '../../../../ui/app_popup_menu.dart';
+import '../../../../ui/app_materials.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,7 +11,7 @@ import 'package:re_highlight/styles/vs2015.dart';
 
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/app_file_entry.dart';
-import '../../../scripts/presentation/pages/script_editor_page.dart';
+import '../../../scripts/presentation/widgets/code_find_panel.dart';
 import '../../application/file_manager_controller.dart';
 
 /// Full-screen code viewer/editor for files opened from the file manager.
@@ -62,20 +64,38 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
     }) {
       final buttons = <ContextMenuButtonItem>[
         if (!controller.isEmpty)
-          ContextMenuButtonItem(type: ContextMenuButtonType.copy,
-            onPressed: () async { await controller.copy(); onDismiss(); }),
+          ContextMenuButtonItem(
+              type: ContextMenuButtonType.copy,
+              onPressed: () async {
+                await controller.copy();
+                onDismiss();
+              }),
         if (!_readOnly && _canEdit && !controller.isEmpty)
-          ContextMenuButtonItem(type: ContextMenuButtonType.cut,
-            onPressed: () { controller.cut(); onDismiss(); }),
+          ContextMenuButtonItem(
+              type: ContextMenuButtonType.cut,
+              onPressed: () {
+                controller.cut();
+                onDismiss();
+              }),
         if (!_readOnly && _canEdit)
-          ContextMenuButtonItem(type: ContextMenuButtonType.paste,
-            onPressed: () { controller.paste(); onDismiss(); }),
+          ContextMenuButtonItem(
+              type: ContextMenuButtonType.paste,
+              onPressed: () {
+                controller.paste();
+                onDismiss();
+              }),
         if (!controller.isEmpty && !controller.isAllSelected)
-          ContextMenuButtonItem(type: ContextMenuButtonType.selectAll,
-            onPressed: () { controller.selectAll(); onRefresh(); }),
+          ContextMenuButtonItem(
+              type: ContextMenuButtonType.selectAll,
+              onPressed: () {
+                controller.selectAll();
+                onRefresh();
+              }),
       ];
-      return buttons.isEmpty ? const SizedBox.shrink() :
-        AdaptiveTextSelectionToolbar.buttonItems(anchors: anchors, buttonItems: buttons);
+      return buttons.isEmpty
+          ? const SizedBox.shrink()
+          : AdaptiveTextSelectionToolbar.buttonItems(
+              anchors: anchors, buttonItems: buttons);
     });
     _loadContent();
   }
@@ -180,6 +200,7 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: appGlassBarBackground(context),
         title: Text(widget.entry.name),
         actions: [
           if (_modified && !_readOnly)
@@ -189,7 +210,8 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
               tooltip: l10n.save,
             ),
           if (!_isBinary && !_loading)
-            PopupMenuButton<String>(
+            AppPopupMenuButton<String>(
+              popUpAnimationStyle: appMenuAnimation(context),
               tooltip: l10n.more,
               onSelected: (value) {
                 switch (value) {
@@ -209,7 +231,9 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
                     child: Row(children: [
                       Icon(_readOnly ? Icons.lock_open : Icons.lock),
                       const SizedBox(width: 12),
-                      Text(_readOnly ? l10n.enterEditMode : l10n.switchToReadOnly),
+                      Text(_readOnly
+                          ? l10n.enterEditMode
+                          : l10n.switchToReadOnly),
                     ]),
                   ),
                 PopupMenuItem(
@@ -270,8 +294,8 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
               codeTheme: _codeHighlightTheme(isDark),
             ),
             wordWrap: false,
-            indicatorBuilder: (context, editingController, chunkController,
-                notifier) {
+            indicatorBuilder:
+                (context, editingController, chunkController, notifier) {
               return Row(
                 children: [
                   DefaultCodeLineNumber(
@@ -283,6 +307,7 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
             },
             findBuilder: (context, controller, readOnly) {
               return CodeFindPanelView(
+                textScaler: MediaQuery.textScalerOf(context),
                 controller: controller,
                 readOnly: readOnly,
               );
@@ -295,8 +320,8 @@ class _FileManagerFileViewerPageState extends State<FileManagerFileViewerPage> {
           decoration: BoxDecoration(
             color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
             border: Border(
-              top:
-                  BorderSide(color: colors.outlineVariant.withValues(alpha: 0.35)),
+              top: BorderSide(
+                  color: colors.outlineVariant.withValues(alpha: 0.35)),
             ),
           ),
           child: Row(

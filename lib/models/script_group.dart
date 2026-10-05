@@ -7,6 +7,7 @@ class ScriptGroup {
   final String? projectKey;
   final String? mainFilePath;
   final bool isProject;
+  final int? homeSortOrder;
 
   ScriptGroup({
     this.id,
@@ -17,6 +18,7 @@ class ScriptGroup {
     this.projectKey,
     this.mainFilePath,
     this.isProject = false,
+    this.homeSortOrder,
   });
 
   ScriptGroup copyWith({
@@ -30,6 +32,7 @@ class ScriptGroup {
     bool? isProject,
     bool clearProjectKey = false,
     bool clearMainFilePath = false,
+    int? homeSortOrder,
   }) {
     return ScriptGroup(
       id: id ?? this.id,
@@ -41,6 +44,7 @@ class ScriptGroup {
       mainFilePath:
           clearMainFilePath ? null : mainFilePath ?? this.mainFilePath,
       isProject: isProject ?? this.isProject,
+      homeSortOrder: homeSortOrder ?? this.homeSortOrder,
     );
   }
 
@@ -54,6 +58,7 @@ class ScriptGroup {
       'projectKey': projectKey,
       'mainFilePath': mainFilePath,
       'isProject': isProject ? 1 : 0,
+      'homeSortOrder': homeSortOrder,
     };
   }
 
@@ -69,6 +74,7 @@ class ScriptGroup {
       projectKey: map['projectKey'] as String?,
       mainFilePath: map['mainFilePath'] as String?,
       isProject: (map['isProject'] as num?)?.toInt() == 1,
+      homeSortOrder: (map['homeSortOrder'] as num?)?.toInt(),
     );
   }
 }
