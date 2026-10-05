@@ -53,7 +53,7 @@ void main() {
       await expectLater(
         find.byType(MaterialApp),
         matchesGoldenFile(
-          'goldens/settings_header_scrolled_${brightness.name}.png',
+          'goldens/settings_header_backup_scrolled_${brightness.name}.png',
         ),
       );
       expect(tester.takeException(), isNull);

@@ -35,6 +35,9 @@ final backupRecoveryProvider = Provider<BackupRecovery>(
 /// Must resolve before constructing workspace widgets or starting MCP services.
 final backupStartupProvider = FutureProvider<void>((ref) async {
   await ref.read(backupRecoveryProvider).recover();
+  // Recovery may have removed a staged operation. Rebuild the persistent UI
+  // owner only after cleanup succeeded, before mounting the workspace again.
+  ref.invalidate(backupControllerProvider);
   try {
     await ref
         .read(nativeBridgeProvider)

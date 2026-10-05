@@ -388,16 +388,17 @@ class BackupController extends ChangeNotifier {
           await _discard(op);
         }
       });
-  Future<void> saveWebDavProfile(
-    WebDavConfig profile, {
-    required String password,
-  }) => _perform(BackupOperationKind.saveProfile, (op) async {
-    op.cancellable = false;
-    _stage(op, BackupOperationStage.preparing);
-    await configStore.saveProfile(profile, password: password);
-    _set(_state.copyWith(profile: profile, remoteBackups: []));
-    _result(const BackupResult(BackupResultKind.profileSaved));
-  }, allowPreview: true);
+  Future<void> saveWebDavProfile(WebDavConfig profile, {String? password}) =>
+      _perform(BackupOperationKind.saveProfile, (op) async {
+        op.cancellable = false;
+        _stage(op, BackupOperationStage.preparing);
+        await configStore.saveProfile(
+          profile,
+          password: password ?? await configStore.readPassword(),
+        );
+        _set(_state.copyWith(profile: profile, remoteBackups: []));
+        _result(const BackupResult(BackupResultKind.profileSaved));
+      }, allowPreview: true);
   Future<void> testWebDavConnection({
     WebDavConfig? profile,
     String? password,
@@ -470,6 +471,8 @@ class BackupController extends ChangeNotifier {
   }) async {
     final candidates = legacy ? _legacyCandidates(manifest) : <String>[];
     if (legacy) {
+      // An ordinary ZIP is always a new project, including after name edits.
+      policy = RestoreConflictPolicy.keepBoth;
       if (entryPoint != null && !candidates.contains(entryPoint)) {
         throw const BackupFailure('INVALID_ENTRYPOINT');
       }
@@ -589,11 +592,14 @@ class BackupController extends ChangeNotifier {
       _updatePreview(policy: policy);
   Future<void> updateLegacyEntryPoint(String? entryPoint) =>
       _updatePreview(entryPoint: entryPoint, changeEntryPoint: true);
+  Future<void> updateLegacyProjectName(String name) =>
+      _updatePreview(projectName: name);
   Future<void> _updatePreview({
     BackupSelection? selection,
     RestoreConflictPolicy? policy,
     String? entryPoint,
     bool changeEntryPoint = false,
+    String? projectName,
   }) {
     final next = _previewTail.then(
       (_) => _updatePreviewNow(
@@ -601,6 +607,7 @@ class BackupController extends ChangeNotifier {
         policy: policy,
         entryPoint: entryPoint,
         changeEntryPoint: changeEntryPoint,
+        projectName: projectName,
       ),
     );
     _previewTail = next;
@@ -612,14 +619,27 @@ class BackupController extends ChangeNotifier {
     RestoreConflictPolicy? policy,
     String? entryPoint,
     bool changeEntryPoint = false,
+    String? projectName,
   }) async {
     final before = _state.preview;
     if (before == null || _active != null || _disposed) return;
     final generation = ++_previewGeneration;
     try {
+      var manifest = before.manifest;
+      if (projectName != null) {
+        if (!before.legacy ||
+            projectName.trim().isEmpty ||
+            projectName.length > 255 ||
+            RegExp(r'[\x00-\x1f\x7f]').hasMatch(projectName)) {
+          throw const BackupFailure('INVALID_PROJECT_NAME');
+        }
+        final json = manifest.toJson();
+        (json['groups'] as List).single['name'] = projectName.trim();
+        manifest = BackupManifest.fromJson(json);
+      }
       final preview = await _plan(
         id: before.operationId,
-        manifest: before.manifest,
+        manifest: manifest,
         selection: selection ?? before.selection,
         policy: policy ?? before.policy,
         legacy: before.legacy,

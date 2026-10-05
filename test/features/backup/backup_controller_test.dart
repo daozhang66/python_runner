@@ -723,6 +723,48 @@ void main() {
     await controller.updateLegacyEntryPoint('../bad.py');
     expect(controller.state.error!.code, 'INVALID_ENTRYPOINT');
   });
+  test(
+    'editing a profile without password preserves the secure credential',
+    () async {
+      await cloudProfile();
+      await controller.saveWebDavProfile(
+        WebDavConfig(
+          baseUri: Uri.parse('https://other.example'),
+          username: 'changed',
+        ),
+      );
+      expect(await config.readPassword(), 'secret');
+      expect(config.loadProfile()!.username, 'changed');
+    },
+  );
+  test('legacy name edit queues with entrypoint and never overwrites a same-name project', () async {
+    final json = native.manifest.toJson();
+    json['scripts'] = [];
+    json['groups'] = [(json['groups'] as List).last];
+    json['files'] = (json['files'] as List)
+        .where((f) => (f['path'] as String).startsWith('projects/'))
+        .toList();
+    native.manifest = BackupManifest.fromJson(json);
+    native.legacy = true;
+    await db.createGroup(
+      localGroup(3, 'Existing', project: true, key: 'existing'),
+    );
+    await controller.pickAndStageLocal();
+    await Future.wait([
+      controller.updateLegacyProjectName('Existing'),
+      controller.updateLegacyEntryPoint(null),
+      controller.updateRestorePolicy(RestoreConflictPolicy.overwrite),
+    ]);
+    final preview = controller.state.preview!;
+    expect(preview.manifest.groups.single.name, 'Existing');
+    expect(preview.plan.groups.single.group.name, isNot('Existing'));
+    expect(preview.plan.groups.single.action, RestoreAction.create);
+    expect(preview.plan.groups.single.group.mainFilePath, isNull);
+    expect(preview.plan.fileMoves.single.overwrite, false);
+    await controller.updateLegacyProjectName('');
+    expect(controller.state.error!.code, 'INVALID_PROJECT_NAME');
+    expect(controller.state.preview!.manifest.groups.single.name, 'Existing');
+  });
   test('selection and policy changes queued rapidly both survive', () async {
     await controller.pickAndStageLocal();
     final selected = controller.updateRestoreSelection(
