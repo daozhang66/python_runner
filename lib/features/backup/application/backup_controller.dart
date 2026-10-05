@@ -98,6 +98,22 @@ class BackupController extends ChangeNotifier {
   void _onNativeProgress(BackupProgress progress) {
     final op = _active;
     if (op == null || op.id != progress.operationId) return;
+    // A staged operation keeps its native ID through confirmation. Delayed
+    // preparation events must not replace the later commit/transfer stage.
+    if (op.kind == BackupOperationKind.restore &&
+        (progress.stage != BackupStage.committing ||
+            _state.operation?.stage == BackupOperationStage.finalizing)) {
+      return;
+    }
+    if (op.kind == BackupOperationKind.upload &&
+        _state.operation?.stage == BackupOperationStage.uploading) {
+      return;
+    }
+    if (op.kind == BackupOperationKind.exportLocal &&
+        _state.operation?.stage == BackupOperationStage.copying &&
+        progress.stage != BackupStage.copying) {
+      return;
+    }
     _stage(
       op,
       switch (progress.stage) {

@@ -37,8 +37,9 @@ class FakeBackupNative extends BackupNativeBridge {
   Completer<void>? commitWait;
   Future<void> Function()? onFinalize;
   Map<String, dynamic>? metadata;
+  final progressEvents = StreamController<BackupProgress>.broadcast(sync: true);
   @override
-  Stream<BackupProgress> get progress => const Stream.empty();
+  Stream<BackupProgress> get progress => progressEvents.stream;
   void check(String call) {
     calls.add(call);
     if (failure == call) {
@@ -277,6 +278,7 @@ void main() {
   });
   tearDown(() async {
     controller.dispose();
+    await native.progressEvents.close();
     await db.closeForTest();
     await dir.delete(recursive: true);
   });
@@ -637,6 +639,18 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       expect(controller.state.operation!.cancellable, false);
+      native.progressEvents.add(
+        BackupProgress(
+          operationId: controller.state.operation!.id,
+          stage: BackupStage.validating,
+          completed: 1,
+          total: 1,
+        ),
+      );
+      expect(
+        controller.state.operation!.stage,
+        BackupOperationStage.committing,
+      );
       await controller.cancel();
       controller.dispose();
       native.commitWait!.complete();
