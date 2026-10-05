@@ -713,7 +713,7 @@ class BackupController extends ChangeNotifier {
               _result(const BackupResult(BackupResultKind.restored));
             } catch (_) {
               database.preserveRestoreEvidence = true;
-              workspaceAccess.blockForRecovery();
+              workspaceAccess.retainNativeDiscard(op.id);
               _result(
                 const BackupResult(BackupResultKind.restoredCleanupPending),
               );
@@ -727,7 +727,7 @@ class BackupController extends ChangeNotifier {
                 _set(_state.copyWith(preview: null));
               } catch (_) {
                 database.preserveRestoreEvidence = true;
-                workspaceAccess.blockForRecovery();
+                workspaceAccess.retainNativeDiscard(op.id);
                 _set(_state.copyWith(preview: null));
                 throw const BackupFailure('RECOVERY_REQUIRED');
               }
