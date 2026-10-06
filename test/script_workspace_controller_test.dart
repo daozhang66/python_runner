@@ -57,6 +57,26 @@ void main() {
       );
 
   group('load', () {
+    test('refresh removes deleted metadata and retains valid script details', () async {
+      final now = DateTime(2026, 1, 1);
+      final retained = script('keep.py', now, sortOrder: 4, isPinned: true, runCount: 9);
+      final repo = FakeScriptRepository(scripts: [retained, script('gone.py', now, sortOrder: 5)]);
+      await repo.deleteScriptFile('gone.py');
+      final container = makeContainer(repo);
+      await container.read(scriptWorkspaceControllerProvider.notifier).load();
+      expect(await repo.getScript('gone.py'), isNull);
+      expect((await repo.getScript('keep.py'))!.toMap(), retained.toMap());
+    });
+
+    test('failed file inventory does not delete metadata', () async {
+      final now = DateTime(2026, 1, 1);
+      final repo = _FailedInventoryRepository(scripts: [script('keep.py', now, sortOrder: 0)]);
+      final container = makeContainer(repo);
+      await container.read(scriptWorkspaceControllerProvider.notifier).load();
+      expect(await repo.getScript('keep.py'), isNotNull);
+      expect(container.read(scriptWorkspaceControllerProvider).loadError, isNotNull);
+    });
+
     test('reconciles file system with DB, backfilling new scripts', () async {
       final now = DateTime(2026, 1, 1);
       final repo = FakeScriptRepository(
@@ -248,7 +268,7 @@ void main() {
   });
 
   group('createScript', () {
-    test('appends new script at end of group sort order', () async {
+    test('inserts new script at front of group sort order', () async {
       final now = DateTime(2026, 1, 1);
       final repo = FakeScriptRepository(scripts: [
         script('a.py', now, sortOrder: 0, groupId: 1),
@@ -264,10 +284,11 @@ void main() {
       expect(ok, isTrue);
       final notifier =
           container.read(scriptWorkspaceControllerProvider.notifier);
-      // 新脚本 sortOrder 应是组内 maxOrder+1 = 2。
       final created = notifier.scripts.firstWhere((s) => s.name == 'c.py');
-      expect(created.sortOrder, 2);
+      expect(created.sortOrder, 0);
       expect(created.groupId, 1);
+      expect(notifier.scriptsInGroup(1).map((s) => s.name),
+          ['c.py', 'a.py', 'b.py']);
     });
   });
 
@@ -530,6 +551,12 @@ void main() {
       expect(untouchedNotifications, 1, reason: '未修改的脚本卡片不应收到其他脚本的更新');
     });
   });
+}
+
+class _FailedInventoryRepository extends FakeScriptRepository {
+  _FailedInventoryRepository({super.scripts});
+  @override
+  Future<List<String>> listScriptFiles() async => throw StateError('storage unavailable');
 }
 
 class _ThrowingListRepository extends FakeScriptRepository {

@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:python_runner/l10n/app_localizations.dart';
 import 'package:python_runner/pages/settings_page.dart';
+import 'package:python_runner/pages/app_logs_page.dart';
+import 'package:python_runner/runtime/runtime_manager.dart';
+import 'package:python_runner/runtime/linux_like_backend.dart';
 import 'package:python_runner/providers/theme_provider.dart';
 import 'package:python_runner/ui/app_theme.dart';
 import 'package:python_runner/ui/app_settings_section.dart';
@@ -23,6 +26,60 @@ void main() {
       await loader.load();
     }
   });
+
+  test(
+    'Debian display names preserve the installed runtime backend identity',
+    () {
+      expect(RuntimeManager.backendDisplayName('linux_like'), 'Debian');
+      expect(LinuxLikeBackend().name, 'Debian');
+      expect(LinuxLikeBackend().id, 'linux_like');
+      expect(
+        RuntimeManager.normalizePreferredBackendId('linux_like'),
+        'linux_like',
+      );
+    },
+  );
+
+  testWidgets(
+    'settings group related controls and keep export inside app logs',
+    (tester) async {
+      await _pumpSettings(tester, height: 6000);
+      final sections = tester
+          .widgetList<AppSettingsSection>(find.byType(AppSettingsSection))
+          .toList();
+      expect(sections.map((section) => section.title), [
+        '外观与语言',
+        '脚本与存储',
+        '运行引擎',
+        '网络与连接',
+        '诊断与日志',
+        '关于与更新',
+      ]);
+      Finder section(String title) => find.byWidgetPredicate(
+        (widget) => widget is AppSettingsSection && widget.title == title,
+      );
+      expect(
+        find.descendant(of: section('脚本与存储'), matching: find.text('备份与恢复')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: section('网络与连接'),
+          matching: find.text('AI / MCP 服务'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('导出完整日志'), findsNothing);
+      expect(find.text('Debian（实验）'), findsOneWidget);
+      await tester.tap(find.text('应用日志'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AppLogsPage), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('导出日志'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final brightness in Brightness.values) {
     testWidgets('liquid settings ${brightness.name} appearance', (
@@ -147,6 +204,7 @@ Future<void> _pumpSettings(
   WidgetTester tester, {
   Brightness brightness = Brightness.light,
   double width = 390,
+  double height = 844,
   double textScale = 1,
   Locale locale = const Locale('zh'),
   Map<String, Object> initialPreferences = const {},
@@ -155,7 +213,7 @@ Future<void> _pumpSettings(
   SharedPreferences.setMockInitialValues(initialPreferences);
   final preferences = await SharedPreferences.getInstance();
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = Size(width, 844);
+  tester.view.physicalSize = Size(width, height);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(

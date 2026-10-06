@@ -755,11 +755,14 @@ extension _ScriptListActions on _ScriptListPageState {
     );
   }
 
-  void _openFileManager() {
-    Navigator.push(
+  Future<void> _openFileManager() async {
+    await Navigator.push(
       context,
       AppPageTransitions.sharedAxisLeftRight(const FileManagerPage()),
     );
+    if (mounted && !ref.read(workspaceAccessProvider).isBusy) {
+      await ref.read(scriptWorkspaceControllerProvider.notifier).load();
+    }
   }
 
   Future<void> _exportScript(String name) async {

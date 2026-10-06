@@ -16,6 +16,7 @@ import '../../../../providers/execution_provider.dart';
 import '../../../../runtime/runtime_manager.dart';
 import '../../../../services/native_bridge.dart';
 import '../../../../services/script_project_service.dart';
+import '../../../../services/workspace_access.dart';
 import '../../../../ui/app_design_tokens.dart';
 import '../../../../ui/app_badges.dart';
 import '../../../../ui/app_empty_state.dart';

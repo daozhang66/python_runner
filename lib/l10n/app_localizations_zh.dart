@@ -442,10 +442,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageRuntime => '管理引擎';
 
   @override
-  String get runtimeInstalled => 'Linux-like 运行引擎已安装';
+  String get runtimeInstalled => 'Debian 运行引擎已安装';
 
   @override
-  String get runtimeNotInstalled => 'Linux-like 运行引擎未安装';
+  String get runtimeNotInstalled => 'Debian 运行引擎未安装';
 
   @override
   String get installRuntime => '安装运行引擎';
@@ -454,14 +454,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get repairRuntime => '修复运行引擎';
 
   @override
-  String get runtimeInstalledSuccess => 'Linux-like 运行引擎安装成功';
+  String get runtimeInstalledSuccess => 'Debian 运行引擎安装成功';
 
   @override
-  String get runtimeAbout => '关于 Linux-like 运行引擎';
+  String get runtimeAbout => '关于 Debian 运行引擎';
 
   @override
   String get runtimeDescription =>
-      'Linux-like 运行引擎是一个实验性运行环境，提供完整的 Linux 环境，支持更多 Python 包和工具。\n\n• 包含 Debian 基础系统\n• 预装 Python 3 和 pip\n• 支持编译原生扩展\n• 更好的兼容性';
+      'Debian 引擎是通过 PRoot 运行的实验性 Debian 用户空间，共用 Android 的 Linux 内核，不包含独立内核。\n\n• Debian 基础系统\n• 预装 Python 3 和 pip\n• 支持编译原生扩展，具体包的兼容性因环境而异';
 
   @override
   String get preparing => '准备中...';
@@ -570,7 +570,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chaquopyDefault => 'Chaquopy（默认）';
 
   @override
-  String get linuxLikeExperimental => 'Linux-like（实验）';
+  String get linuxLikeExperimental => 'Debian（实验）';
 
   @override
   String get pypiSource => 'PyPI 源';
@@ -823,7 +823,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get installRequirements => '安装 requirements.txt';
 
   @override
-  String get requirementsLinuxOnly => 'requirements.txt 仅支持 Linux-like';
+  String get requirementsLinuxOnly => 'requirements.txt 仅支持 Debian';
 
   @override
   String get selectRequirements => '请选择 requirements.txt';
@@ -1008,13 +1008,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get linuxLikeOnly => '仅 Linux-like 可用';
+  String get linuxLikeOnly => '仅 Debian 可用';
 
   @override
   String get installTaskInProgress => '安装任务进行中';
 
   @override
-  String get projectRequirementsLinuxOnly => 'requirements.txt 仅支持 Linux-like';
+  String get projectRequirementsLinuxOnly => 'requirements.txt 仅支持 Debian';
 
   @override
   String get installAlreadyInProgress => '已有安装任务进行中，请稍后再试';
@@ -1404,10 +1404,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openSettings => '去设置';
 
   @override
-  String get linuxLikeNotInstalledAction => 'Linux-like 未安装，请先打开运行环境并完成安装';
+  String get linuxLikeNotInstalledAction => 'Debian 未安装，请先打开运行环境并完成安装';
 
   @override
-  String get runtimeSwitchLinuxLike => 'Linux-like 已保存；执行和包管理将使用 Linux-like';
+  String get runtimeSwitchLinuxLike => 'Debian 已保存；执行和包管理将使用 Debian';
 
   @override
   String get runtimeSwitchChaquopy => '运行引擎已切换为 Chaquopy';
@@ -1419,7 +1419,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chaquopyDescription => '基于 Python 官方实现，稳定可靠';
 
   @override
-  String get linuxLikeDescription => 'Debian 环境，支持更多包';
+  String get linuxLikeDescription => '通过 PRoot 运行 Debian 用户空间，共用 Android 内核';
 
   @override
   String get available => '可用';
@@ -1923,8 +1923,7 @@ class AppLocalizationsZh extends AppLocalizations {
       'Flutter + Dart · Material 3 · Riverpod / Provider';
 
   @override
-  String get architectureEngineValue =>
-      'Chaquopy / Linux-like（Debian proot）可切换';
+  String get architectureEngineValue => 'Chaquopy / Debian（PRoot）可切换';
 
   @override
   String get architectureNativeValue =>
@@ -2540,4 +2539,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupErrorGeneric => '操作未能完成，请检查存储空间与连接后重试。';
+
+  @override
+  String get settingsAppearanceLanguage => '外观与语言';
+
+  @override
+  String get settingsScriptsStorage => '脚本与存储';
+
+  @override
+  String get settingsNetworkConnections => '网络与连接';
+
+  @override
+  String get settingsDiagnostics => '诊断与日志';
+
+  @override
+  String get settingsAboutUpdates => '关于与更新';
 }

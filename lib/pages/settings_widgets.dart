@@ -361,7 +361,7 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
       Navigator.pop(context, true);
     } catch (error, stackTrace) {
       AppLogger.instance.error(
-        '安装 Linux-like 运行环境失败: $error',
+        '安装 Debian 运行环境失败: $error',
         source: 'Settings',
         detail: stackTrace.toString(),
       );
@@ -564,7 +564,7 @@ class _AboutPageState extends State<_AboutPage> {
               _AboutItem(
                 label: l10n.engine,
                 value: _runtimeBackend == RuntimeManager.linuxLikeBackendId
-                    ? 'Linux-like'
+                    ? 'Debian'
                     : 'Chaquopy',
               ),
               _AboutItem(

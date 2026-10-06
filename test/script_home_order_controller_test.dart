@@ -113,7 +113,7 @@ void main() {
     await controller.createScript('new.py');
     await controller.load();
     expect(controller.homeItems.map((item) => item.key),
-        ['pin.py', 'group:1', 'group:2', 'second.py', 'new.py']);
+        ['pin.py', 'new.py', 'group:1', 'group:2', 'second.py']);
   });
 
   test('running scripts keeps manual group positions and promotes script slots',

@@ -621,7 +621,6 @@ class _ProjectBody extends StatelessWidget {
         final files = _ProjectFileList(
           files: project.files,
           currentDirectory: currentDirectory,
-          selectedPath: project.selectedPath,
           mainFilePath: project.group.mainFilePath,
           onSelect: onSelectFile,
           onEnterDirectory: onEnterDirectory,
@@ -646,7 +645,6 @@ class _ProjectBody extends StatelessWidget {
 class _ProjectFileList extends StatelessWidget {
   final List<ScriptProjectFile> files;
   final String currentDirectory;
-  final String? selectedPath;
   final String? mainFilePath;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onEnterDirectory;
@@ -657,7 +655,6 @@ class _ProjectFileList extends StatelessWidget {
   const _ProjectFileList({
     required this.files,
     required this.currentDirectory,
-    required this.selectedPath,
     required this.mainFilePath,
     required this.onSelect,
     required this.onEnterDirectory,
@@ -737,48 +734,54 @@ class _ProjectFileList extends StatelessWidget {
                       itemCount: visibleFiles.length,
                       itemBuilder: (context, index) {
                         final file = visibleFiles[index];
-                        final selected = file.path == selectedPath;
                         final isMain = file.path == mainFilePath;
-                        return ListTile(
-                          dense: true,
-                          selected: selected,
-                          contentPadding:
-                              const EdgeInsets.only(left: 16, right: 8),
-                          leading: Icon(
-                            file.isDirectory
-                                ? Icons.folder_outlined
-                                : Icons.description_outlined,
-                            size: 22,
-                          ),
-                          title: Text(
-                            file.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: isMain
-                              ? Text(AppLocalizations.of(context)!.mainProgram)
-                              : null,
-                          onTap: file.isDirectory
-                              ? () => onEnterDirectory(file.path)
-                              : () => onSelect(file.path),
-                          trailing: AppPopupMenuButton<String>(
-                            popUpAnimationStyle: appMenuAnimation(context),
-                            onSelected: (action) {
-                              if (action == 'rename') onRename(file);
-                              if (action == 'delete') onDelete(file);
-                            },
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: 'rename',
-                                child:
-                                    Text(AppLocalizations.of(context)!.rename),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child:
-                                    Text(AppLocalizations.of(context)!.delete),
-                              ),
-                            ],
+                        // Files open in a separate editor; the provider's last
+                        // selection is not a persistent selection in this list.
+                        // Keep transient ink on the row that owns it when scrolling.
+                        return Material(
+                          key: ValueKey('project-file-${file.path}'),
+                          type: MaterialType.transparency,
+                          clipBehavior: Clip.hardEdge,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding:
+                                const EdgeInsets.only(left: 16, right: 8),
+                            leading: Icon(
+                              file.isDirectory
+                                  ? Icons.folder_outlined
+                                  : Icons.description_outlined,
+                              size: 22,
+                            ),
+                            title: Text(
+                              file.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: isMain
+                                ? Text(AppLocalizations.of(context)!.mainProgram)
+                                : null,
+                            onTap: file.isDirectory
+                                ? () => onEnterDirectory(file.path)
+                                : () => onSelect(file.path),
+                            trailing: AppPopupMenuButton<String>(
+                              popUpAnimationStyle: appMenuAnimation(context),
+                              onSelected: (action) {
+                                if (action == 'rename') onRename(file);
+                                if (action == 'delete') onDelete(file);
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child:
+                                      Text(AppLocalizations.of(context)!.rename),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child:
+                                      Text(AppLocalizations.of(context)!.delete),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },

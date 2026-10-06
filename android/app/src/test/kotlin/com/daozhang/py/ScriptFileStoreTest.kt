@@ -11,6 +11,17 @@ class ScriptFileStoreTest {
     @get:Rule val temp = TemporaryFolder()
 
     @Test
+    fun failedDeletionMustNotReportSuccessToMetadataOwner() {
+        val target = File(temp.root, "scripts/blocked.py").apply { mkdirs() }
+        val child = File(target, "keep.txt").apply { writeText("keep") }
+        try {
+            ScriptFileStore(temp.root).deleteScript("blocked.py")
+            fail("A failed filesystem deletion must not allow metadata removal")
+        } catch (_: IllegalStateException) {}
+        assertEquals("keep", child.readText())
+    }
+
+    @Test
     fun invalidScriptsDirectoryMustNotLookLikeAnEmptyInventory() {
         File(temp.root, "scripts").writeText("not a directory")
         try {

@@ -3,14 +3,17 @@ import '../../../../widgets/app_dialogs.dart';
 import '../../../../ui/app_materials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/app_file_entry.dart';
-import '../../../../services/native_bridge.dart';
+import '../../../../providers/infrastructure_providers.dart';
+import '../../../scripts/application/script_workspace_controller.dart';
 import '../../../../utils/app_page_transitions.dart';
 import 'file_manager_file_viewer_page.dart';
 import '../../application/file_manager_controller.dart';
+import '../../application/script_file_manager_operations.dart';
 import '../../domain/file_manager_location.dart';
 import '../widgets/file_manager_entry_tile.dart';
 
@@ -47,14 +50,19 @@ class _FileManagerPageState extends State<FileManagerPage> {
     _controller.loadInitial();
   }
 
-  static FileManagerController _buildDefaultController() {
-    final bridge = NativeBridge();
+  FileManagerController _buildDefaultController() {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final bridge = container.read(nativeBridgeProvider);
+    final operations = ScriptFileManagerOperations(
+      bridge: bridge,
+      workspace: container.read(scriptWorkspaceControllerProvider.notifier),
+    );
     return FileManagerController(
       listDirectory: bridge.listFilePickerDirectory,
       readFile: bridge.readFilePickerFile,
       createDirectory: bridge.createFileManagerDirectory,
-      renameEntry: bridge.renameFileManagerEntry,
-      deleteEntry: bridge.deleteFileManagerEntry,
+      renameEntry: operations.renameEntry,
+      deleteEntry: operations.deleteEntry,
       writeFile: bridge.writeFileManagerFile,
       transferEntry: bridge.transferFileManagerEntry,
       ensureDirectory: bridge.ensureFileManagerDirectory,

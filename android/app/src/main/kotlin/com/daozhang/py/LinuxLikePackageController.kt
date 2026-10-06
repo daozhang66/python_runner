@@ -40,7 +40,7 @@ class LinuxLikePackageController(
             try {
                 val info = linuxLikeRuntimeManager.getInfo()
                 if (info["available"] != "true") {
-                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                    throw IllegalStateException(info["message"] ?: "Debian runtime unavailable")
                 }
                 val target = resolveLinuxLikeRequirementsTarget(
                     projectKey,
@@ -83,13 +83,13 @@ class LinuxLikePackageController(
                         .ifBlank { "pip 退出码 ${commandResult.exitCode}" }
                     sendInstallProgress("requirements.txt", "error", "$label 安装失败")
                     mainHandler.post {
-                        result.error("1031", "Linux-like安装requirements失败: $errorMessage", null)
+                        result.error("1031", "Debian安装requirements失败: $errorMessage", null)
                     }
                 }
             } catch (e: Exception) {
                 sendInstallProgress("requirements.txt", "error", "安装失败: ${e.message}")
                 mainHandler.post {
-                    result.error("1031", "Linux-like安装requirements失败: ${e.message}", null)
+                    result.error("1031", "Debian安装requirements失败: ${e.message}", null)
                 }
             } finally {
                 temporaryFile?.delete()
@@ -153,7 +153,7 @@ class LinuxLikePackageController(
             try {
                 val info = linuxLikeRuntimeManager.getInfo()
                 if (info["available"] != "true") {
-                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                    throw IllegalStateException(info["message"] ?: "Debian runtime unavailable")
                 }
                 val packageSpec = if (!version.isNullOrBlank()) "$packageName==$version" else packageName
                 val args = mutableListOf(
@@ -184,19 +184,19 @@ class LinuxLikePackageController(
                             ?: "pip show did not find $packageName after install"
                         sendInstallProgress(packageName, "error", "$packageSpec 安装后校验失败")
                         mainHandler.post {
-                            result.error("1019", "Linux-like安装包校验失败: $verifyMessage", null)
+                            result.error("1019", "Debian安装包校验失败: $verifyMessage", null)
                         }
                     }
                 } else {
                     sendInstallProgress(packageName, "error", "$packageSpec 安装失败")
                     mainHandler.post {
-                        result.error("1019", "Linux-like安装包失败: ${commandResult.stderr}", null)
+                        result.error("1019", "Debian安装包失败: ${commandResult.stderr}", null)
                     }
                 }
             } catch (e: Exception) {
                 sendInstallProgress(packageName, "error", "安装失败: ${e.message}")
                 mainHandler.post {
-                    result.error("1019", "Linux-like安装包失败: ${e.message}", null)
+                    result.error("1019", "Debian安装包失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-pip-install"; it.start() }
@@ -212,7 +212,7 @@ class LinuxLikePackageController(
             try {
                 val info = linuxLikeRuntimeManager.getInfo()
                 if (info["available"] != "true") {
-                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                    throw IllegalStateException(info["message"] ?: "Debian runtime unavailable")
                 }
                 val fixedVersion = version
                     ?.trim()
@@ -249,7 +249,7 @@ class LinuxLikePackageController(
                             ?: "pip show did not find $packageName after repair"
                         sendInstallProgress(packageName, "error", "$packageSpec 修复后校验失败")
                         mainHandler.post {
-                            result.error("1019", "Linux-like修复包校验失败: $verifyMessage", null)
+                            result.error("1019", "Debian修复包校验失败: $verifyMessage", null)
                         }
                     }
                 } else {
@@ -258,13 +258,13 @@ class LinuxLikePackageController(
                         .ifBlank { "pip 退出码 ${commandResult.exitCode}" }
                     sendInstallProgress(packageName, "error", "$packageSpec 修复失败")
                     mainHandler.post {
-                        result.error("1019", "Linux-like修复包失败: $errorMessage", null)
+                        result.error("1019", "Debian修复包失败: $errorMessage", null)
                     }
                 }
             } catch (e: Exception) {
                 sendInstallProgress(packageName, "error", "修复失败: ${e.message}")
                 mainHandler.post {
-                    result.error("1019", "Linux-like修复包失败: ${e.message}", null)
+                    result.error("1019", "Debian修复包失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-pip-repair"; it.start() }
@@ -354,7 +354,7 @@ class LinuxLikePackageController(
             try {
                 val info = linuxLikeRuntimeManager.getInfo()
                 if (info["available"] != "true") {
-                    throw IllegalStateException(info["message"] ?: "Linux-like runtime unavailable")
+                    throw IllegalStateException(info["message"] ?: "Debian runtime unavailable")
                 }
                 sendInstallProgress(packageName, "uninstalling", "开始卸载 $packageName...")
                 val removedPackages = removeLinuxLikePackagesFromOverlay(listOf(packageName))
@@ -374,13 +374,13 @@ class LinuxLikePackageController(
                 } else {
                     sendInstallProgress(packageName, "error", "$packageName 卸载失败")
                     mainHandler.post {
-                        result.error("1024", "Linux-like卸载包失败: $packageName 未安装", null)
+                        result.error("1024", "Debian卸载包失败: $packageName 未安装", null)
                     }
                 }
             } catch (e: Exception) {
                 sendInstallProgress(packageName, "error", "卸载失败: ${e.message}")
                 mainHandler.post {
-                    result.error("1024", "Linux-like卸载包失败: ${e.message}", null)
+                    result.error("1024", "Debian卸载包失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-pip-uninstall"; it.start() }
@@ -1146,7 +1146,7 @@ class LinuxLikePackageController(
                 }
             } catch (e: Exception) {
                 mainHandler.post {
-                    result.error("1025", "Linux-like列出包失败: ${e.message}", null)
+                    result.error("1025", "Debian列出包失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-package-list"; it.start() }

@@ -633,7 +633,7 @@ void main() {
       expect(repo.requirementsInstallCount, 0);
       expect(
         container.read(packageControllerProvider).installLog.last,
-        contains('仅支持 Linux-like'),
+        contains('仅支持 Debian'),
       );
     });
   });

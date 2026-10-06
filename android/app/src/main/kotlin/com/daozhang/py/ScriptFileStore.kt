@@ -43,7 +43,7 @@ class ScriptFileStore(private val filesDir: File) {
     fun deleteScript(name: String) {
         val file = safeScriptFile(name)
         require(file.exists()) { "脚本不存在 $name" }
-        file.delete()
+        check(file.delete()) { "删除脚本失败: $name" }
     }
 
     fun renameScript(oldName: String, newName: String) {

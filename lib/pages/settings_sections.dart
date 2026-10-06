@@ -45,8 +45,10 @@ extension _SettingsSections on _SettingsPageState {
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      Text(l10n.pypiSource,
-                          style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        l10n.pypiSource,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       Text(
                         l10n.useOfficialSourceWhenEmpty,
                         style: TextStyle(
@@ -94,9 +96,17 @@ extension _SettingsSections on _SettingsPageState {
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildScriptStorageSection() {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
         _SectionCard(
           icon: Icons.code,
-          title: l10n.script,
+          title: l10n.settingsScriptsStorage,
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -108,18 +118,18 @@ extension _SettingsSections on _SettingsPageState {
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      Text(l10n.executionTimeout,
-                          style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        l10n.executionTimeout,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       Text(
                         _timeout == 0
                             ? l10n.unlimited
                             : _timeout >= 3600
-                                ? l10n
-                                    .hours((_timeout / 3600).toStringAsFixed(1))
-                                : _timeout >= 60
-                                    ? l10n.minutes(
-                                        (_timeout / 60).toStringAsFixed(0))
-                                    : l10n.seconds(_timeout),
+                            ? l10n.hours((_timeout / 3600).toStringAsFixed(1))
+                            : _timeout >= 60
+                            ? l10n.minutes((_timeout / 60).toStringAsFixed(0))
+                            : l10n.seconds(_timeout),
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context).colorScheme.primary,
@@ -132,22 +142,22 @@ extension _SettingsSections on _SettingsPageState {
                     value: _timeout == 0
                         ? 0
                         : _timeout <= 60
-                            ? _timeout.toDouble()
-                            : _timeout <= 600
-                                ? 60 + (_timeout - 60) * 40 / 540
-                                : _timeout <= 3600
-                                    ? 100 + (_timeout - 600) * 40 / 3000
-                                    : 140 + (_timeout - 3600) * 10 / 32400,
+                        ? _timeout.toDouble()
+                        : _timeout <= 600
+                        ? 60 + (_timeout - 60) * 40 / 540
+                        : _timeout <= 3600
+                        ? 100 + (_timeout - 600) * 40 / 3000
+                        : 140 + (_timeout - 3600) * 10 / 32400,
                     min: 0,
                     max: 150,
                     divisions: 150,
                     label: _timeout == 0
                         ? l10n.unlimited
                         : _timeout >= 3600
-                            ? '${(_timeout / 3600).toStringAsFixed(1)}h'
-                            : _timeout >= 60
-                                ? '${(_timeout / 60).toStringAsFixed(0)}m'
-                                : '${_timeout}s',
+                        ? '${(_timeout / 3600).toStringAsFixed(1)}h'
+                        : _timeout >= 60
+                        ? '${(_timeout / 60).toStringAsFixed(0)}m'
+                        : '${_timeout}s',
                     onChanged: (v) {
                       int val;
                       if (v == 0) {
@@ -212,6 +222,7 @@ extension _SettingsSections on _SettingsPageState {
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: _pickExportDir,
             ),
+            _buildBackupTile(),
           ],
         ),
       ],
@@ -224,13 +235,15 @@ extension _SettingsSections on _SettingsPageState {
       children: [
         _SectionCard(
           icon: Icons.http,
-          title: l10n.network,
+          title: l10n.settingsNetworkConnections,
           children: [
             SwitchListTile(
               secondary: const Icon(Icons.developer_mode),
               title: Text(l10n.networkDebugMode),
-              subtitle: Text(l10n.networkDebugModeDescription,
-                  style: const TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.networkDebugModeDescription,
+                style: const TextStyle(fontSize: 12),
+              ),
               value: _netDebugMode,
               onChanged: _toggleNetDebugMode,
             ),
@@ -258,21 +271,28 @@ extension _SettingsSections on _SettingsPageState {
                 onChanged: _toggleAllowInsecure,
               ),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l10n.proxyConfigurationOptional,
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
+                    Text(
+                      l10n.proxyConfigurationOptional,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(l10n.proxyConfigurationDescription,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant)),
+                    Text(
+                      l10n.proxyConfigurationDescription,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     _buildProxyFields(),
                   ],
@@ -283,8 +303,10 @@ extension _SettingsSections on _SettingsPageState {
             SwitchListTile(
               secondary: const Icon(Icons.visibility_outlined),
               title: Text(l10n.recordNetworkRequests),
-              subtitle: Text(l10n.recordNetworkRequestsDescription,
-                  style: TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.recordNetworkRequestsDescription,
+                style: TextStyle(fontSize: 12),
+              ),
               value: _recordRequests,
               onChanged: (v) async {
                 await RequestOverrideConfig.instance.setRecordRequests(v);
@@ -295,8 +317,10 @@ extension _SettingsSections on _SettingsPageState {
               SwitchListTile(
                 secondary: const Icon(Icons.description_outlined),
                 title: Text(l10n.recordResponsePreview),
-                subtitle: Text(l10n.responsePreviewLimit,
-                    style: TextStyle(fontSize: 12)),
+                subtitle: Text(
+                  l10n.responsePreviewLimit,
+                  style: TextStyle(fontSize: 12),
+                ),
                 value: _recordResponseBody,
                 onChanged: (v) async {
                   await RequestOverrideConfig.instance.setRecordResponseBody(v);
@@ -330,8 +354,9 @@ extension _SettingsSections on _SettingsPageState {
                     context: context,
                     builder: (ctx) => AppAlertDialog(
                       scrollable: true,
-                      backgroundColor:
-                          Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                      backgroundColor: Theme.of(ctx)
+                          .colorScheme
+                          .surfaceContainerHigh,
                       surfaceTintColor: Colors.transparent,
                       title: Text(l10n.enableRequestOverrides),
                       content: Text(l10n.requestOverrideWarning),
@@ -370,6 +395,8 @@ extension _SettingsSections on _SettingsPageState {
                 ),
               ),
             ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildMcpTile(),
           ],
         ),
       ],
@@ -382,29 +409,21 @@ extension _SettingsSections on _SettingsPageState {
       children: [
         _SectionCard(
           icon: Icons.build_outlined,
-          title: l10n.systemTools,
+          title: l10n.settingsDiagnostics,
           children: [
             ListTile(
               leading: const Icon(Icons.article_outlined),
               title: Text(l10n.appLogs),
-              subtitle:
-                  Text(l10n.appLogsDescription, style: TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.appLogsDescription,
+                style: TextStyle(fontSize: 12),
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AppLogsPage(),
-                ),
+                MaterialPageRoute(builder: (_) => const AppLogsPage()),
               ),
               onLongPress: _viewSystemLogs,
-            ),
-            ListTile(
-              leading: const Icon(Icons.file_download_outlined),
-              title: Text(l10n.exportFullLogs),
-              subtitle: Text(l10n.exportFullLogsDescription,
-                  style: TextStyle(fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _exportSystemLogs,
             ),
           ],
         ),
@@ -414,53 +433,61 @@ extension _SettingsSections on _SettingsPageState {
 
   Widget _buildProxyFields() {
     final l10n = AppLocalizations.of(context)!;
-    return LayoutBuilder(builder: (context, constraints) {
-      final host = TextField(
-        controller: _proxyHostController,
-        enableSuggestions: false,
-        autocorrect: false,
-        decoration: InputDecoration(
-          hintText: '192.168.1.100',
-          labelText: l10n.proxyAddress,
-          isDense: true,
-        ),
-      );
-      final port = TextField(
-        controller: _proxyPortController,
-        enableSuggestions: false,
-        autocorrect: false,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: InputDecoration(
-          hintText: '8888',
-          labelText: l10n.port,
-          isDense: true,
-        ),
-      );
-      final save = IconButton(
-        onPressed: _saveProxyConfig,
-        tooltip: l10n.save,
-        icon: const Icon(Icons.save_outlined),
-      );
-      if (constraints.maxWidth < 420) {
-        return Column(children: [
-          host,
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: port),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final host = TextField(
+          controller: _proxyHostController,
+          enableSuggestions: false,
+          autocorrect: false,
+          decoration: InputDecoration(
+            hintText: '192.168.1.100',
+            labelText: l10n.proxyAddress,
+            isDense: true,
+          ),
+        );
+        final port = TextField(
+          controller: _proxyPortController,
+          enableSuggestions: false,
+          autocorrect: false,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            hintText: '8888',
+            labelText: l10n.port,
+            isDense: true,
+          ),
+        );
+        final save = IconButton(
+          onPressed: _saveProxyConfig,
+          tooltip: l10n.save,
+          icon: const Icon(Icons.save_outlined),
+        );
+        if (constraints.maxWidth < 420) {
+          return Column(
+            children: [
+              host,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: port),
+                  const SizedBox(width: 8),
+                  save,
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(flex: 3, child: host),
             const SizedBox(width: 8),
-            save
-          ]),
-        ]);
-      }
-      return Row(children: [
-        Expanded(flex: 3, child: host),
-        const SizedBox(width: 8),
-        Expanded(flex: 2, child: port),
-        const SizedBox(width: 8),
-        save,
-      ]);
-    });
+            Expanded(flex: 2, child: port),
+            const SizedBox(width: 8),
+            save,
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildAboutSection() {
@@ -469,7 +496,7 @@ extension _SettingsSections on _SettingsPageState {
       children: [
         _SectionCard(
           icon: Icons.info_outline,
-          title: l10n.aboutApp,
+          title: l10n.settingsAboutUpdates,
           children: [
             ListTile(
               leading: _checkingUpdate
@@ -480,24 +507,30 @@ extension _SettingsSections on _SettingsPageState {
                     )
                   : const Icon(Icons.system_update_alt),
               title: Text(l10n.checkForUpdates),
-              subtitle: Text(l10n.checkForUpdatesDescription,
-                  style: TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.checkForUpdatesDescription,
+                style: TextStyle(fontSize: 12),
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: _checkingUpdate ? null : _checkForUpdates,
             ),
             ListTile(
               leading: const Icon(Icons.history_outlined),
               title: Text(l10n.updateLog),
-              subtitle: Text(l10n.updateLogDescription,
-                  style: TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.updateLogDescription,
+                style: TextStyle(fontSize: 12),
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: _openUpdateLogPage,
             ),
             SwitchListTile(
               secondary: const Icon(Icons.update_outlined),
               title: Text(l10n.autoCheckUpdates),
-              subtitle: Text(l10n.autoCheckUpdatesDescription,
-                  style: const TextStyle(fontSize: 12)),
+              subtitle: Text(
+                l10n.autoCheckUpdatesDescription,
+                style: const TextStyle(fontSize: 12),
+              ),
               value: _autoCheckUpdates,
               onChanged: _setAutoCheckUpdates,
             ),
@@ -531,7 +564,7 @@ extension _SettingsSections on _SettingsPageState {
     final l10n = AppLocalizations.of(context)!;
     return _SectionCard(
       icon: Icons.tune,
-      title: l10n.general,
+      title: l10n.settingsAppearanceLanguage,
       children: [
         Consumer(
           builder: (context, ref, _) {
@@ -552,14 +585,14 @@ extension _SettingsSections on _SettingsPageState {
         ListTile(
           leading: const Icon(Icons.palette_outlined),
           title: Text(l10n.themeAndColors),
-          subtitle: Text(l10n.themeAndColorsDescription,
-              style: TextStyle(fontSize: 12)),
+          subtitle: Text(
+            l10n.themeAndColorsDescription,
+            style: TextStyle(fontSize: 12),
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const ThemeSettingsPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
           ),
         ),
       ],
@@ -591,16 +624,20 @@ extension _SettingsSections on _SettingsPageState {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(locale.languageCode == 'zh'
-                    ? Icons.check_rounded
-                    : Icons.language_outlined),
+                leading: Icon(
+                  locale.languageCode == 'zh'
+                      ? Icons.check_rounded
+                      : Icons.language_outlined,
+                ),
                 title: Text(labels.chinese),
                 onTap: () => Navigator.pop(sheetContext, const Locale('zh')),
               ),
               ListTile(
-                leading: Icon(locale.languageCode == 'en'
-                    ? Icons.check_rounded
-                    : Icons.language_outlined),
+                leading: Icon(
+                  locale.languageCode == 'en'
+                      ? Icons.check_rounded
+                      : Icons.language_outlined,
+                ),
                 title: Text(labels.english),
                 onTap: () => Navigator.pop(sheetContext, const Locale('en')),
               ),

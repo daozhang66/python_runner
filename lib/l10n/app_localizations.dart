@@ -917,13 +917,13 @@ abstract class AppLocalizations {
   /// No description provided for @runtimeInstalled.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like runtime is installed'**
+  /// **'Debian runtime is installed'**
   String get runtimeInstalled;
 
   /// No description provided for @runtimeNotInstalled.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like runtime is not installed'**
+  /// **'Debian runtime is not installed'**
   String get runtimeNotInstalled;
 
   /// No description provided for @installRuntime.
@@ -941,19 +941,19 @@ abstract class AppLocalizations {
   /// No description provided for @runtimeInstalledSuccess.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like runtime installed'**
+  /// **'Debian runtime installed'**
   String get runtimeInstalledSuccess;
 
   /// No description provided for @runtimeAbout.
   ///
   /// In en, this message translates to:
-  /// **'About the Linux-like runtime'**
+  /// **'About the Debian runtime'**
   String get runtimeAbout;
 
   /// No description provided for @runtimeDescription.
   ///
   /// In en, this message translates to:
-  /// **'The Linux-like runtime is experimental and provides a complete Linux environment with broader Python package and tool support.\n\n• Debian base system\n• Python 3 and pip preinstalled\n• Native extension compilation\n• Better compatibility'**
+  /// **'The experimental Debian engine runs a Debian userspace through PRoot, sharing Android’s Linux kernel rather than providing its own kernel.\n\n• Debian base system\n• Python 3 and pip preinstalled\n• Native extension compilation; package compatibility varies'**
   String get runtimeDescription;
 
   /// No description provided for @preparing.
@@ -1157,7 +1157,7 @@ abstract class AppLocalizations {
   /// No description provided for @linuxLikeExperimental.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like (experimental)'**
+  /// **'Debian (experimental)'**
   String get linuxLikeExperimental;
 
   /// No description provided for @pypiSource.
@@ -1643,7 +1643,7 @@ abstract class AppLocalizations {
   /// No description provided for @requirementsLinuxOnly.
   ///
   /// In en, this message translates to:
-  /// **'requirements.txt is only supported by Linux-like'**
+  /// **'requirements.txt is only supported by Debian'**
   String get requirementsLinuxOnly;
 
   /// No description provided for @selectRequirements.
@@ -1997,7 +1997,7 @@ abstract class AppLocalizations {
   /// No description provided for @linuxLikeOnly.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like only'**
+  /// **'Debian only'**
   String get linuxLikeOnly;
 
   /// No description provided for @installTaskInProgress.
@@ -2009,7 +2009,7 @@ abstract class AppLocalizations {
   /// No description provided for @projectRequirementsLinuxOnly.
   ///
   /// In en, this message translates to:
-  /// **'requirements.txt is only supported by Linux-like'**
+  /// **'requirements.txt is only supported by Debian'**
   String get projectRequirementsLinuxOnly;
 
   /// No description provided for @installAlreadyInProgress.
@@ -2717,13 +2717,13 @@ abstract class AppLocalizations {
   /// No description provided for @linuxLikeNotInstalledAction.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like is not installed. Open the runtime settings and install it first.'**
+  /// **'Debian is not installed. Open the runtime settings and install it first.'**
   String get linuxLikeNotInstalledAction;
 
   /// No description provided for @runtimeSwitchLinuxLike.
   ///
   /// In en, this message translates to:
-  /// **'Linux-like saved. Execution and package management will use Linux-like.'**
+  /// **'Debian saved. Execution and package management will use Debian.'**
   String get runtimeSwitchLinuxLike;
 
   /// No description provided for @runtimeSwitchChaquopy.
@@ -2747,7 +2747,7 @@ abstract class AppLocalizations {
   /// No description provided for @linuxLikeDescription.
   ///
   /// In en, this message translates to:
-  /// **'Debian environment with support for more packages'**
+  /// **'Debian userspace via PRoot, sharing the Android kernel'**
   String get linuxLikeDescription;
 
   /// No description provided for @available.
@@ -3629,7 +3629,7 @@ abstract class AppLocalizations {
   /// No description provided for @architectureEngineValue.
   ///
   /// In en, this message translates to:
-  /// **'Switchable Chaquopy / Linux-like (Debian proot)'**
+  /// **'Switchable Chaquopy / Debian (PRoot)'**
   String get architectureEngineValue;
 
   /// No description provided for @architectureNativeValue.
@@ -4752,6 +4752,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The operation could not finish. Check your storage and connection, then retry.'**
   String get backupErrorGeneric;
+
+  /// No description provided for @settingsAppearanceLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance & language'**
+  String get settingsAppearanceLanguage;
+
+  /// No description provided for @settingsScriptsStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Scripts & storage'**
+  String get settingsScriptsStorage;
+
+  /// No description provided for @settingsNetworkConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Network & connections'**
+  String get settingsNetworkConnections;
+
+  /// No description provided for @settingsDiagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics & logs'**
+  String get settingsDiagnostics;
+
+  /// No description provided for @settingsAboutUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'About & updates'**
+  String get settingsAboutUpdates;
 }
 
 class _AppLocalizationsDelegate

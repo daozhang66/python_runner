@@ -56,7 +56,7 @@ class RuntimeInfoController(
                 }
                 mainHandler.post { result.success(info) }
             } catch (e: Exception) {
-                mainHandler.post { result.error("1014", "Failed to read Linux-like Python info: ${e.message}", null) }
+                mainHandler.post { result.error("1014", "Failed to read Debian Python info: ${e.message}", null) }
             }
         }.also { it.name = "linux-like-py-info"; it.start() }
     }
@@ -98,7 +98,7 @@ class RuntimeInfoController(
         try {
             result.success(linuxLikeRuntimeManager.getInfo())
         } catch (e: Exception) {
-            result.error("1014", "获取Linux-like运行环境信息失败: ${e.message}", null)
+            result.error("1014", "获取Debian运行环境信息失败: ${e.message}", null)
         }
     }
 
@@ -106,7 +106,7 @@ class RuntimeInfoController(
         return try {
             linuxLikeRuntimeManager.getInfo().toPigeonLinuxLikeRuntimeInfo()
         } catch (e: Exception) {
-            throw FlutterError("1014", "获取Linux-like运行环境信息失败: ${e.message}", null)
+            throw FlutterError("1014", "获取Debian运行环境信息失败: ${e.message}", null)
         }
     }
 
@@ -117,7 +117,7 @@ class RuntimeInfoController(
                 mainHandler.post { result.success(info) }
             } catch (e: Exception) {
                 mainHandler.post {
-                    result.error("1015", "准备Linux-like运行环境失败: ${e.message}", null)
+                    result.error("1015", "准备Debian运行环境失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-prepare"; it.start() }
@@ -144,11 +144,11 @@ class RuntimeInfoController(
                         mapOf(
                             "packageName" to "linux-like-runtime",
                             "status" to "error",
-                            "Linux-like环境安装失败: ${e.message}" to
-                                "Linux-like环境安装失败: ${e.message}"
+                            "Debian环境安装失败: ${e.message}" to
+                                "Debian环境安装失败: ${e.message}"
                         )
                     )
-                    result.error("1016", "安装Linux-like运行环境失败: ${e.message}", null)
+                    result.error("1016", "安装Debian运行环境失败: ${e.message}", null)
                 }
             }
         }.also { it.name = "linux-like-install"; it.start() }

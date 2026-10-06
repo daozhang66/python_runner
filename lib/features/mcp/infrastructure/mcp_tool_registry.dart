@@ -255,7 +255,7 @@ class McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_project_run',
           description:
-              'Run the main program of a project group and return an execution_id immediately. Projects require the Linux-like runtime; install it and make it active first. Busy runs are rejected. Use pyrunner_execution_output and pyrunner_execution_input for output and interaction.',
+              'Run the main program of a project group and return an execution_id immediately. Projects require the Debian runtime; install it and make it active first. Busy runs are rejected. Use pyrunner_execution_output and pyrunner_execution_input for output and interaction.',
           permission: McpPermission.runScripts,
           inputSchema: _objectSchema({
             'project_key': _stringProp('Project key; see pyrunner_group_list')
@@ -328,7 +328,7 @@ class McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_app_get_status',
           description:
-              'Get app status: version, active Python runtime (chaquopy or linux_like), Linux-like installation state, and MCP service information.',
+              'Get app status: version, active Python runtime (chaquopy or linux_like), Debian installation state, and MCP service information.',
           permission: McpPermission.readScripts,
           inputSchema: _objectSchema(const {}),
         ),

@@ -45,7 +45,7 @@ class ChaquopyBackend implements RuntimeBackend {
   @override
   Future<RuntimeSession> startScript(RuntimeRequest request) async {
     if (request.isProject) {
-      throw StateError('项目型脚本组仅支持 Linux-like 引擎');
+      throw StateError('项目型脚本组仅支持 Debian 引擎');
     }
     final session = ChaquopyRuntimeSession(
       backend: this,
@@ -89,7 +89,7 @@ class ChaquopyBackend implements RuntimeBackend {
   ) async {
     return const PackageInstallResult(
       success: false,
-      message: '修复仅支持 Linux-like 用户包',
+      message: '修复仅支持 Debian 用户包',
     );
   }
 
@@ -99,7 +99,7 @@ class ChaquopyBackend implements RuntimeBackend {
   ) async {
     return const PackageInstallResult(
       success: false,
-      message: 'requirements.txt 仅支持 Linux-like 运行环境',
+      message: 'requirements.txt 仅支持 Debian 运行环境',
     );
   }
 

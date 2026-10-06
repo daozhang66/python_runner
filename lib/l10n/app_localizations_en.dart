@@ -444,10 +444,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageRuntime => 'Manage runtime';
 
   @override
-  String get runtimeInstalled => 'Linux-like runtime is installed';
+  String get runtimeInstalled => 'Debian runtime is installed';
 
   @override
-  String get runtimeNotInstalled => 'Linux-like runtime is not installed';
+  String get runtimeNotInstalled => 'Debian runtime is not installed';
 
   @override
   String get installRuntime => 'Install runtime';
@@ -456,14 +456,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get repairRuntime => 'Repair runtime';
 
   @override
-  String get runtimeInstalledSuccess => 'Linux-like runtime installed';
+  String get runtimeInstalledSuccess => 'Debian runtime installed';
 
   @override
-  String get runtimeAbout => 'About the Linux-like runtime';
+  String get runtimeAbout => 'About the Debian runtime';
 
   @override
   String get runtimeDescription =>
-      'The Linux-like runtime is experimental and provides a complete Linux environment with broader Python package and tool support.\n\n• Debian base system\n• Python 3 and pip preinstalled\n• Native extension compilation\n• Better compatibility';
+      'The experimental Debian engine runs a Debian userspace through PRoot, sharing Android’s Linux kernel rather than providing its own kernel.\n\n• Debian base system\n• Python 3 and pip preinstalled\n• Native extension compilation; package compatibility varies';
 
   @override
   String get preparing => 'Preparing...';
@@ -574,7 +574,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chaquopyDefault => 'Chaquopy (default)';
 
   @override
-  String get linuxLikeExperimental => 'Linux-like (experimental)';
+  String get linuxLikeExperimental => 'Debian (experimental)';
 
   @override
   String get pypiSource => 'PyPI source';
@@ -838,7 +838,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get requirementsLinuxOnly =>
-      'requirements.txt is only supported by Linux-like';
+      'requirements.txt is only supported by Debian';
 
   @override
   String get selectRequirements => 'Select requirements.txt';
@@ -1023,14 +1023,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get linuxLikeOnly => 'Linux-like only';
+  String get linuxLikeOnly => 'Debian only';
 
   @override
   String get installTaskInProgress => 'Installation in progress';
 
   @override
   String get projectRequirementsLinuxOnly =>
-      'requirements.txt is only supported by Linux-like';
+      'requirements.txt is only supported by Debian';
 
   @override
   String get installAlreadyInProgress =>
@@ -1429,11 +1429,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get linuxLikeNotInstalledAction =>
-      'Linux-like is not installed. Open the runtime settings and install it first.';
+      'Debian is not installed. Open the runtime settings and install it first.';
 
   @override
   String get runtimeSwitchLinuxLike =>
-      'Linux-like saved. Execution and package management will use Linux-like.';
+      'Debian saved. Execution and package management will use Debian.';
 
   @override
   String get runtimeSwitchChaquopy => 'Runtime switched to Chaquopy';
@@ -1447,7 +1447,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get linuxLikeDescription =>
-      'Debian environment with support for more packages';
+      'Debian userspace via PRoot, sharing the Android kernel';
 
   @override
   String get available => 'Available';
@@ -1971,8 +1971,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Flutter + Dart · Material 3 · Riverpod / Provider';
 
   @override
-  String get architectureEngineValue =>
-      'Switchable Chaquopy / Linux-like (Debian proot)';
+  String get architectureEngineValue => 'Switchable Chaquopy / Debian (PRoot)';
 
   @override
   String get architectureNativeValue =>
@@ -2696,4 +2695,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backupErrorGeneric =>
       'The operation could not finish. Check your storage and connection, then retry.';
+
+  @override
+  String get settingsAppearanceLanguage => 'Appearance & language';
+
+  @override
+  String get settingsScriptsStorage => 'Scripts & storage';
+
+  @override
+  String get settingsNetworkConnections => 'Network & connections';
+
+  @override
+  String get settingsDiagnostics => 'Diagnostics & logs';
+
+  @override
+  String get settingsAboutUpdates => 'About & updates';
 }
