@@ -5,6 +5,32 @@ import 'package:python_runner/ui/app_bottom_navigation.dart';
 import 'package:python_runner/ui/app_navigation_pages.dart';
 
 void main() {
+  testWidgets('direct navigation skips intermediate pages and retains state', (
+    tester,
+  ) async {
+    final selected = ValueNotifier(0);
+    addTearDown(selected.dispose);
+    await _pumpPages(tester, selected, animate: false);
+    await tester.tap(find.text('count 0: 0'));
+    await tester.pump();
+    final list = find.byKey(const ValueKey('list-0'));
+    await tester.drag(list, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    final offset = _scrollOffset(tester, list);
+
+    selected.value = 2;
+    await tester.pump();
+    expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 2);
+    expect(find.text('count 2: 0'), findsOneWidget);
+    expect(find.text('count 1: 0', skipOffstage: false), findsNothing);
+    selected.value = 0;
+    await tester.pump();
+    expect(_scrollOffset(tester, list), closeTo(offset, 0.1));
+    await tester.drag(list, const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(find.text('count 0: 1'), findsOneWidget);
+  });
+
   testWidgets('only releasing navigation starts the page transition',
       (tester) async {
     final selected = ValueNotifier(0);

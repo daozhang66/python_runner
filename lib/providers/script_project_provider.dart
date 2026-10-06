@@ -6,6 +6,9 @@ import '../services/app_logger.dart';
 import '../services/script_project_service.dart';
 
 class ScriptProjectProvider extends ChangeNotifier {
+  static final Set<ScriptProjectProvider> _openProjects = {};
+  bool _disposed = false;
+  int _stateRevision = 0;
   final ScriptProjectService _service;
   final AppLogger _logger = AppLogger.instance;
 
@@ -22,7 +25,51 @@ class ScriptProjectProvider extends ChangeNotifier {
     required ScriptGroup group,
     required ScriptProjectService service,
   })  : _group = group,
-        _service = service;
+        _service = service {
+    _openProjects.add(this);
+  }
+
+  /// [groups] contains only existing project targets replaced by the restore.
+  /// A changed provider state invalidates pending reads so later edits win.
+  static Future<void> refreshAfterRestore(Iterable<ScriptGroup> groups) async {
+    final byId = {for (final group in groups.where((g) => g.isProject)) group.id: group};
+    await Future.wait(List.of(_openProjects).map((provider) async {
+      final group = byId[provider.group.id];
+      if (group == null || provider._disposed || group.projectKey != provider.group.projectKey) return;
+      final revision = provider._stateRevision;
+      final selected = provider._selectedPath;
+      bool canPublish() => !provider._disposed && provider._stateRevision == revision;
+      try {
+        final files = await provider._service.loadProjectFiles(group);
+        files.sort((a, b) => a.isDirectory != b.isDirectory ? (a.isDirectory ? -1 : 1) : a.path.compareTo(b.path));
+        final exists = selected != null && files.any((file) => file.path == selected && !file.isDirectory);
+        final content = exists ? await provider._service.readProjectFile(group, selected) : '';
+        if (!canPublish()) return;
+        provider._group = group;
+        provider._files = files;
+        provider._selectedPath = exists ? selected : null;
+        provider._content = content;
+        provider._dirty = false;
+        provider._error = null;
+        provider.notifyListeners();
+      } catch (error, stack) {
+        if (canPublish()) { provider._recordFailure('刷新恢复后的项目', error, stack); provider.notifyListeners(); }
+      }
+    }));
+  }
+
+  @override
+  void notifyListeners() {
+    _stateRevision++;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _openProjects.remove(this);
+    super.dispose();
+  }
 
   ScriptGroup get group => _group;
   List<ScriptProjectFile> get files => List.unmodifiable(_files);

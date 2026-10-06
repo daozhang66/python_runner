@@ -568,10 +568,7 @@ extension _SettingsSections on _SettingsPageState {
 
   Widget _buildRuntimeInstallPanel(AppLocalizations l10n) {
     return ListTile(
-      leading: Icon(
-        _linuxLikeAvailable ? Icons.check_circle_outline : Icons.info_outline,
-        color: _linuxLikeAvailable ? Colors.green : null,
-      ),
+      leading: const Icon(Icons.terminal_outlined),
       title: Text(l10n.linuxLikeExperimental),
       subtitle: Text(
         _linuxLikeAvailable ? l10n.runtimeInstalled : l10n.runtimeNotInstalled,

@@ -399,9 +399,10 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
                     children: [
                       Icon(
                         _installed
-                            ? Icons.check_circle_outline
+                            ? Icons.check_rounded
                             : Icons.info_outline,
-                        color: _installed ? Colors.green : colors.primary,
+                        size: 20,
+                        color: colors.onSurfaceVariant,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -452,10 +453,11 @@ class _RuntimeInstallDialogState extends State<_RuntimeInstallDialog> {
             child: Text(l10n.close),
           ),
           if (!_checking)
-            FilledButton.icon(
+            TextButton.icon(
               onPressed: _installing ? null : _installOrRepair,
               icon: Icon(
                 _installed ? Icons.build_outlined : Icons.download_outlined,
+                size: 18,
               ),
               label: Text(
                 _installed ? l10n.repairRuntime : l10n.installRuntime,

@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -57,6 +58,10 @@ class ScriptExecutionController(
     )
 
     private val executionStateLock = Any()
+    fun hasActiveExecution(): Boolean = synchronized(executionStateLock) {
+        LiveExecutionWorkers.hasActive() || currentExecutionId != null ||
+            currentExecutionThread?.isAlive == true || currentExecutionProcess?.isAlive == true
+    }
     private var currentExecutionThread: Thread? = null
     private var currentExecutionProcess: Process? = null
     private var currentExecutionId: String? = null
@@ -239,7 +244,7 @@ class ScriptExecutionController(
         synchronized(executionStateLock) {
             currentExecutionThread = executionThread
         }
-        executionThread.start()
+        LiveExecutionWorkers.start(executionThread)
 
         // Watchdog thread: kill script if it exceeds the timeout
         if (timeoutSeconds > 0) {
@@ -454,14 +459,15 @@ class ScriptExecutionController(
                 )
                 executionTempDir = processBuilder.environment()["PROOT_TMP_DIR"]
                 val process = processBuilder.start()
+                LiveExecutionWorkers.track(process)
                 synchronized(executionStateLock) {
                     currentExecutionProcess = process
                 }
 
                 val stdoutCapture =
-                    collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId)
+                    collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId, stopRequested)
                 val stderrCapture =
-                    collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId)
+                    collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId, stopRequested)
 
                 if (timeoutSeconds > 0) {
                     val watchdogThread = Thread {
@@ -546,7 +552,7 @@ class ScriptExecutionController(
         synchronized(executionStateLock) {
             currentExecutionThread = linuxLikeExecutionThread
         }
-        linuxLikeExecutionThread.start()
+        LiveExecutionWorkers.start(linuxLikeExecutionThread)
     }
 
     fun sendLinuxLikeStdin(input: String, result: MethodChannel.Result) {
@@ -670,7 +676,8 @@ class ScriptExecutionController(
         type: String,
         buffer: BoundedOutputBuffer,
         emitLogs: Boolean,
-        executionId: String? = null
+        executionId: String? = null,
+        stopRequested: AtomicBoolean? = null
     ): ProcessOutputCapture {
         val failed = AtomicBoolean(false)
         val thread = Thread {
@@ -689,6 +696,9 @@ class ScriptExecutionController(
                     }
                 }
             } catch (e: Exception) {
+                // Process destruction closes pipes under the blocked readers.
+                // Keep this execution's token: a later run may already be active.
+                if (e is InterruptedIOException && stopRequested?.get() == true) return@Thread
                 failed.set(true)
                 reportFailure("读取 Linux-like $type 输出", e, executionId)
             }

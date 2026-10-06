@@ -13,6 +13,12 @@
 migrate_working_dir/
 测试分析文件夹切勿上传/
 
+# AI assistant workspace state
+.zcode/
+
+# Golden test failure artifacts
+**/failures/
+
 # IntelliJ related
 *.iml
 *.ipr

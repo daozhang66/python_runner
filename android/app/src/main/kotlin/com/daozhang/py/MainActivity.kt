@@ -15,6 +15,8 @@ import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.Locale
+import com.daozhang.py.backup.BackupPlugin
+import com.daozhang.py.backup.BackupException
 
 class MainActivity : FlutterActivity() {
 
@@ -34,6 +36,7 @@ class MainActivity : FlutterActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var backupPlugin: BackupPlugin
     private val scriptFileStore by lazy { ScriptFileStore(filesDir) }
     private val scriptProjectStore by lazy { ScriptProjectStore(this, filesDir) }
     private val nativeFileOperations by lazy {
@@ -175,6 +178,11 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (!flutterEngine.plugins.has(BackupPlugin::class.java)) {
+            flutterEngine.plugins.add(BackupPlugin())
+        }
+        backupPlugin = flutterEngine.plugins.get(BackupPlugin::class.java) as BackupPlugin
+        backupPlugin.executionActive = { scriptExecutionController.hasActiveExecution() }
 
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
@@ -252,15 +260,15 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             object : FilePickerHostApi {
                 override fun getFilePickerRoots(): List<NativeAppFileEntry> {
-                    return nativeFileOperations.getFilePickerRootsForPigeon()
+                    backupPlugin.gate.enterLegacy("getFilePickerRoots").use { return nativeFileOperations.getFilePickerRootsForPigeon() }
                 }
 
                 override fun listFilePickerDirectory(path: String): List<NativeAppFileEntry> {
-                    return nativeFileOperations.listFilePickerDirectoryForPigeon(path)
+                    backupPlugin.gate.enterLegacy("listFilePickerDirectory").use { return nativeFileOperations.listFilePickerDirectoryForPigeon(path) }
                 }
 
                 override fun readFilePickerFile(path: String): ByteArray {
-                    return nativeFileOperations.readFilePickerFile(path)
+                    backupPlugin.gate.enterLegacy("readFilePickerFile").use { return nativeFileOperations.readFilePickerFile(path) }
                 }
             }
         )
@@ -282,7 +290,17 @@ class MainActivity : FlutterActivity() {
                     result.error(NativeBridgeContract.ERROR_CODE, contractError, null)
                     return@setMethodCallHandler
                 }
-                methodHandlers[call.method]?.invoke(call, result) ?: result.notImplemented()
+                val lease = try { backupPlugin.gate.enterLegacy(call.method) } catch (e: BackupException) {
+                    result.error(e.code, e.message, null)
+                    return@setMethodCallHandler
+                }
+                val guardedResult = object : MethodChannel.Result {
+                    override fun success(value: Any?) { lease.close(); result.success(value) }
+                    override fun error(code: String, message: String?, details: Any?) { lease.close(); result.error(code, message, details) }
+                    override fun notImplemented() { lease.close(); result.notImplemented() }
+                }
+                try { methodHandlers[call.method]?.invoke(call, guardedResult) ?: guardedResult.notImplemented() }
+                catch (e: Exception) { lease.close(); throw e }
             }
     }
 

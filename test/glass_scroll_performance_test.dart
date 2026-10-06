@@ -4,11 +4,69 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:g1455/g1455.dart' as glass;
 import 'package:g1455/glass_diagnostics.dart' as diagnostics;
 import 'package:python_runner/ui/app_liquid_host.dart';
+import 'package:python_runner/ui/app_navigation_pages.dart';
 import 'package:python_runner/ui/app_surfaces.dart';
 import 'package:python_runner/ui/app_theme.dart';
 import 'package:python_runner/ui/app_visual_style.dart';
 
 void main() {
+  testWidgets('page transitions keep glass available without a finish switch', (
+    tester,
+  ) async {
+    final page = ValueNotifier(0);
+    addTearDown(page.dispose);
+    final pages = List.generate(
+      4,
+      (index) => Center(
+        child: SizedBox(
+          width: 200,
+          height: 100,
+          child: AppSurface(child: Text('Page $index')),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      _app(
+        ValueListenableBuilder(
+          valueListenable: page,
+          builder: (_, index, _) =>
+              AppNavigationPages(index: index, children: pages),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final handle = diagnostics.GlassProxyScope.maybeOf(
+      tester.element(find.byType(AppSurface).first),
+    )!;
+    expect(handle.frame, isNotNull);
+    page.value = 3;
+    await tester.pump();
+    for (var frame = 0; frame < 36; frame++) {
+      await tester.pump(const Duration(microseconds: 8333));
+      expect(
+        handle.frame,
+        isNotNull,
+        reason:
+            'Switching to flat material mid-transition causes a visible flash',
+      );
+    }
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(handle.frame, isNotNull);
+    final restored = handle.snapshots;
+    await tester.pump(const Duration(seconds: 1));
+    expect(handle.snapshots, restored);
+    expect(tester.takeException(), isNull);
+    // Leaving during a transition must remain safe.
+    page.value = 0;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('last culled surface is republished on exact-position reentry', (
     tester,
   ) async {
@@ -226,6 +284,11 @@ void main() {
       scroll.jumpTo(i * 6.0);
       await tester.pump(const Duration(microseconds: 8333));
       final frame = handle.frame;
+      expect(
+        frame,
+        isNotNull,
+        reason: 'Scrolling must not drop the glass backdrop and switch to a flat fill',
+      );
       if (frame != null) {
         final count = frame.layout.slots.length;
         if (count > maxSlots) maxSlots = count;
@@ -245,6 +308,13 @@ void main() {
       'maxBaseSlots=$maxSlots maxBasePixels=$maxPixels wallMs=${watch.elapsedMilliseconds}',
     );
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(
+      handle.frame,
+      isNotNull,
+      reason: 'Full glass returns after scrolling settles',
+    );
     final settled = host.recorded as int;
     await tester.pump(const Duration(seconds: 1));
     expect(host.recorded as int, settled);

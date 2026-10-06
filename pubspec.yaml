@@ -2,7 +2,7 @@ name: python_runner
 description: "Python运行器 - Android端Python脚本运行环境"
 publish_to: 'none'
 
-version: 1.6.0+36
+version: 1.6.1+37
 
 environment:
   sdk: ^3.13.5
@@ -45,6 +45,7 @@ dependencies:
   url_launcher: ^6.3.1
   # MCP 配对令牌摘要（sha256）
   crypto: ^3.0.3
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:

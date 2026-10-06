@@ -11,6 +11,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 import 'services/native_bridge.dart';
+import 'services/workspace_access.dart';
+import 'features/backup/application/backup_bootstrap.dart';
 import 'features/files/domain/file_manager_location.dart'
     show defaultScriptWorkingDirectory;
 import 'services/app_logger.dart';
@@ -63,14 +65,8 @@ void main() async {
   // Load SharedPreferences for Riverpod
   final prefs = await SharedPreferences.getInstance();
 
-  // Ensure the default script working directory exists from app start.
-  // Failures (e.g. storage permission not granted yet) are non-fatal: the
-  // file manager and the script runtime create it again when needed.
-  try {
-    await NativeBridge().ensureFileManagerDirectory(
-      defaultScriptWorkingDirectory,
-    );
-  } catch (_) {}
+  // Recovery owns admission before any workspace widgets or MCP services start.
+  WorkspaceAccess.instance.blockForRecovery();
 
   // Global Flutter framework error handler
   FlutterError.onError = (details) {
@@ -113,7 +109,7 @@ void main() async {
             value: httpInspectorStore,
           ),
         ],
-        child: const PythonRunnerApp(),
+        child: const BackupBootstrap(child: PythonRunnerApp()),
       ),
     ),
   );
@@ -699,7 +695,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             extendBody: true,
             body: SafeArea(
               bottom: false,
-              child: _buildPageStack(animate: true),
+              child: _buildPageStack(),
             ),
             bottomNavigationBar:
                 ref.watch(

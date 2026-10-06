@@ -756,5 +756,194 @@
   "mcpConfirmationAutoDenySoon": "About to be denied automatically...",
   "mcpDeny": "Deny",
   "mcpAllowSession": "Allow for this session",
-  "mcpAllow": "Allow"
+  "mcpAllow": "Allow",
+  "backupTitle": "Backup and restore",
+  "backupDescription": "Save scripts and whole projects, or restore a backup.",
+  "backupContents": "Backup contents",
+  "backupChooseContents": "Choose contents",
+  "backupScope": "{scripts, plural, =1{1 script} other{{scripts} scripts}} · {projects, plural, =1{1 project} other{{projects} projects}} · {groups, plural, =1{1 group} other{{groups} groups}}",
+  "@backupScope": {
+    "placeholders": {
+      "scripts": {
+        "type": "int"
+      },
+      "projects": {
+        "type": "int"
+      },
+      "groups": {
+        "type": "int"
+      }
+    }
+  },
+  "backupScopeHint": "Includes project files and empty groups. Settings and passwords are excluded.",
+  "backupEmptyLibrary": "Your library is empty. Restore a backup to add scripts or projects.",
+  "backupNothingSelected": "Choose at least one script, project, or empty group to back up.",
+  "backupExportLocal": "Export to device",
+  "backupUpload": "Back up to WebDAV",
+  "backupRestoreLocal": "Restore from device",
+  "backupRestoreRemote": "Restore from WebDAV",
+  "backupDestinations": "Save locations",
+  "backupLocalFolder": "Device folder",
+  "backupFolderUnset": "Choose a folder on your first export.",
+  "backupChange": "Change",
+  "backupConfigure": "Configure",
+  "backupCloudUnset": "Add a secure WebDAV server to use cloud backups.",
+  "backupActions": "Back up",
+  "backupRestoreSection": "Restore",
+  "backupRestoreHint": "Review contents and conflicts before making changes.",
+  "backupSelectAll": "Select all",
+  "backupClearAll": "Clear all",
+  "backupUseSelection": "Use selection",
+  "backupEmptyGroup": "Empty group",
+  "backupWholeProject": "Whole project, including all files",
+  "backupRootScripts": "Ungrouped scripts",
+  "backupWebDavTitle": "WebDAV connection",
+  "backupServerUrl": "HTTPS server URL",
+  "backupServerHint": "https://cloud.example.com/dav/",
+  "backupUsername": "Username",
+  "backupPassword": "Password or app password",
+  "backupKeepPassword": "Leave blank to keep your saved password.",
+  "backupPasswordPrivate": "Stored securely on this device.",
+  "backupShowPassword": "Show password",
+  "backupHidePassword": "Hide password",
+  "backupRemoteDirectory": "Remote directory",
+  "backupTestConnection": "Test connection",
+  "backupInvalidUrl": "Enter an HTTPS URL without a username, password, query, or fragment.",
+  "backupInvalidUsername": "Enter a username without colons or control characters.",
+  "backupPasswordRequired": "Enter a password or app password.",
+  "backupInvalidDirectory": "Use folder names separated by /; do not use empty names, . or ...",
+  "backupHistoryTitle": "WebDAV backups",
+  "backupHistoryEmpty": "No completed backups in this folder yet.",
+  "backupRefresh": "Refresh",
+  "backupUnknownDate": "Date unavailable",
+  "backupUnknownSize": "Size unavailable",
+  "backupPreviewTitle": "Review restore",
+  "backupCreated": "Created {date}",
+  "@backupCreated": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPolicyTitle": "When names match",
+  "backupKeepBoth": "Keep both",
+  "backupKeepBothHint": "Give incoming items a new name.",
+  "backupOverwrite": "Replace existing",
+  "backupOverwriteHint": "Replace matching scripts and whole projects.",
+  "backupSkip": "Skip existing",
+  "backupSkipHint": "Keep existing items without restoring their matches.",
+  "backupPlanTitle": "Changes to review",
+  "backupPlanCounts": "Restore: {scripts, plural, =1{1 script} other{{scripts} scripts}}, {projects, plural, =1{1 project} other{{projects} projects}}. Replace: {replacements, plural, =1{1 whole project} other{{replacements} whole projects}}. Skip: {skipped, plural, =1{1 item} other{{skipped} items}}.",
+  "@backupPlanCounts": {
+    "placeholders": {
+      "scripts": {
+        "type": "int"
+      },
+      "projects": {
+        "type": "int"
+      },
+      "replacements": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRename": "{from} → {to}",
+  "@backupRename": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "backupReplaceItem": "Replace: {name}",
+  "@backupReplaceItem": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSkipItem": "Skip: {name}",
+  "@backupSkipItem": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "backupNoChanges": "Nothing to restore with this selection and conflict choice.",
+  "backupPreviewUpdated": "Your library changed. Review this refreshed preview and confirm again.",
+  "backupRestoreNow": "Restore",
+  "backupConfirmTitle": "Restore selected contents?",
+  "backupConfirmBody": "The selected items will be added to your library. Unrelated items will be preserved.",
+  "backupReplaceConfirm": "Matching scripts will be replaced. Each matching project’s entire current directory will be replaced, including files absent from this backup. Unrelated items will be preserved.",
+  "backupDiscardPreview": "Discard preview",
+  "backupLegacyTitle": "Import project ZIP",
+  "backupLegacyHint": "This ZIP is an ordinary project. Original library metadata is unavailable. It will be imported as a new project.",
+  "backupProjectName": "Project name",
+  "backupInvalidProjectName": "Enter a valid project name.",
+  "backupEntryPoint": "Python entrypoint",
+  "backupNoEntryPoint": "Choose later",
+  "backupNoPythonFiles": "No Python files found. You can import this project and choose an entrypoint before running it.",
+  "backupProgressPreparing": "Preparing…",
+  "backupProgressSelecting": "Waiting for your file selection…",
+  "backupProgressScanning": "Checking files…",
+  "backupProgressCompressing": "Creating backup…",
+  "backupProgressCopying": "Saving to device…",
+  "backupProgressUploading": "Uploading backup…",
+  "backupProgressDownloading": "Downloading backup…",
+  "backupProgressValidating": "Checking backup…",
+  "backupProgressStaging": "Preparing restore…",
+  "backupProgressCommitting": "Restoring files. Please keep the app open.",
+  "backupProgressFinalizing": "Finishing restore…",
+  "backupSavedTo": "Saved: {destination}",
+  "@backupSavedTo": {
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestored": "Restored {scripts, plural, =1{1 script} other{{scripts} scripts}}, {projects, plural, =1{1 project} other{{projects} projects}}, and {groups, plural, =1{1 group} other{{groups} groups}}.",
+  "@backupRestored": {
+    "placeholders": {
+      "scripts": {
+        "type": "int"
+      },
+      "projects": {
+        "type": "int"
+      },
+      "groups": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreComplete": "Restore complete. Your library has been refreshed.",
+  "backupConnectionVerified": "Connection verified.",
+  "backupProfileSaved": "Connection saved.",
+  "backupCancelled": "Operation cancelled.",
+  "backupRetry": "Retry",
+  "backupRetryRecovery": "Retry recovery",
+  "backupRecoveryRequired": "Recovery could not finish. Files and recovery data are preserved. Check available storage and retry.",
+  "backupErrorAuthentication": "Sign-in failed. Check your username and password in WebDAV settings.",
+  "backupErrorPermission": "Access denied. Check the folder permissions or choose another location.",
+  "backupErrorLocalPermission": "Access to the saved folder was lost. Choose the folder again, then retry export.",
+  "backupErrorInvalid": "This backup is damaged, unsafe, or uses an unsupported format. Choose another ZIP.",
+  "backupErrorVersion": "This backup version is not supported. Update the app before trying again.",
+  "backupErrorBusy": "Another operation is in progress. Wait for it to finish, or close the current restore preview.",
+  "backupErrorRunning": "Stop running scripts before backing up or restoring.",
+  "backupErrorNetwork": "Could not reach the server. Check your connection and server URL, then retry.",
+  "backupErrorStorage": "There is not enough free storage. Free some space and retry.",
+  "backupErrorLimit": "This archive exceeds the supported file count, size, or metadata limits. Use a smaller backup.",
+  "backupErrorConfiguration": "The saved connection could not be read or saved securely. Try again or enter the connection details again.",
+  "backupErrorSourceMissing": "A script or project file is missing. Refresh the backup contents or deselect the missing project, then try again.",
+  "backupErrorSourceChanged": "Files changed during backup. Stop editing or modifying files, then try again.",
+  "backupErrorGeneric": "The operation could not finish. Check your storage and connection, then retry."
 }

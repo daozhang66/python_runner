@@ -120,6 +120,14 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final dark = colors.brightness == Brightness.dark;
+    // Blur cannot separate two pale surfaces. A neutral tint gives light
+    // glass some depth while retaining the current palette and live backdrop.
+    final trackColor = dark
+        ? colors.surfaceContainer.withValues(alpha: 0.54)
+        : Color.alphaBlend(
+                colors.onSurfaceVariant.withValues(alpha: 0.12),
+                colors.surfaceContainer)
+            .withValues(alpha: 0.70);
     final l10n = AppLocalizations.of(context)!;
     final direction = Directionality.of(context);
     final labels = AppNavigationDestinations.labels(l10n);
@@ -225,7 +233,8 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                               Positioned.fill(
                                   child: IgnorePointer(
                                       child: CustomPaint(
-                                          painter: _GlassShadow(dark: dark)))),
+                                          painter: _GlassShadow(
+                                              dark: dark, contact: !dark)))),
                               Positioned.fill(
                                 child: IgnorePointer(
                                   child: ClipPath(
@@ -251,10 +260,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                                               child: Material(
                                                 key: const ValueKey(
                                                     'navigation-surface'),
-                                                color: colors.surfaceContainer
-                                                    .withValues(
-                                                        alpha:
-                                                            dark ? 0.54 : 0.62),
+                                                color: trackColor,
                                                 surfaceTintColor:
                                                     Colors.transparent,
                                                 shape: StadiumBorder(
@@ -518,13 +524,20 @@ class _GlassTrackRim extends CustomPainter {
     final bounds = Offset.zero & size;
     final outer = const StadiumBorder().getOuterPath(bounds.deflate(0.4));
     final inner = const StadiumBorder().getOuterPath(bounds.deflate(1.3));
-    // A faint outer shade keeps the white highlight visible on white pages.
+    // A shaded lower edge anchors the white upper highlight on pale pages.
     canvas.drawPath(
         outer,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.7
-          ..color = shade.withValues(alpha: 0.12));
+          ..shader = LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                shade.withValues(alpha: 0.10),
+                shade.withValues(alpha: 0.18),
+                shade.withValues(alpha: 0.28),
+              ]).createShader(bounds));
     canvas.drawPath(
         inner,
         Paint()

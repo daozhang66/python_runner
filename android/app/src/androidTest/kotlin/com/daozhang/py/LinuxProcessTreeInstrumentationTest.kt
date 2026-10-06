@@ -18,13 +18,68 @@ import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.io.InputStream
+import java.io.InterruptedIOException
+import java.io.IOException
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
 class LinuxProcessTreeInstrumentationTest {
+    @Test
+    fun stoppedOutputReadersIgnoreCloseInterruptionsButRunningFailuresRemainVisible() {
+        for (type in listOf("stdout", "stderr")) {
+            verifyOutputFailure(type, InterruptedIOException("read interrupted by close() on another thread"), true, false)
+            verifyOutputFailure(type, InterruptedIOException("unexpected read interruption"), false, true)
+            verifyOutputFailure(type, IOException("unexpected I/O failure"), false, true)
+            verifyOutputFailure(type, IOException("unexpected I/O failure"), true, true)
+            verifyOutputFailure(type, IllegalStateException("unexpected reader failure"), true, true)
+        }
+    }
+
+    private fun verifyOutputFailure(type: String, error: Exception, stopping: Boolean, expectedFailure: Boolean) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val probe = ExecutionProbe()
+        val controller = controller(context, LinuxLikeRuntimeManager(context), probe)
+        val stop = AtomicBoolean(false)
+        fun field(name: String, value: Any) {
+            ScriptExecutionController::class.java.getDeclaredField(name).apply { isAccessible = true }.set(controller, value)
+        }
+        field("currentExecutionId", "capture-test")
+        field("currentExecutionStopRequested", stop)
+        val reading = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val input = object : InputStream() {
+            override fun read(): Int {
+                reading.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                throw error
+            }
+        }
+        val bufferClass = ScriptExecutionController::class.java.declaredClasses.single { it.simpleName == "BoundedOutputBuffer" }
+        val buffer = bufferClass.getDeclaredConstructor(Int::class.javaPrimitiveType).apply { isAccessible = true }.newInstance(1024)
+        val method = ScriptExecutionController::class.java.declaredMethods.single { it.name == "collectProcessOutput" }
+        val capture = method.apply { isAccessible = true }.invoke(controller, input, type, buffer, true, "capture-test", stop)
+        val thread = capture.javaClass.getDeclaredMethod("getThread").apply { isAccessible = true }.invoke(capture) as Thread
+        try {
+            assertTrue("reader never started", reading.await(5, TimeUnit.SECONDS))
+            stop.set(stopping)
+            // A later execution must not replace the reader's original stop token.
+            field("currentExecutionId", "next-execution")
+            field("currentExecutionStopRequested", AtomicBoolean(!stopping))
+        } finally {
+            release.countDown()
+            thread.join(5000)
+        }
+        assertFalse("reader did not terminate", thread.isAlive)
+        val failed = capture.javaClass.getDeclaredMethod("getFailed").apply { isAccessible = true }.invoke(capture) as AtomicBoolean
+        assertEquals("$type ${error.javaClass.simpleName} stopping=$stopping", expectedFailure, failed.get())
+        assertEquals("console warning classification", expectedFailure, probe.logs.any { it.contains("[运行时警告]") })
+    }
+
     @Test
     fun stopTerminatesRootAndReparentableChild() {
         val process = ProcessBuilder(

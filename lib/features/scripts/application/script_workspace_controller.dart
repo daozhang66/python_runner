@@ -5,6 +5,7 @@ import '../../../models/script_group.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/project_path_validator.dart';
 import '../../../services/script_name_validator.dart';
+import '../../../services/workspace_access.dart';
 import 'script_home_item.dart';
 import 'script_repository.dart';
 import 'script_workspace_state.dart';
@@ -24,7 +25,10 @@ final scriptWorkspaceControllerProvider =
 );
 
 class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
-  ScriptWorkspaceController();
+  ScriptWorkspaceController({WorkspaceAccess? workspaceAccess})
+    : _workspaceAccessOverride = workspaceAccess;
+  final WorkspaceAccess? _workspaceAccessOverride;
+  WorkspaceAccess get _workspaceAccess => _workspaceAccessOverride ?? ref.read(workspaceAccessProvider);
 
   late final ScriptRepository _repository;
   final AppLogger _logger = AppLogger.instance;
@@ -66,6 +70,10 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
   // --- 排序/提升算法（逐行复制自 legacy，勿改） ---
 
   Future<T> _enqueue<T>(Future<T> Function() operation) {
+    return _workspaceAccess.runMutation(() => _enqueueAccepted(operation));
+  }
+
+  Future<T> _enqueueAccepted<T>(Future<T> Function() operation) {
     final result = _operationTail.then<T>(
       (_) => operation(),
       onError: (_) => operation(),
@@ -215,8 +223,8 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
   // --- 命令：加载 ---
 
   Future<void> load() {
-    state = state.copyWith(isLoading: true);
     return _enqueue(() async {
+      state = state.copyWith(isLoading: true);
       try {
         final candidateGroups = await _repository.getAllGroups();
         candidateGroups.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));

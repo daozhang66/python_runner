@@ -21,6 +21,7 @@ import '../l10n/app_localizations.dart';
 import '../widgets/app_dialogs.dart';
 import '../ui/app_settings_section.dart';
 import '../features/mcp/presentation/pages/mcp_settings_page.dart';
+import '../features/backup/presentation/backup_restore_page.dart';
 import 'update_log_page.dart';
 import 'theme_settings_page.dart';
 import 'app_logs_page.dart';
@@ -84,6 +85,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             delegate: SliverChildListDelegate([
               _buildAppearanceSection(),
               _buildRuntimeSection(),
+              _buildBackupSection(),
               _buildNetworkDebugSection(),
               _buildMcpSection(),
               _buildDiagnosticsSection(),
@@ -107,6 +109,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   // ── Section builders ──
+
+  Widget _buildBackupSection() {
+    final l10n = AppLocalizations.of(context)!;
+    return AppSettingsSection(
+      icon: Icons.backup_outlined,
+      title: l10n.backupTitle,
+      framed: true,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.backup_outlined),
+          title: Text(l10n.backupTitle),
+          subtitle: Text(l10n.backupDescription),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BackupRestorePage()),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// AI / MCP 服务入口（计划 §11）。
   Widget _buildMcpSection() {

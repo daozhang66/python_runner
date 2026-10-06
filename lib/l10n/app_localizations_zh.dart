@@ -2190,4 +2190,354 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mcpAllow => '允许';
+
+  @override
+  String get backupTitle => '备份与恢复';
+
+  @override
+  String get backupDescription => '保存脚本和完整项目，或从备份恢复。';
+
+  @override
+  String get backupContents => '备份内容';
+
+  @override
+  String get backupChooseContents => '选择内容';
+
+  @override
+  String backupScope(int scripts, int projects, int groups) {
+    return '$scripts 个脚本 · $projects 个项目 · $groups 个分组';
+  }
+
+  @override
+  String get backupScopeHint => '包含项目文件及空分组，不包含设置和密码。';
+
+  @override
+  String get backupEmptyLibrary => '脚本库为空。可从备份恢复脚本或项目。';
+
+  @override
+  String get backupNothingSelected => '请至少选择一个脚本、项目或空分组。';
+
+  @override
+  String get backupExportLocal => '导出到本机';
+
+  @override
+  String get backupUpload => '备份到 WebDAV';
+
+  @override
+  String get backupRestoreLocal => '从本机恢复';
+
+  @override
+  String get backupRestoreRemote => '从 WebDAV 恢复';
+
+  @override
+  String get backupDestinations => '保存位置';
+
+  @override
+  String get backupLocalFolder => '本机文件夹';
+
+  @override
+  String get backupFolderUnset => '首次导出时选择文件夹。';
+
+  @override
+  String get backupChange => '更改';
+
+  @override
+  String get backupConfigure => '配置';
+
+  @override
+  String get backupCloudUnset => '配置安全的 WebDAV 服务器以使用云端备份。';
+
+  @override
+  String get backupActions => '备份';
+
+  @override
+  String get backupRestoreSection => '恢复';
+
+  @override
+  String get backupRestoreHint => '先检查内容和冲突，再确认恢复。';
+
+  @override
+  String get backupSelectAll => '全选';
+
+  @override
+  String get backupClearAll => '清空选择';
+
+  @override
+  String get backupUseSelection => '确认选择';
+
+  @override
+  String get backupEmptyGroup => '空分组';
+
+  @override
+  String get backupWholeProject => '完整项目，包含所有文件';
+
+  @override
+  String get backupRootScripts => '未分组脚本';
+
+  @override
+  String get backupWebDavTitle => 'WebDAV 连接';
+
+  @override
+  String get backupServerUrl => 'HTTPS 服务器地址';
+
+  @override
+  String get backupServerHint => 'https://cloud.example.com/dav/';
+
+  @override
+  String get backupUsername => '用户名';
+
+  @override
+  String get backupPassword => '密码或应用密码';
+
+  @override
+  String get backupKeepPassword => '留空以保留已保存的密码。';
+
+  @override
+  String get backupPasswordPrivate => '安全保存在本机。';
+
+  @override
+  String get backupShowPassword => '显示密码';
+
+  @override
+  String get backupHidePassword => '隐藏密码';
+
+  @override
+  String get backupRemoteDirectory => '远端目录';
+
+  @override
+  String get backupTestConnection => '测试连接';
+
+  @override
+  String get backupInvalidUrl => '请输入 HTTPS 地址，不要在地址中包含用户名、密码、查询或片段。';
+
+  @override
+  String get backupInvalidUsername => '请输入用户名，不可包含冒号或控制字符。';
+
+  @override
+  String get backupPasswordRequired => '请输入密码或应用密码。';
+
+  @override
+  String get backupInvalidDirectory => '用 / 分隔文件夹名；不可使用空名称、. 或 ..。';
+
+  @override
+  String get backupHistoryTitle => 'WebDAV 备份';
+
+  @override
+  String get backupHistoryEmpty => '此文件夹中暂无已完成的备份。';
+
+  @override
+  String get backupRefresh => '刷新';
+
+  @override
+  String get backupUnknownDate => '日期未知';
+
+  @override
+  String get backupUnknownSize => '大小未知';
+
+  @override
+  String get backupPreviewTitle => '检查恢复内容';
+
+  @override
+  String backupCreated(String date) {
+    return '创建于 $date';
+  }
+
+  @override
+  String get backupPolicyTitle => '名称冲突时';
+
+  @override
+  String get backupKeepBoth => '保留两者';
+
+  @override
+  String get backupKeepBothHint => '为恢复的内容使用新名称。';
+
+  @override
+  String get backupOverwrite => '覆盖现有内容';
+
+  @override
+  String get backupOverwriteHint => '替换同名脚本和整个项目。';
+
+  @override
+  String get backupSkip => '跳过现有内容';
+
+  @override
+  String get backupSkipHint => '保留现有内容，跳过与其同名的备份内容。';
+
+  @override
+  String get backupPlanTitle => '待确认的更改';
+
+  @override
+  String backupPlanCounts(
+    int scripts,
+    int projects,
+    int replacements,
+    int skipped,
+  ) {
+    return '将恢复 $scripts 个脚本和 $projects 个项目；替换 $replacements 个完整项目，跳过 $skipped 项。';
+  }
+
+  @override
+  String backupRename(String from, String to) {
+    return '$from → $to';
+  }
+
+  @override
+  String backupReplaceItem(String name) {
+    return '替换：$name';
+  }
+
+  @override
+  String backupSkipItem(String name) {
+    return '跳过：$name';
+  }
+
+  @override
+  String get backupNoChanges => '当前选择与冲突处理方式下没有可恢复的内容。';
+
+  @override
+  String get backupPreviewUpdated => '脚本库已发生变化。请检查更新后的预览并再次确认。';
+
+  @override
+  String get backupRestoreNow => '恢复';
+
+  @override
+  String get backupConfirmTitle => '恢复所选内容？';
+
+  @override
+  String get backupConfirmBody => '所选内容将恢复到脚本库，其他内容将保留。';
+
+  @override
+  String get backupReplaceConfirm =>
+      '同名脚本将被替换。同名项目的整个当前目录将被替换，包括备份中没有的文件。其他内容将保留。';
+
+  @override
+  String get backupDiscardPreview => '放弃此次恢复';
+
+  @override
+  String get backupLegacyTitle => '导入项目 ZIP';
+
+  @override
+  String get backupLegacyHint => '此 ZIP 为普通项目压缩包，不包含原脚本库信息，将作为新项目导入。';
+
+  @override
+  String get backupProjectName => '项目名称';
+
+  @override
+  String get backupInvalidProjectName => '请输入有效的项目名称。';
+
+  @override
+  String get backupEntryPoint => 'Python 入口文件';
+
+  @override
+  String get backupNoEntryPoint => '稍后选择';
+
+  @override
+  String get backupNoPythonFiles => '未找到 Python 文件。可以先导入项目，运行前再设置入口文件。';
+
+  @override
+  String get backupProgressPreparing => '正在准备…';
+
+  @override
+  String get backupProgressSelecting => '等待选择文件或文件夹…';
+
+  @override
+  String get backupProgressScanning => '正在检查文件…';
+
+  @override
+  String get backupProgressCompressing => '正在创建备份…';
+
+  @override
+  String get backupProgressCopying => '正在保存到本机…';
+
+  @override
+  String get backupProgressUploading => '正在上传备份…';
+
+  @override
+  String get backupProgressDownloading => '正在下载备份…';
+
+  @override
+  String get backupProgressValidating => '正在检查备份…';
+
+  @override
+  String get backupProgressStaging => '正在准备恢复…';
+
+  @override
+  String get backupProgressCommitting => '正在恢复文件，请保持应用打开。';
+
+  @override
+  String get backupProgressFinalizing => '正在完成恢复…';
+
+  @override
+  String backupSavedTo(String destination) {
+    return '已保存：$destination';
+  }
+
+  @override
+  String backupRestored(int scripts, int projects, int groups) {
+    return '已恢复 $scripts 个脚本、$projects 个项目和 $groups 个分组。';
+  }
+
+  @override
+  String get backupRestoreComplete => '恢复完成，脚本库已刷新。';
+
+  @override
+  String get backupConnectionVerified => '连接测试成功。';
+
+  @override
+  String get backupProfileSaved => '连接配置已保存。';
+
+  @override
+  String get backupCancelled => '操作已取消。';
+
+  @override
+  String get backupRetry => '重试';
+
+  @override
+  String get backupRetryRecovery => '重试恢复';
+
+  @override
+  String get backupRecoveryRequired => '恢复尚未完成，文件和恢复数据已保留。请检查可用存储空间后重试。';
+
+  @override
+  String get backupErrorAuthentication => '登录失败，请在 WebDAV 配置中检查用户名和密码。';
+
+  @override
+  String get backupErrorPermission => '无法访问，请检查文件夹权限或选择其他位置。';
+
+  @override
+  String get backupErrorLocalPermission => '已失去所选文件夹的访问权限，请重新选择文件夹后再次导出。';
+
+  @override
+  String get backupErrorInvalid => '此备份已损坏、存在不安全内容或格式不受支持，请选择其他 ZIP。';
+
+  @override
+  String get backupErrorVersion => '暂不支持此备份版本，请更新应用后重试。';
+
+  @override
+  String get backupErrorBusy => '另一个操作正在进行，请等待完成或关闭当前恢复预览。';
+
+  @override
+  String get backupErrorRunning => '请先停止正在运行的脚本，再备份或恢复。';
+
+  @override
+  String get backupErrorNetwork => '无法连接服务器，请检查网络和服务器地址后重试。';
+
+  @override
+  String get backupErrorStorage => '可用存储空间不足，请释放空间后重试。';
+
+  @override
+  String get backupErrorLimit => '此压缩包超出支持的文件数量、大小或信息限制，请使用较小的备份。';
+
+  @override
+  String get backupErrorConfiguration => '无法安全读取或保存连接配置，请重试或重新填写连接信息。';
+
+  @override
+  String get backupErrorSourceMissing =>
+      '待备份的脚本或项目文件已不存在。请刷新备份内容，或取消选择缺失的项目后重试。';
+
+  @override
+  String get backupErrorSourceChanged => '文件在备份过程中发生变化。请停止编辑或修改文件后重试。';
+
+  @override
+  String get backupErrorGeneric => '操作未能完成，请检查存储空间与连接后重试。';
 }

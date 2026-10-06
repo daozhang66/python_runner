@@ -4093,6 +4093,665 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow'**
   String get mcpAllow;
+
+  /// No description provided for @backupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup and restore'**
+  String get backupTitle;
+
+  /// No description provided for @backupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Save scripts and whole projects, or restore a backup.'**
+  String get backupDescription;
+
+  /// No description provided for @backupContents.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup contents'**
+  String get backupContents;
+
+  /// No description provided for @backupChooseContents.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose contents'**
+  String get backupChooseContents;
+
+  /// No description provided for @backupScope.
+  ///
+  /// In en, this message translates to:
+  /// **'{scripts, plural, =1{1 script} other{{scripts} scripts}} · {projects, plural, =1{1 project} other{{projects} projects}} · {groups, plural, =1{1 group} other{{groups} groups}}'**
+  String backupScope(int scripts, int projects, int groups);
+
+  /// No description provided for @backupScopeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes project files and empty groups. Settings and passwords are excluded.'**
+  String get backupScopeHint;
+
+  /// No description provided for @backupEmptyLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Your library is empty. Restore a backup to add scripts or projects.'**
+  String get backupEmptyLibrary;
+
+  /// No description provided for @backupNothingSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose at least one script, project, or empty group to back up.'**
+  String get backupNothingSelected;
+
+  /// No description provided for @backupExportLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Export to device'**
+  String get backupExportLocal;
+
+  /// No description provided for @backupUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up to WebDAV'**
+  String get backupUpload;
+
+  /// No description provided for @backupRestoreLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore from device'**
+  String get backupRestoreLocal;
+
+  /// No description provided for @backupRestoreRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore from WebDAV'**
+  String get backupRestoreRemote;
+
+  /// No description provided for @backupDestinations.
+  ///
+  /// In en, this message translates to:
+  /// **'Save locations'**
+  String get backupDestinations;
+
+  /// No description provided for @backupLocalFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Device folder'**
+  String get backupLocalFolder;
+
+  /// No description provided for @backupFolderUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder on your first export.'**
+  String get backupFolderUnset;
+
+  /// No description provided for @backupChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get backupChange;
+
+  /// No description provided for @backupConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get backupConfigure;
+
+  /// No description provided for @backupCloudUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a secure WebDAV server to use cloud backups.'**
+  String get backupCloudUnset;
+
+  /// No description provided for @backupActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up'**
+  String get backupActions;
+
+  /// No description provided for @backupRestoreSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get backupRestoreSection;
+
+  /// No description provided for @backupRestoreHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Review contents and conflicts before making changes.'**
+  String get backupRestoreHint;
+
+  /// No description provided for @backupSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get backupSelectAll;
+
+  /// No description provided for @backupClearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get backupClearAll;
+
+  /// No description provided for @backupUseSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Use selection'**
+  String get backupUseSelection;
+
+  /// No description provided for @backupEmptyGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty group'**
+  String get backupEmptyGroup;
+
+  /// No description provided for @backupWholeProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole project, including all files'**
+  String get backupWholeProject;
+
+  /// No description provided for @backupRootScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped scripts'**
+  String get backupRootScripts;
+
+  /// No description provided for @backupWebDavTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV connection'**
+  String get backupWebDavTitle;
+
+  /// No description provided for @backupServerUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTPS server URL'**
+  String get backupServerUrl;
+
+  /// No description provided for @backupServerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://cloud.example.com/dav/'**
+  String get backupServerHint;
+
+  /// No description provided for @backupUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get backupUsername;
+
+  /// No description provided for @backupPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password or app password'**
+  String get backupPassword;
+
+  /// No description provided for @backupKeepPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to keep your saved password.'**
+  String get backupKeepPassword;
+
+  /// No description provided for @backupPasswordPrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored securely on this device.'**
+  String get backupPasswordPrivate;
+
+  /// No description provided for @backupShowPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get backupShowPassword;
+
+  /// No description provided for @backupHidePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get backupHidePassword;
+
+  /// No description provided for @backupRemoteDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote directory'**
+  String get backupRemoteDirectory;
+
+  /// No description provided for @backupTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get backupTestConnection;
+
+  /// No description provided for @backupInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an HTTPS URL without a username, password, query, or fragment.'**
+  String get backupInvalidUrl;
+
+  /// No description provided for @backupInvalidUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a username without colons or control characters.'**
+  String get backupInvalidUsername;
+
+  /// No description provided for @backupPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a password or app password.'**
+  String get backupPasswordRequired;
+
+  /// No description provided for @backupInvalidDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Use folder names separated by /; do not use empty names, . or ...'**
+  String get backupInvalidDirectory;
+
+  /// No description provided for @backupHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV backups'**
+  String get backupHistoryTitle;
+
+  /// No description provided for @backupHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No completed backups in this folder yet.'**
+  String get backupHistoryEmpty;
+
+  /// No description provided for @backupRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get backupRefresh;
+
+  /// No description provided for @backupUnknownDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date unavailable'**
+  String get backupUnknownDate;
+
+  /// No description provided for @backupUnknownSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size unavailable'**
+  String get backupUnknownSize;
+
+  /// No description provided for @backupPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review restore'**
+  String get backupPreviewTitle;
+
+  /// No description provided for @backupCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created {date}'**
+  String backupCreated(String date);
+
+  /// No description provided for @backupPolicyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When names match'**
+  String get backupPolicyTitle;
+
+  /// No description provided for @backupKeepBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep both'**
+  String get backupKeepBoth;
+
+  /// No description provided for @backupKeepBothHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Give incoming items a new name.'**
+  String get backupKeepBothHint;
+
+  /// No description provided for @backupOverwrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace existing'**
+  String get backupOverwrite;
+
+  /// No description provided for @backupOverwriteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace matching scripts and whole projects.'**
+  String get backupOverwriteHint;
+
+  /// No description provided for @backupSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip existing'**
+  String get backupSkip;
+
+  /// No description provided for @backupSkipHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep existing items without restoring their matches.'**
+  String get backupSkipHint;
+
+  /// No description provided for @backupPlanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes to review'**
+  String get backupPlanTitle;
+
+  /// No description provided for @backupPlanCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore: {scripts, plural, =1{1 script} other{{scripts} scripts}}, {projects, plural, =1{1 project} other{{projects} projects}}. Replace: {replacements, plural, =1{1 whole project} other{{replacements} whole projects}}. Skip: {skipped, plural, =1{1 item} other{{skipped} items}}.'**
+  String backupPlanCounts(
+    int scripts,
+    int projects,
+    int replacements,
+    int skipped,
+  );
+
+  /// No description provided for @backupRename.
+  ///
+  /// In en, this message translates to:
+  /// **'{from} → {to}'**
+  String backupRename(String from, String to);
+
+  /// No description provided for @backupReplaceItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace: {name}'**
+  String backupReplaceItem(String name);
+
+  /// No description provided for @backupSkipItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip: {name}'**
+  String backupSkipItem(String name);
+
+  /// No description provided for @backupNoChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to restore with this selection and conflict choice.'**
+  String get backupNoChanges;
+
+  /// No description provided for @backupPreviewUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Your library changed. Review this refreshed preview and confirm again.'**
+  String get backupPreviewUpdated;
+
+  /// No description provided for @backupRestoreNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get backupRestoreNow;
+
+  /// No description provided for @backupConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore selected contents?'**
+  String get backupConfirmTitle;
+
+  /// No description provided for @backupConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected items will be added to your library. Unrelated items will be preserved.'**
+  String get backupConfirmBody;
+
+  /// No description provided for @backupReplaceConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching scripts will be replaced. Each matching project’s entire current directory will be replaced, including files absent from this backup. Unrelated items will be preserved.'**
+  String get backupReplaceConfirm;
+
+  /// No description provided for @backupDiscardPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard preview'**
+  String get backupDiscardPreview;
+
+  /// No description provided for @backupLegacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import project ZIP'**
+  String get backupLegacyTitle;
+
+  /// No description provided for @backupLegacyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This ZIP is an ordinary project. Original library metadata is unavailable. It will be imported as a new project.'**
+  String get backupLegacyHint;
+
+  /// No description provided for @backupProjectName.
+  ///
+  /// In en, this message translates to:
+  /// **'Project name'**
+  String get backupProjectName;
+
+  /// No description provided for @backupInvalidProjectName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid project name.'**
+  String get backupInvalidProjectName;
+
+  /// No description provided for @backupEntryPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Python entrypoint'**
+  String get backupEntryPoint;
+
+  /// No description provided for @backupNoEntryPoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose later'**
+  String get backupNoEntryPoint;
+
+  /// No description provided for @backupNoPythonFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No Python files found. You can import this project and choose an entrypoint before running it.'**
+  String get backupNoPythonFiles;
+
+  /// No description provided for @backupProgressPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get backupProgressPreparing;
+
+  /// No description provided for @backupProgressSelecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your file selection…'**
+  String get backupProgressSelecting;
+
+  /// No description provided for @backupProgressScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking files…'**
+  String get backupProgressScanning;
+
+  /// No description provided for @backupProgressCompressing.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating backup…'**
+  String get backupProgressCompressing;
+
+  /// No description provided for @backupProgressCopying.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving to device…'**
+  String get backupProgressCopying;
+
+  /// No description provided for @backupProgressUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading backup…'**
+  String get backupProgressUploading;
+
+  /// No description provided for @backupProgressDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading backup…'**
+  String get backupProgressDownloading;
+
+  /// No description provided for @backupProgressValidating.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking backup…'**
+  String get backupProgressValidating;
+
+  /// No description provided for @backupProgressStaging.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing restore…'**
+  String get backupProgressStaging;
+
+  /// No description provided for @backupProgressCommitting.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring files. Please keep the app open.'**
+  String get backupProgressCommitting;
+
+  /// No description provided for @backupProgressFinalizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing restore…'**
+  String get backupProgressFinalizing;
+
+  /// No description provided for @backupSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved: {destination}'**
+  String backupSavedTo(String destination);
+
+  /// No description provided for @backupRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {scripts, plural, =1{1 script} other{{scripts} scripts}}, {projects, plural, =1{1 project} other{{projects} projects}}, and {groups, plural, =1{1 group} other{{groups} groups}}.'**
+  String backupRestored(int scripts, int projects, int groups);
+
+  /// No description provided for @backupRestoreComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore complete. Your library has been refreshed.'**
+  String get backupRestoreComplete;
+
+  /// No description provided for @backupConnectionVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection verified.'**
+  String get backupConnectionVerified;
+
+  /// No description provided for @backupProfileSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection saved.'**
+  String get backupProfileSaved;
+
+  /// No description provided for @backupCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation cancelled.'**
+  String get backupCancelled;
+
+  /// No description provided for @backupRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get backupRetry;
+
+  /// No description provided for @backupRetryRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry recovery'**
+  String get backupRetryRecovery;
+
+  /// No description provided for @backupRecoveryRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery could not finish. Files and recovery data are preserved. Check available storage and retry.'**
+  String get backupRecoveryRequired;
+
+  /// No description provided for @backupErrorAuthentication.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in failed. Check your username and password in WebDAV settings.'**
+  String get backupErrorAuthentication;
+
+  /// No description provided for @backupErrorPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Access denied. Check the folder permissions or choose another location.'**
+  String get backupErrorPermission;
+
+  /// No description provided for @backupErrorLocalPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Access to the saved folder was lost. Choose the folder again, then retry export.'**
+  String get backupErrorLocalPermission;
+
+  /// No description provided for @backupErrorInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup is damaged, unsafe, or uses an unsupported format. Choose another ZIP.'**
+  String get backupErrorInvalid;
+
+  /// No description provided for @backupErrorVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup version is not supported. Update the app before trying again.'**
+  String get backupErrorVersion;
+
+  /// No description provided for @backupErrorBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Another operation is in progress. Wait for it to finish, or close the current restore preview.'**
+  String get backupErrorBusy;
+
+  /// No description provided for @backupErrorRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop running scripts before backing up or restoring.'**
+  String get backupErrorRunning;
+
+  /// No description provided for @backupErrorNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the server. Check your connection and server URL, then retry.'**
+  String get backupErrorNetwork;
+
+  /// No description provided for @backupErrorStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'There is not enough free storage. Free some space and retry.'**
+  String get backupErrorStorage;
+
+  /// No description provided for @backupErrorLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'This archive exceeds the supported file count, size, or metadata limits. Use a smaller backup.'**
+  String get backupErrorLimit;
+
+  /// No description provided for @backupErrorConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'The saved connection could not be read or saved securely. Try again or enter the connection details again.'**
+  String get backupErrorConfiguration;
+
+  /// No description provided for @backupErrorSourceMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'A script or project file is missing. Refresh the backup contents or deselect the missing project, then try again.'**
+  String get backupErrorSourceMissing;
+
+  /// No description provided for @backupErrorSourceChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Files changed during backup. Stop editing or modifying files, then try again.'**
+  String get backupErrorSourceChanged;
+
+  /// No description provided for @backupErrorGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation could not finish. Check your storage and connection, then retry.'**
+  String get backupErrorGeneric;
 }
 
 class _AppLocalizationsDelegate

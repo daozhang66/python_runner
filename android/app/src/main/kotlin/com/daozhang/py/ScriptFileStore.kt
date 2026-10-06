@@ -1,6 +1,7 @@
 package com.daozhang.py
 
 import java.io.File
+import java.io.IOException
 
 class ScriptFileStore(private val filesDir: File) {
     fun scriptsDir(): File {
@@ -54,7 +55,9 @@ class ScriptFileStore(private val filesDir: File) {
     }
 
     fun listScripts(): List<Map<String, Any>> {
-        val files = scriptsDir().listFiles()?.filter { it.isFile && it.name.endsWith(".py") } ?: emptyList()
+        val entries = scriptsDir().listFiles()
+            ?: throw IOException("Cannot read the script directory")
+        val files = entries.filter { it.isFile && it.name.endsWith(".py") }
         return files.map { file ->
             mapOf(
                 "name" to file.name,

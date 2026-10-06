@@ -2254,4 +2254,446 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mcpAllow => 'Allow';
+
+  @override
+  String get backupTitle => 'Backup and restore';
+
+  @override
+  String get backupDescription =>
+      'Save scripts and whole projects, or restore a backup.';
+
+  @override
+  String get backupContents => 'Backup contents';
+
+  @override
+  String get backupChooseContents => 'Choose contents';
+
+  @override
+  String backupScope(int scripts, int projects, int groups) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scripts,
+      locale: localeName,
+      other: '$scripts scripts',
+      one: '1 script',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      projects,
+      locale: localeName,
+      other: '$projects projects',
+      one: '1 project',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      groups,
+      locale: localeName,
+      other: '$groups groups',
+      one: '1 group',
+    );
+    return '$_temp0 · $_temp1 · $_temp2';
+  }
+
+  @override
+  String get backupScopeHint =>
+      'Includes project files and empty groups. Settings and passwords are excluded.';
+
+  @override
+  String get backupEmptyLibrary =>
+      'Your library is empty. Restore a backup to add scripts or projects.';
+
+  @override
+  String get backupNothingSelected =>
+      'Choose at least one script, project, or empty group to back up.';
+
+  @override
+  String get backupExportLocal => 'Export to device';
+
+  @override
+  String get backupUpload => 'Back up to WebDAV';
+
+  @override
+  String get backupRestoreLocal => 'Restore from device';
+
+  @override
+  String get backupRestoreRemote => 'Restore from WebDAV';
+
+  @override
+  String get backupDestinations => 'Save locations';
+
+  @override
+  String get backupLocalFolder => 'Device folder';
+
+  @override
+  String get backupFolderUnset => 'Choose a folder on your first export.';
+
+  @override
+  String get backupChange => 'Change';
+
+  @override
+  String get backupConfigure => 'Configure';
+
+  @override
+  String get backupCloudUnset =>
+      'Add a secure WebDAV server to use cloud backups.';
+
+  @override
+  String get backupActions => 'Back up';
+
+  @override
+  String get backupRestoreSection => 'Restore';
+
+  @override
+  String get backupRestoreHint =>
+      'Review contents and conflicts before making changes.';
+
+  @override
+  String get backupSelectAll => 'Select all';
+
+  @override
+  String get backupClearAll => 'Clear all';
+
+  @override
+  String get backupUseSelection => 'Use selection';
+
+  @override
+  String get backupEmptyGroup => 'Empty group';
+
+  @override
+  String get backupWholeProject => 'Whole project, including all files';
+
+  @override
+  String get backupRootScripts => 'Ungrouped scripts';
+
+  @override
+  String get backupWebDavTitle => 'WebDAV connection';
+
+  @override
+  String get backupServerUrl => 'HTTPS server URL';
+
+  @override
+  String get backupServerHint => 'https://cloud.example.com/dav/';
+
+  @override
+  String get backupUsername => 'Username';
+
+  @override
+  String get backupPassword => 'Password or app password';
+
+  @override
+  String get backupKeepPassword => 'Leave blank to keep your saved password.';
+
+  @override
+  String get backupPasswordPrivate => 'Stored securely on this device.';
+
+  @override
+  String get backupShowPassword => 'Show password';
+
+  @override
+  String get backupHidePassword => 'Hide password';
+
+  @override
+  String get backupRemoteDirectory => 'Remote directory';
+
+  @override
+  String get backupTestConnection => 'Test connection';
+
+  @override
+  String get backupInvalidUrl =>
+      'Enter an HTTPS URL without a username, password, query, or fragment.';
+
+  @override
+  String get backupInvalidUsername =>
+      'Enter a username without colons or control characters.';
+
+  @override
+  String get backupPasswordRequired => 'Enter a password or app password.';
+
+  @override
+  String get backupInvalidDirectory =>
+      'Use folder names separated by /; do not use empty names, . or ...';
+
+  @override
+  String get backupHistoryTitle => 'WebDAV backups';
+
+  @override
+  String get backupHistoryEmpty => 'No completed backups in this folder yet.';
+
+  @override
+  String get backupRefresh => 'Refresh';
+
+  @override
+  String get backupUnknownDate => 'Date unavailable';
+
+  @override
+  String get backupUnknownSize => 'Size unavailable';
+
+  @override
+  String get backupPreviewTitle => 'Review restore';
+
+  @override
+  String backupCreated(String date) {
+    return 'Created $date';
+  }
+
+  @override
+  String get backupPolicyTitle => 'When names match';
+
+  @override
+  String get backupKeepBoth => 'Keep both';
+
+  @override
+  String get backupKeepBothHint => 'Give incoming items a new name.';
+
+  @override
+  String get backupOverwrite => 'Replace existing';
+
+  @override
+  String get backupOverwriteHint =>
+      'Replace matching scripts and whole projects.';
+
+  @override
+  String get backupSkip => 'Skip existing';
+
+  @override
+  String get backupSkipHint =>
+      'Keep existing items without restoring their matches.';
+
+  @override
+  String get backupPlanTitle => 'Changes to review';
+
+  @override
+  String backupPlanCounts(
+    int scripts,
+    int projects,
+    int replacements,
+    int skipped,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scripts,
+      locale: localeName,
+      other: '$scripts scripts',
+      one: '1 script',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      projects,
+      locale: localeName,
+      other: '$projects projects',
+      one: '1 project',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      replacements,
+      locale: localeName,
+      other: '$replacements whole projects',
+      one: '1 whole project',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      skipped,
+      locale: localeName,
+      other: '$skipped items',
+      one: '1 item',
+    );
+    return 'Restore: $_temp0, $_temp1. Replace: $_temp2. Skip: $_temp3.';
+  }
+
+  @override
+  String backupRename(String from, String to) {
+    return '$from → $to';
+  }
+
+  @override
+  String backupReplaceItem(String name) {
+    return 'Replace: $name';
+  }
+
+  @override
+  String backupSkipItem(String name) {
+    return 'Skip: $name';
+  }
+
+  @override
+  String get backupNoChanges =>
+      'Nothing to restore with this selection and conflict choice.';
+
+  @override
+  String get backupPreviewUpdated =>
+      'Your library changed. Review this refreshed preview and confirm again.';
+
+  @override
+  String get backupRestoreNow => 'Restore';
+
+  @override
+  String get backupConfirmTitle => 'Restore selected contents?';
+
+  @override
+  String get backupConfirmBody =>
+      'The selected items will be added to your library. Unrelated items will be preserved.';
+
+  @override
+  String get backupReplaceConfirm =>
+      'Matching scripts will be replaced. Each matching project’s entire current directory will be replaced, including files absent from this backup. Unrelated items will be preserved.';
+
+  @override
+  String get backupDiscardPreview => 'Discard preview';
+
+  @override
+  String get backupLegacyTitle => 'Import project ZIP';
+
+  @override
+  String get backupLegacyHint =>
+      'This ZIP is an ordinary project. Original library metadata is unavailable. It will be imported as a new project.';
+
+  @override
+  String get backupProjectName => 'Project name';
+
+  @override
+  String get backupInvalidProjectName => 'Enter a valid project name.';
+
+  @override
+  String get backupEntryPoint => 'Python entrypoint';
+
+  @override
+  String get backupNoEntryPoint => 'Choose later';
+
+  @override
+  String get backupNoPythonFiles =>
+      'No Python files found. You can import this project and choose an entrypoint before running it.';
+
+  @override
+  String get backupProgressPreparing => 'Preparing…';
+
+  @override
+  String get backupProgressSelecting => 'Waiting for your file selection…';
+
+  @override
+  String get backupProgressScanning => 'Checking files…';
+
+  @override
+  String get backupProgressCompressing => 'Creating backup…';
+
+  @override
+  String get backupProgressCopying => 'Saving to device…';
+
+  @override
+  String get backupProgressUploading => 'Uploading backup…';
+
+  @override
+  String get backupProgressDownloading => 'Downloading backup…';
+
+  @override
+  String get backupProgressValidating => 'Checking backup…';
+
+  @override
+  String get backupProgressStaging => 'Preparing restore…';
+
+  @override
+  String get backupProgressCommitting =>
+      'Restoring files. Please keep the app open.';
+
+  @override
+  String get backupProgressFinalizing => 'Finishing restore…';
+
+  @override
+  String backupSavedTo(String destination) {
+    return 'Saved: $destination';
+  }
+
+  @override
+  String backupRestored(int scripts, int projects, int groups) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scripts,
+      locale: localeName,
+      other: '$scripts scripts',
+      one: '1 script',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      projects,
+      locale: localeName,
+      other: '$projects projects',
+      one: '1 project',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      groups,
+      locale: localeName,
+      other: '$groups groups',
+      one: '1 group',
+    );
+    return 'Restored $_temp0, $_temp1, and $_temp2.';
+  }
+
+  @override
+  String get backupRestoreComplete =>
+      'Restore complete. Your library has been refreshed.';
+
+  @override
+  String get backupConnectionVerified => 'Connection verified.';
+
+  @override
+  String get backupProfileSaved => 'Connection saved.';
+
+  @override
+  String get backupCancelled => 'Operation cancelled.';
+
+  @override
+  String get backupRetry => 'Retry';
+
+  @override
+  String get backupRetryRecovery => 'Retry recovery';
+
+  @override
+  String get backupRecoveryRequired =>
+      'Recovery could not finish. Files and recovery data are preserved. Check available storage and retry.';
+
+  @override
+  String get backupErrorAuthentication =>
+      'Sign-in failed. Check your username and password in WebDAV settings.';
+
+  @override
+  String get backupErrorPermission =>
+      'Access denied. Check the folder permissions or choose another location.';
+
+  @override
+  String get backupErrorLocalPermission =>
+      'Access to the saved folder was lost. Choose the folder again, then retry export.';
+
+  @override
+  String get backupErrorInvalid =>
+      'This backup is damaged, unsafe, or uses an unsupported format. Choose another ZIP.';
+
+  @override
+  String get backupErrorVersion =>
+      'This backup version is not supported. Update the app before trying again.';
+
+  @override
+  String get backupErrorBusy =>
+      'Another operation is in progress. Wait for it to finish, or close the current restore preview.';
+
+  @override
+  String get backupErrorRunning =>
+      'Stop running scripts before backing up or restoring.';
+
+  @override
+  String get backupErrorNetwork =>
+      'Could not reach the server. Check your connection and server URL, then retry.';
+
+  @override
+  String get backupErrorStorage =>
+      'There is not enough free storage. Free some space and retry.';
+
+  @override
+  String get backupErrorLimit =>
+      'This archive exceeds the supported file count, size, or metadata limits. Use a smaller backup.';
+
+  @override
+  String get backupErrorConfiguration =>
+      'The saved connection could not be read or saved securely. Try again or enter the connection details again.';
+
+  @override
+  String get backupErrorSourceMissing =>
+      'A script or project file is missing. Refresh the backup contents or deselect the missing project, then try again.';
+
+  @override
+  String get backupErrorSourceChanged =>
+      'Files changed during backup. Stop editing or modifying files, then try again.';
+
+  @override
+  String get backupErrorGeneric =>
+      'The operation could not finish. Check your storage and connection, then retry.';
 }
