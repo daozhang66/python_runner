@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check source repository hygiene
+        run: |
+          python3 -m unittest discover -s test -p repository_hygiene_test.py
+          python3 scripts/check_repo_hygiene.py
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
