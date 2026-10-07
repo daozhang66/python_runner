@@ -113,10 +113,10 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
   final BoxConstraints? menuConstraints;
   @override
   Duration get transitionDuration =>
-      reduced ? Duration.zero : const Duration(milliseconds: 260);
+      reduced ? Duration.zero : const Duration(milliseconds: 160);
   @override
   Duration get reverseTransitionDuration =>
-      reduced ? Duration.zero : const Duration(milliseconds: 180);
+      reduced ? Duration.zero : const Duration(milliseconds: 120);
   @override
   bool get barrierDismissible => true;
   @override

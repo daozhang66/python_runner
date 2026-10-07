@@ -94,6 +94,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get disableAutoFollow => '关闭自动滚动';
 
   @override
+  String get terminalScrollToTop => '跳转到顶部';
+
+  @override
+  String get terminalScrollToBottom => '跳转到底部';
+
+  @override
+  String get terminalDisplayOptions => '输出选项';
+
+  @override
+  String get terminalAutoFollowOutput => '自动跟随输出';
+
+  @override
   String get exportLogs => '导出日志';
 
   @override
