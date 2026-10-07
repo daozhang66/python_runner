@@ -639,8 +639,11 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
       return;
     }
     // A capture is one picture and takes no layers, and it is painted afresh
-    // every time anyway.
-    if (context is ProxyWalkContext) {
+    // every time anyway. At presence zero (classic UI), use normal child
+    // painting too: Material route snapshots can otherwise leave this extra
+    // retained layer holding an ink frame after its animation has completed.
+    // There is no glass-only repaint to optimize while the surface is absent.
+    if (context is ProxyWalkContext || _presence <= 0) {
       context.paintChild(child, offset);
       return;
     }
@@ -955,6 +958,10 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
     final AtlasSlot? slot = frame?.slotForKey(this);
     if (frame == null || slot == null) {
       paintsWithoutProxy++;
+      // A newly visible surface has no atlas slot until the post-frame capture.
+      // Keep its tint and outline present on that first frame instead of
+      // briefly exposing bare page content through cards and button fills.
+      _paintFlat(context.canvas, offset, countPaint: false);
       return;
     }
     paintsWithProxy++;
@@ -1013,6 +1020,7 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
     final GlassProxyFrame? frame = _proxy?.frameFor(this);
     final AtlasSlot? slot = frame?.slotForKey(this);
     if (frame == null || slot == null) {
+      _paintFlat(canvas, offset, countPaint: false);
       return;
     }
     paintsIntoProxy++;
@@ -1058,9 +1066,9 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
     if (inset >= size.shortestSide / 2) {
       return;
     }
-    // A faded glass drawn whole until the program arrives would put a hard
-    // edge where the fade is, for the frames before it does: nothing instead.
+    // The flat finish already supports the fade mask while the shader loads.
     if (_fade != null) {
+      _paintFlat(canvas, offset, countPaint: false);
       return;
     }
     final Rect box = offset & size;
@@ -1091,6 +1099,9 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
         Paint()..filterQuality = FilterQuality.low,
       )
       ..restore();
+    // The unrefracted atlas alone has no material tint or outline. Preserve
+    // both until the shader arrives, including captures for nested controls.
+    _paintFlat(canvas, offset, countPaint: false);
   }
 
   /// Draws a rung that reads nothing: the same shape, the same rim, and the
@@ -1119,12 +1130,14 @@ class RenderGlassSurface extends RenderProxyBox implements GlassSurfaceGeometry 
   /// against a mix toward a colour that is 4.7x worse (D86–D88). At 0.79
   /// logical px it is narrower than a device pixel on every real screen, so
   /// what lands is a coverage fraction either way.
-  void _paintFlat(Canvas canvas, Offset offset) {
+  void _paintFlat(Canvas canvas, Offset offset, {bool countPaint = true}) {
     final GlassTier tier = effectiveTier;
-    if (tier == GlassTier.opaque) {
-      paintsOpaque++;
-    } else {
-      paintsCheap++;
+    if (countPaint) {
+      if (tier == GlassTier.opaque) {
+        paintsOpaque++;
+      } else {
+        paintsCheap++;
+      }
     }
     final GlassFinish finish = effectiveFinish;
     final double inset = presenceInset();

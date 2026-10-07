@@ -561,8 +561,8 @@ class ExecutionProvider extends ChangeNotifier {
       }
 
       if (isProject) {
-        throw StateError('Linux-like 运行时未就绪: ${health.message}\n\n'
-            '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
+        throw StateError('Debian 运行时未就绪: ${health.message}\n\n'
+            '项目脚本需要 Debian 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
 
       _logger.warn(
@@ -573,8 +573,8 @@ class ExecutionProvider extends ChangeNotifier {
       if (e is StateError) rethrow;
 
       if (isProject) {
-        throw StateError('Linux-like 运行时健康检查失败: $e\n\n'
-            '项目脚本需要 Linux-like 环境。请先安装运行时或在设置中切换到 Chaquopy。');
+        throw StateError('Debian 运行时健康检查失败: $e\n\n'
+            '项目脚本需要 Debian 环境。请先安装运行时或在设置中切换到 Chaquopy。');
       }
 
       _logger.warn(
@@ -773,7 +773,7 @@ class ExecutionProvider extends ChangeNotifier {
 
     try {
       if (preferredRuntimeBackendId != RuntimeManager.linuxLikeBackendId) {
-        throw StateError('项目只能在 Linux-like 引擎下运行，请先切换运行引擎');
+        throw StateError('项目只能在 Debian 引擎下运行，请先切换运行引擎');
       }
       if (_runtimeManagerLocked &&
           _runtimeManager.activeBackendId !=

@@ -4,6 +4,7 @@ import 'app_design_tokens.dart';
 import 'app_materials.dart';
 import 'app_visual_style.dart';
 import 'app_button_layer.dart';
+import '../utils/app_page_transitions.dart';
 
 /// Shared by the application and visual tests. The caller owns palette choice.
 abstract final class AppTheme {
@@ -64,6 +65,14 @@ abstract final class AppTheme {
     );
 
     return base.copyWith(
+      pageTransitionsTheme: liquid
+          ? PageTransitionsTheme(
+              builders: {
+                for (final platform in TargetPlatform.values)
+                  platform: const DirectPageTransitionsBuilder(),
+              },
+            )
+          : base.pageTransitionsTheme,
       extensions: [materials],
       textTheme: text,
       primaryTextTheme: _zeroTracking(base.primaryTextTheme),

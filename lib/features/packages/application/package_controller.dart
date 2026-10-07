@@ -346,7 +346,7 @@ class PackageController extends Notifier<PackageState> {
 
   Future<void> _installRequirements(RequirementsInstallRequest request) async {
     if (!state.supportsRequirementsInstall) {
-      _appendInstallLog('requirements.txt 仅支持 Linux-like');
+      _appendInstallLog('requirements.txt 仅支持 Debian');
       return;
     }
     final label = request.displayName.trim().isEmpty

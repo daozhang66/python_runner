@@ -12,7 +12,7 @@ import 'runtime_stdin_request.dart';
 
 class LinuxLikeBackend implements RuntimeBackend {
   static const backendId = 'linux_like';
-  static const unavailableMessage = 'Linux-like 运行环境未安装，当前执行仍会回退到 Chaquopy';
+  static const unavailableMessage = 'Debian 运行环境未安装，当前执行仍会回退到 Chaquopy';
 
   final NativeBridge? _bridge;
 
@@ -22,7 +22,7 @@ class LinuxLikeBackend implements RuntimeBackend {
   String get id => backendId;
 
   @override
-  String get name => 'Linux-like';
+  String get name => 'Debian';
 
   @override
   late final Stream<RuntimeOutput> outputStream = _bridge == null
@@ -190,13 +190,13 @@ class LinuxLikeBackend implements RuntimeBackend {
           await bridge.installLinuxLikeRuntime(manifestUrl: manifestUrl);
       return RuntimeHealth(
         ok: info['available'] == 'true',
-        message: info['message'] ?? 'Linux-like runtime installed',
+        message: info['message'] ?? 'Debian runtime installed',
         details: info,
       );
     } catch (e) {
       return RuntimeHealth(
         ok: false,
-        message: 'Linux-like运行环境安装失败: $e',
+        message: 'Debian运行环境安装失败: $e',
         details: const {
           'backend': backendId,
           'available': 'false',

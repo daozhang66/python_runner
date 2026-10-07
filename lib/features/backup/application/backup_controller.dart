@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../../models/script_file.dart';
 import '../../../models/script_group.dart';
 import '../../../services/database_service.dart';
 import '../../../services/workspace_access.dart';
@@ -40,12 +41,14 @@ class BackupController extends ChangeNotifier {
     required this.database,
     required this.native,
     required this.configStore,
+    required Future<List<String>> Function() listScriptFiles,
     WorkspaceAccess? workspaceAccess,
     WebDavClientFactory? webDavFactory,
     bool Function()? isExecutionRunning,
     Future<void> Function()? reloadWorkspace,
     Future<void> Function(Iterable<ScriptGroup> groups)? reloadRestoredProjects,
   }) : workspaceAccess = workspaceAccess ?? WorkspaceAccess.instance,
+       _listScriptFiles = listScriptFiles,
        _webDavFactory =
            webDavFactory ??
            ((config, password) =>
@@ -59,6 +62,7 @@ class BackupController extends ChangeNotifier {
   final BackupNativeBridge native;
   final BackupConfigStore configStore;
   final WorkspaceAccess workspaceAccess;
+  final Future<List<String>> Function() _listScriptFiles;
   final WebDavClientFactory _webDavFactory;
   final bool Function() _isExecutionRunning;
   final Future<void> Function() _reloadWorkspace;
@@ -67,6 +71,7 @@ class BackupController extends ChangeNotifier {
   BackupState _state = BackupState();
   BackupState get state => _state;
   _OperationContext? _active;
+  Timer? _savedNoticeTimer;
   bool _disposed = false;
   int _previewGeneration = 0;
   Future<void> _previewTail = Future.value();
@@ -161,6 +166,7 @@ class BackupController extends ChangeNotifier {
       return;
     }
     final op = _OperationContext(id ?? newBackupOperationId(), kind);
+    _savedNoticeTimer?.cancel();
     _active = op;
     _set(
       _state.copyWith(
@@ -198,6 +204,18 @@ class BackupController extends ChangeNotifier {
       if (identical(_active, op)) {
         _active = null;
         _set(_state.copyWith(operation: null));
+        final result = _state.lastResult;
+        if (!_disposed &&
+            _state.error == null &&
+            (result?.kind == BackupResultKind.exportedLocal ||
+                result?.kind == BackupResultKind.uploaded)) {
+          // Start after cleanup so slow exports still get a full visible notice.
+          _savedNoticeTimer = Timer(const Duration(seconds: 4), () {
+            if (!_disposed && identical(_state.lastResult, result)) {
+              _set(_state.copyWith(lastResult: null));
+            }
+          });
+        }
       }
     }
   }
@@ -217,9 +235,39 @@ class BackupController extends ChangeNotifier {
       (id) => snapshot.groups.any((g) => g.id == id),
     ),
   );
+  Future<BackupLibrarySnapshot> _readBackupLibrary() async {
+    final snapshot = await database.readBackupSnapshot();
+    // File-manager edits can leave metadata for scripts which no longer exist.
+    // Match the workspace's live inventory without deleting historical metadata
+    // or filtering the separate snapshots used for restore conflict planning.
+    final names = (await _listScriptFiles()).toSet();
+    final byName = {for (final script in snapshot.scripts) script.name: script};
+    var nextOrder = snapshot.scripts.fold<int>(
+      0,
+      (order, script) => script.sortOrder > order ? script.sortOrder : order,
+    );
+    final now = DateTime.now();
+    return BackupLibrarySnapshot(
+      scripts: [
+        ...snapshot.scripts.where((script) => names.contains(script.name)),
+        // Discover scripts renamed/imported through the file manager even if
+        // the workspace has not yet persisted metadata for their new names.
+        for (final name in names.where((name) => !byName.containsKey(name)))
+          ScriptFile(
+            name: name,
+            path: name,
+            createdAt: now,
+            modifiedAt: now,
+            sortOrder: ++nextOrder,
+          ),
+      ],
+      groups: snapshot.groups,
+    );
+  }
+
   Future<void> loadLibrary() async {
     try {
-      final snapshot = await database.readBackupSnapshot();
+      final snapshot = await _readBackupLibrary();
       if (_disposed) return;
       _set(
         _state.copyWith(
@@ -295,7 +343,7 @@ class BackupController extends ChangeNotifier {
         await native.acquireWorkspace(op.id);
         op.nativeReserved = true;
         try {
-          final snapshot = await database.readBackupSnapshot();
+          final snapshot = await _readBackupLibrary();
           final selection = _state.selectAll
               ? _all(snapshot)
               : _retain(_state.selection, snapshot);
@@ -787,6 +835,7 @@ class BackupController extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
+    _savedNoticeTimer?.cancel();
     unawaited(cancel());
     if (_active == null && _state.preview != null) {
       unawaited(

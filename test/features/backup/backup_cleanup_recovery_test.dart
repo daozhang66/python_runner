@@ -118,6 +118,7 @@ void main() {
     controller = BackupController(
       database: db,
       native: native,
+      listScriptFiles: native.listScriptFiles,
       workspaceAccess: gate,
       configStore: BackupConfigStore(
         preferences: await SharedPreferences.getInstance(),

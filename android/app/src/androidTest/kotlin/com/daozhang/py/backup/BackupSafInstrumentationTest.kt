@@ -9,12 +9,65 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BackupSafInstrumentationTest {
+    @Test
+    fun deviceCreatesArchiveFromChannelMetadataAndRestoresItsContents() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.filesDir, "backup_create_test_${UUID.randomUUID()}")
+        val script = File(root, "scripts/hello.py")
+        script.parentFile!!.mkdirs()
+        script.writeText("print('你好')")
+        try {
+            val metadata =
+                JSONObject(
+                    mapOf(
+                        "format" to "python_runner_backup",
+                        "version" to 1,
+                        "createdAt" to 1710000000123L,
+                        "scripts" to
+                            listOf(
+                                mapOf(
+                                    "name" to "hello.py",
+                                    "createdAt" to 1700000000000L,
+                                    "modifiedAt" to 1700000001000L,
+                                    "runCount" to 0,
+                                    "isPinned" to false,
+                                    "sortOrder" to 0,
+                                    "groupId" to null,
+                                    "homeSortOrder" to null,
+                                )
+                            ),
+                        "groups" to emptyList<Any>(),
+                    )
+                )
+            val archive = BackupArchive(root)
+            val created = archive.create("export", metadata, AtomicBoolean(false))
+            val file = archive.knownArchive("export", created.getString("path"))
+            val restored =
+                archive.stage("restore", file.inputStream(), file.name, AtomicBoolean(false))
+            assertFalse(restored.getBoolean("legacy"))
+            assertEquals(
+                "print('你好')",
+                File(archive.payload("restore"), "scripts/hello.py").readText(),
+            )
+            script.delete()
+            try {
+                archive.create("missing", metadata, AtomicBoolean(false))
+                fail("Stale metadata must not produce a silently incomplete archive")
+            } catch (e: BackupException) {
+                assertEquals("SOURCE_MISSING", e.code)
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     @Test
     fun missingPersistedGrantReturnsSpecificError() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

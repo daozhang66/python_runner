@@ -43,6 +43,8 @@ String backupFailureMessage(
   'LOCAL_DIRECTORY_REQUIRED' => l.backupFolderUnset,
   'WEBDAV_PROFILE_REQUIRED' => l.backupCloudUnset,
   'CONFIGURATION_UNAVAILABLE' => l.backupErrorConfiguration,
+  'SOURCE_MISSING' => l.backupErrorSourceMissing,
+  'SOURCE_CHANGED' => l.backupErrorSourceChanged,
   'NO_SPACE' => l.backupErrorStorage,
   'LIMIT_EXCEEDED' => l.backupErrorLimit,
   'WEBDAV_NETWORK' ||

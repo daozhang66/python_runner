@@ -155,7 +155,7 @@ void main() {
   });
 
   testWidgets(
-    'dialog uses native materialization and keeps its bounded width',
+    'dialog keeps a stable lightweight finish and bounded width',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -191,8 +191,15 @@ void main() {
             )
             .first,
       );
-      expect(surface.materialize, inExclusiveRange(0, 1));
+      expect(surface.materialize, 1);
+      final panel = find.descendant(
+        of: find.byType(AppAlertDialog),
+        matching: find.byType(glass.GlassSurface),
+      ).first;
+      expect(tester.renderObject<glass.RenderGlassSurface>(panel).effectiveTier,
+          glass.GlassTier.cheap);
       await tester.pumpAndSettle();
+      expect(tester.widget<glass.GlassSurface>(panel).materialize, surface.materialize);
       expect(
         tester.getSize(find.byType(glass.GlassSurface).last).width,
         lessThanOrEqualTo(560),

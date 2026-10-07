@@ -29,6 +29,7 @@ import 'project_restore_refresh_test.dart' show ProjectFiles;
 class FakeBackupNative extends BackupNativeBridge {
   FakeBackupNative(this.dir);
   final Directory dir;
+  bool inventoryUnavailable = false;
   final calls = <String>[];
   final pending = <String>[];
   String? failure;
@@ -43,6 +44,27 @@ class FakeBackupNative extends BackupNativeBridge {
   Future<void> Function()? onFinalize;
   Map<String, dynamic>? metadata;
   final progressEvents = StreamController<BackupProgress>.broadcast(sync: true);
+
+  Future<void> seedScriptFiles() async {
+    await Directory('${dir.path}/scripts').create(recursive: true);
+    for (final script in manifest.scripts) {
+      await File('${dir.path}/scripts/${script.name}')
+          .writeAsString('print(1)');
+    }
+  }
+
+  Future<List<String>> listScriptFiles() async {
+    if (inventoryUnavailable) {
+      throw const FileSystemException('inventory unavailable');
+    }
+    final root = Directory('${dir.path}/scripts');
+    if (!await root.exists()) return [];
+    return (await root.list().toList())
+        .whereType<File>()
+        .map((file) => file.uri.pathSegments.last)
+        .toList();
+  }
+
   @override
   Stream<BackupProgress> get progress => progressEvents.stream;
   void check(String call) {
@@ -95,6 +117,11 @@ class FakeBackupNative extends BackupNativeBridge {
     expect(owner, true);
     reservation = id;
     metadata = value;
+    for (final script in value['scripts'] as List) {
+      if (!await File('${dir.path}/scripts/${script['name']}').exists()) {
+        throw PlatformException(code: 'SOURCE_MISSING');
+      }
+    }
     final selected = BackupSelection(
       scriptNames: (value['scripts'] as List).map((s) => s['name'] as String),
       groupIds: (value['groups'] as List).map((g) => g['id'] as int),
@@ -277,6 +304,7 @@ void main() {
       database: db,
       native: native,
       configStore: config,
+      listScriptFiles: native.listScriptFiles,
       workspaceAccess: gate,
       webDavFactory: (_, _) => dav,
       isExecutionRunning: () => running,
@@ -296,12 +324,155 @@ void main() {
     await dir.delete(recursive: true);
   });
   Future<void> seed() async {
+    await native.seedScriptFiles();
     for (final group in native.manifest.groups) {
       await db.createGroup(group);
     }
     for (final script in native.manifest.scripts) {
       await db.upsertScript(script);
     }
+  }
+
+  test(
+    'backup library excludes deleted script rows without deleting metadata',
+    () async {
+      await seed();
+      final missing = localScript('deleted.py', groupId: 81);
+      await db.upsertScript(missing);
+
+      await controller.loadLibrary();
+
+      expect(controller.state.error, isNull);
+      expect(
+        controller.state.library!.scripts.map((s) => s.name),
+        unorderedEquals(['alone.py', '你好.py']),
+      );
+      expect(
+        controller.state.selection.scriptNames,
+        isNot(contains('deleted.py')),
+      );
+      expect(controller.state.library!.groups, hasLength(3));
+      expect((await db.getScript('deleted.py'))!.toMap(), missing.toMap());
+    },
+  );
+
+  for (final cloud in [false, true]) {
+    test(
+      '${cloud ? 'cloud' : 'local'} backup includes renamed files before workspace reload',
+      () async {
+        await seed();
+        await controller.loadLibrary();
+        await File('${dir.path}/scripts/alone.py')
+            .rename('${dir.path}/scripts/renamed.py');
+        // The archive boundary knows the actual payload, while SQLite retains
+        // the old name until the workspace is next loaded.
+        final manifestJson = native.manifest.toJson();
+        (manifestJson['scripts'] as List).firstWhere(
+          (s) => s['name'] == 'alone.py',
+        )['name'] = 'renamed.py';
+        (manifestJson['files'] as List).firstWhere(
+          (f) => f['path'] == 'scripts/alone.py',
+        )['path'] = 'scripts/renamed.py';
+        native.manifest = BackupManifest.fromJson(manifestJson);
+        if (cloud) {
+          await controller.saveWebDavProfile(dav.config, password: 'unused');
+          await controller.backupWebDav();
+        } else {
+          await controller.chooseLocalDirectory();
+          await controller.exportLocal();
+        }
+        expect(controller.state.error, isNull);
+        expect(
+          controller.state.lastResult?.kind,
+          cloud ? BackupResultKind.uploaded : BackupResultKind.exportedLocal,
+        );
+        expect(
+          (native.metadata!['scripts'] as List).map((s) => s['name']),
+          unorderedEquals(['你好.py', 'renamed.py']),
+        );
+        expect(
+          (native.metadata!['scripts'] as List).firstWhere(
+            (s) => s['name'] == '你好.py',
+          )['runCount'],
+          12,
+        );
+        expect(await db.getScript('alone.py'), isNotNull);
+        expect(await db.getScript('renamed.py'), isNull);
+      },
+    );
+
+    test(
+      '${cloud ? 'cloud' : 'local'} backup refreshes files after selection and aborts on inventory failure',
+      () async {
+        await seed();
+        await controller.loadLibrary();
+        await File('${dir.path}/scripts/alone.py').delete();
+        if (cloud) {
+          await controller.saveWebDavProfile(dav.config, password: 'unused');
+        } else {
+          await controller.chooseLocalDirectory();
+        }
+        native.inventoryUnavailable = true;
+        if (cloud) {
+          await controller.backupWebDav();
+        } else {
+          await controller.exportLocal();
+        }
+        expect(controller.state.error, isNotNull);
+        expect(controller.state.lastResult, isNull);
+        expect(native.metadata, isNull);
+        expect(dav.calls, isEmpty);
+        expect(native.owner, false);
+        expect(native.reservation, isNull);
+
+        native.inventoryUnavailable = false;
+        if (cloud) {
+          await controller.backupWebDav();
+        } else {
+          await controller.exportLocal();
+        }
+        expect(controller.state.error, isNull);
+        expect(
+          controller.state.lastResult?.kind,
+          cloud ? BackupResultKind.uploaded : BackupResultKind.exportedLocal,
+        );
+        expect((native.metadata!['scripts'] as List).map((s) => s['name']), [
+          '你好.py',
+        ]);
+        expect(await db.getScript('alone.py'), isNotNull);
+      },
+    );
+
+    test(
+      '${cloud ? 'cloud' : 'local'} backup ignores stale rows in a selected group',
+      () async {
+        await seed();
+        await controller.loadLibrary();
+        // File-manager deletion/rename leaves metadata behind, even after the
+        // workspace stops displaying the old script. Refresh at execution time.
+        await db.upsertScript(localScript('deleted.py', groupId: 81));
+        controller.selectLibrary(BackupSelection(groupIds: {81}));
+        if (cloud) {
+          await controller.saveWebDavProfile(dav.config, password: 'unused');
+          await controller.backupWebDav();
+        } else {
+          await controller.chooseLocalDirectory();
+          await controller.exportLocal();
+        }
+
+        expect(controller.state.error, isNull);
+        expect(
+          controller.state.lastResult?.kind,
+          cloud ? BackupResultKind.uploaded : BackupResultKind.exportedLocal,
+        );
+        expect((native.metadata!['scripts'] as List).map((s) => s['name']), [
+          '你好.py',
+        ]);
+        expect(await db.getScript('deleted.py'), isNotNull);
+        expect(native.owner, false);
+        expect(native.reservation, isNull);
+      },
+    );
   }
 
   Future<void> cloudProfile() =>

@@ -44,6 +44,7 @@ void main() {
       }
     });
     f.controller = BackupController(
+      listScriptFiles: f.native.listScriptFiles,
       database: f.db,
       native: BackupNativeBridge(channel: channel, events: events),
       configStore: f.store,

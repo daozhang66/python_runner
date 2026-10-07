@@ -695,7 +695,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             extendBody: true,
             body: SafeArea(
               bottom: false,
-              child: _buildPageStack(animate: true),
+              child: _buildPageStack(),
             ),
             bottomNavigationBar:
                 ref.watch(

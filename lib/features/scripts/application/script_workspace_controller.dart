@@ -149,6 +149,116 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
     );
   }
 
+  Future<void> _insertHomeItemsAtFront(
+    List<ScriptFile> candidateScripts,
+    List<ScriptGroup> candidateGroups,
+    List<ScriptHomeItem> additions,
+  ) async {
+    final keys = additions.map((item) => item.key).toSet();
+    // Capture the visible order before adding slots: legacy home ordering and
+    // explicit home ranks can coexist, and script slots follow script ranks.
+    final existing = ScriptHomeItem.ordered(
+      candidateScripts.where((s) => !keys.contains(s.name)),
+      candidateGroups.where((g) => !keys.contains('group:${g.id}')),
+    );
+    final items = [
+      ...existing.where((item) => item.isPinned),
+      ...additions,
+      ...existing.where((item) => !item.isPinned),
+    ];
+    final scriptUpdates = <ScriptFile>[];
+    final groupUpdates = <ScriptGroup>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.script case final script?) {
+        scriptUpdates.add(script.copyWith(
+          sortOrder: scriptUpdates.length,
+          homeSortOrder: i,
+        ));
+      } else {
+        groupUpdates.add(item.group!.copyWith(
+          sortOrder: groupUpdates.length,
+          homeSortOrder: i,
+        ));
+      }
+    }
+    await _repository.batchUpdateHomeSortOrders(scriptUpdates, groupUpdates);
+    final scriptsByName = {
+      for (final script in scriptUpdates) script.name: script,
+    };
+    final groupsById = {for (final group in groupUpdates) group.id: group};
+    for (var i = 0; i < candidateScripts.length; i++) {
+      candidateScripts[i] =
+          scriptsByName[candidateScripts[i].name] ?? candidateScripts[i];
+    }
+    for (var i = 0; i < candidateGroups.length; i++) {
+      candidateGroups[i] =
+          groupsById[candidateGroups[i].id] ?? candidateGroups[i];
+    }
+  }
+
+  Future<void> _addScriptAtFront(ScriptFile script) async {
+    script = script.copyWith(
+        sortOrder: _maxSortOrderForGroup(script.groupId) + 1);
+    final candidateScripts = [..._scripts, script];
+    final candidateGroups = List<ScriptGroup>.of(_groups);
+    await _repository.upsertScript(script);
+    try {
+      if (script.groupId == null) {
+        await _insertHomeItemsAtFront(candidateScripts, candidateGroups,
+            [ScriptHomeItem.script(script)]);
+      } else {
+        final updates = _promoteScriptToFrontInGroup(candidateScripts, script);
+        await _repository.batchUpdateSortOrders(updates);
+      }
+    } catch (e, stackTrace) {
+      // Creation already committed. Keep that success and its persisted ranks
+      // rather than reporting a failure that invites destructive caller cleanup.
+      candidateScripts
+        ..clear()
+        ..addAll([..._scripts, script]);
+      _logger.error('新脚本排序失败: $e',
+          source: 'ScriptWorkspace', detail: stackTrace.toString());
+    }
+    _scripts
+      ..clear()
+      ..addAll(candidateScripts);
+    _groups
+      ..clear()
+      ..addAll(candidateGroups);
+    _sortScripts();
+    _sortGroups();
+    _commit();
+  }
+
+  Future<ScriptGroup> _addGroupAtFront(ScriptGroup draft) async {
+    draft = draft.copyWith(sortOrder: _groups.fold<int>(
+        0, (max, group) => group.sortOrder > max ? group.sortOrder : max) + 1);
+    final id = await _repository.createGroup(draft);
+    final group = draft.copyWith(id: id);
+    final candidateScripts = List<ScriptFile>.of(_scripts);
+    final candidateGroups = [..._groups, group];
+    try {
+      await _insertHomeItemsAtFront(candidateScripts, candidateGroups,
+          [ScriptHomeItem.group(group)]);
+    } catch (e, stackTrace) {
+      // A project caller deletes its directory on a failed creation result.
+      // The row exists, so return it even if the optional reorder failed.
+      _logger.error('新分组排序失败: $e',
+          source: 'ScriptWorkspace', detail: stackTrace.toString());
+    }
+    _scripts
+      ..clear()
+      ..addAll(candidateScripts);
+    _groups
+      ..clear()
+      ..addAll(candidateGroups);
+    _sortScripts();
+    _sortGroups();
+    _commit();
+    return _groups.firstWhere((item) => item.id == id);
+  }
+
   void _commit({
     bool scriptsChanged = true,
     bool groupsChanged = true,
@@ -234,23 +344,35 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
 
         final candidateScripts = <ScriptFile>[];
         final now = DateTime.now();
-        int maxOrder = dbScripts.fold<int>(
-            0, (max, s) => s.sortOrder > max ? s.sortOrder : max);
+        final discovered = <ScriptHomeItem>[];
         for (final name in names) {
           if (dbMap.containsKey(name)) {
             candidateScripts.add(dbMap[name]!);
           } else {
-            maxOrder++;
             final script = ScriptFile(
               name: name,
               path: name,
               createdAt: now,
               modifiedAt: now,
-              sortOrder: maxOrder,
+              sortOrder: 0,
             );
             await _repository.upsertScript(script);
             candidateScripts.add(script);
+            discovered.add(ScriptHomeItem.script(script));
           }
+        }
+        // Only prune after the complete native inventory and metadata reads
+        // succeeded. A failed/unavailable directory must not look empty.
+        final liveNames = names.toSet();
+        for (final script in dbScripts) {
+          if (!liveNames.contains(script.name)) {
+            await _repository.deleteScript(script.name);
+          }
+        }
+        if (discovered.isNotEmpty) {
+          await _insertHomeItemsAtFront(
+              candidateScripts, candidateGroups, discovered);
+          candidateGroups.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         }
         _sortScriptList(candidateScripts);
         _groups
@@ -284,19 +406,15 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
         final path =
             await _repository.createScriptFile(safeName, content: content);
         final now = DateTime.now();
-        final maxOrder = _maxSortOrderForGroup(groupId);
         final script = ScriptFile(
           name: safeName,
           path: path,
           createdAt: now,
           modifiedAt: now,
-          sortOrder: maxOrder + 1,
+          sortOrder: 0,
           groupId: groupId,
         );
-        await _repository.upsertScript(script);
-        _scripts.add(script);
-        _sortScripts();
-        _commit();
+        await _addScriptAtFront(script);
         return true;
       } catch (e, stackTrace) {
         _logger.error(
@@ -313,7 +431,7 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
     return _enqueue(() async {
       try {
         final safeName = ScriptNameValidator.normalize(name);
-        await _repository.deleteScriptFile(safeName);
+        if (!await _repository.deleteScriptFile(safeName)) return false;
         await _repository.deleteScript(safeName);
         _scripts.removeWhere((s) => s.name == safeName);
         _commit();
@@ -334,8 +452,20 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
       try {
         final safeOldName = ScriptNameValidator.normalize(oldName);
         final safeNewName = ScriptNameValidator.normalize(newName);
-        await _repository.renameScriptFile(safeOldName, safeNewName);
-        await _repository.renameScript(safeOldName, safeNewName, safeNewName);
+        if (!await _repository.renameScriptFile(safeOldName, safeNewName)) return false;
+        try {
+          await _repository.renameScript(safeOldName, safeNewName, safeNewName);
+        } catch (_) {
+          try {
+            if (!await _repository.renameScriptFile(safeNewName, safeOldName)) {
+              throw StateError('Could not restore the original script name');
+            }
+          } catch (rollbackError, stackTrace) {
+            _logger.error('回退脚本重命名失败: $rollbackError',
+                source: 'ScriptWorkspace', detail: stackTrace.toString());
+          }
+          rethrow;
+        }
         final idx = _scripts.indexWhere((s) => s.name == safeOldName);
         if (idx >= 0) {
           _scripts[idx] = _scripts[idx].copyWith(
@@ -418,19 +548,15 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
         final safeName = ScriptNameValidator.normalize(name);
         final path = await _repository.importScriptFromUri(uri, safeName);
         final now = DateTime.now();
-        final maxOrder = _maxSortOrderForGroup(groupId);
         final script = ScriptFile(
           name: safeName,
           path: path,
           createdAt: now,
           modifiedAt: now,
-          sortOrder: maxOrder + 1,
+          sortOrder: 0,
           groupId: groupId,
         );
-        await _repository.upsertScript(script);
-        _scripts.add(script);
-        _sortScripts();
-        _commit();
+        await _addScriptAtFront(script);
         return path;
       } catch (e, stackTrace) {
         _logger.error(
@@ -527,18 +653,13 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
 
       try {
         final now = DateTime.now();
-        final maxOrder = _groups.fold<int>(
-            0, (max, group) => group.sortOrder > max ? group.sortOrder : max);
         final draft = ScriptGroup(
           name: trimmedName,
-          sortOrder: maxOrder + 1,
+          sortOrder: 0,
           createdAt: now,
           modifiedAt: now,
         );
-        final id = await _repository.createGroup(draft);
-        _groups.add(draft.copyWith(id: id));
-        _sortGroups();
-        _commit(scriptsChanged: false);
+        await _addGroupAtFront(draft);
         return true;
       } catch (e, stackTrace) {
         _logger.error(
@@ -571,23 +692,16 @@ class ScriptWorkspaceController extends Notifier<ScriptWorkspaceState> {
             ? null
             : ProjectPathValidator.validateMainFilePath(mainFilePath);
         final now = DateTime.now();
-        final maxOrder = _groups.fold<int>(
-            0, (max, group) => group.sortOrder > max ? group.sortOrder : max);
         final draft = ScriptGroup(
           name: trimmedName,
-          sortOrder: maxOrder + 1,
+          sortOrder: 0,
           createdAt: now,
           modifiedAt: now,
           projectKey: safeProjectKey,
           mainFilePath: safeMainFilePath,
           isProject: true,
         );
-        final id = await _repository.createGroup(draft);
-        final group = draft.copyWith(id: id);
-        _groups.add(group);
-        _sortGroups();
-        _commit(scriptsChanged: false);
-        return group;
+        return await _addGroupAtFront(draft);
       } catch (e, stackTrace) {
         _logger.error(
           '创建项目分组失败: $e',

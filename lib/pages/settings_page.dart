@@ -1,12 +1,14 @@
 import '../ui/app_materials.dart';
+
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+
 import '../services/native_bridge.dart';
 import '../services/app_logger.dart';
 import '../services/app_update_manager.dart';
@@ -35,10 +37,7 @@ part 'settings_widgets.dart';
 class SettingsPage extends ConsumerStatefulWidget {
   final ThemeMode currentThemeMode;
 
-  const SettingsPage({
-    super.key,
-    required this.currentThemeMode,
-  });
+  const SettingsPage({super.key, required this.currentThemeMode});
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -82,27 +81,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
           SliverList(
-            delegate: SliverChildListDelegate([
-              _buildAppearanceSection(),
-              _buildRuntimeSection(),
-              _buildBackupSection(),
-              _buildNetworkDebugSection(),
-              _buildMcpSection(),
-              _buildDiagnosticsSection(),
-              _buildAboutSection(),
-            ]
-                .map((section) => Align(
+            delegate: SliverChildListDelegate(
+              [
+                    _buildAppearanceSection(),
+                    _buildScriptStorageSection(),
+                    _buildRuntimeSection(),
+                    _buildNetworkDebugSection(),
+                    _buildDiagnosticsSection(),
+                    _buildAboutSection(),
+                  ]
+                  .map(
+                    (section) => Align(
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 760),
                         child: section,
                       ),
-                    ))
-                .toList()),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
           SliverToBoxAdapter(
-              child:
-                  SizedBox(height: 8 + MediaQuery.paddingOf(context).bottom)),
+            child: SizedBox(height: 8 + MediaQuery.paddingOf(context).bottom),
+          ),
         ],
       ),
     );
@@ -110,45 +112,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   // ── Section builders ──
 
-  Widget _buildBackupSection() {
+  Widget _buildBackupTile() {
     final l10n = AppLocalizations.of(context)!;
-    return AppSettingsSection(
-      icon: Icons.backup_outlined,
-      title: l10n.backupTitle,
-      framed: true,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.backup_outlined),
-          title: Text(l10n.backupTitle),
-          subtitle: Text(l10n.backupDescription),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const BackupRestorePage()),
-          ),
-        ),
-      ],
+    return ListTile(
+      leading: const Icon(Icons.backup_outlined),
+      title: Text(l10n.backupTitle),
+      subtitle: Text(l10n.backupDescription),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BackupRestorePage()),
+      ),
     );
   }
 
-  /// AI / MCP 服务入口（计划 §11）。
-  Widget _buildMcpSection() {
+  Widget _buildMcpTile() {
     final l10n = AppLocalizations.of(context)!;
-    return _SectionCard(
-      icon: Icons.smart_toy_outlined,
-      title: l10n.mcpSectionTitle,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.smart_toy_outlined),
-          title: Text(l10n.mcpSectionTitle),
-          subtitle: Text(l10n.mcpSectionDescription),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const McpSettingsPage()),
-          ),
-        ),
-      ],
+    return ListTile(
+      leading: const Icon(Icons.smart_toy_outlined),
+      title: Text(l10n.mcpSectionTitle),
+      subtitle: Text(l10n.mcpSectionDescription),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const McpSettingsPage()),
+      ),
     );
   }
 

@@ -54,7 +54,7 @@ class RuntimeManager {
   static String backendDisplayName(String backendId) {
     switch (normalizePreferredBackendId(backendId)) {
       case linuxLikeBackendId:
-        return 'Linux-like';
+        return 'Debian';
       case chaquopyBackendId:
       default:
         return 'Chaquopy';
@@ -68,7 +68,7 @@ class RuntimeManager {
   static String backendStatusMessage(String backendId) {
     switch (normalizePreferredBackendId(backendId)) {
       case linuxLikeBackendId:
-        return 'Linux-like 开发版已接入；首次使用请先安装运行环境';
+        return 'Debian 开发版已接入；首次使用请先安装运行环境';
       case chaquopyBackendId:
       default:
         return 'Chaquopy 当前可用，适合轻量和稳定脚本执行';

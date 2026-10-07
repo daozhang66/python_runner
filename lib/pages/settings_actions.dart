@@ -48,7 +48,7 @@ extension _SettingsActions on _SettingsPageState {
       return available;
     } catch (error, stackTrace) {
       AppLogger.instance.warn(
-        '读取 Linux-like 运行环境状态失败: $error',
+        '读取 Debian 运行环境状态失败: $error',
         source: 'Settings',
         detail: stackTrace.toString(),
       );
@@ -413,38 +413,6 @@ extension _SettingsActions on _SettingsPageState {
         context,
         MaterialPageRoute(
             builder: (_) => _SystemLogViewPage(logContent: logContent)));
-  }
-
-  Future<void> _exportSystemLogs() async {
-    try {
-      final content = await AppLogger.instance.exportAll();
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final prefs = await SharedPreferences.getInstance();
-      final workingDir = (prefs.getString('working_dir') ?? '').trim();
-      final logExportDir = workingDir.isEmpty ? null : workingDir;
-      final path = await _bridge.exportLog(
-        content,
-        fileName: 'python_runner_logs_$timestamp.txt',
-        destDir: logExportDir,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text(AppLocalizations.of(context)!.fullLogsExportedTo(path)),
-              duration: const Duration(seconds: 3)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.exportFailed),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   void _openAboutPage() {

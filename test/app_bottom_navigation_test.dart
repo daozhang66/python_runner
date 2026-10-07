@@ -527,8 +527,8 @@ void main() {
     await _pumpNavigation(tester);
     final surface = find.byKey(const ValueKey('navigation-surface'));
     final material = tester.widget<Material>(surface);
-    final colors = Theme.of(tester.element(surface)).colorScheme;
-    expect(material.color, colors.surfaceContainer.withValues(alpha: 0.62));
+    expect(material.color!.a, inExclusiveRange(0, 1),
+        reason: 'The floating glass must keep sampling the page behind it');
     expect(material.shape, isA<StadiumBorder>());
     final indicatorDecoration = tester
         .widget<DecoratedBox>(
@@ -543,6 +543,40 @@ void main() {
     expect(tester.getSize(_indicator).width,
         closeTo((tester.getSize(surface).width - 12) / 4 - 4, 0.01));
   });
+
+  for (final seed in [Colors.blue, Colors.green, Colors.orange]) {
+    testWidgets('light glass separates from a pale page: $seed', (tester) async {
+      await _pumpNavigation(tester, seedColor: seed);
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const ValueKey('navigation-capture')));
+      final item = tester.getRect(_item(1));
+      // Unselected empty space avoids measuring an icon or selected fill.
+      final point = boundary.globalToLocal(
+          Offset(item.left + item.width * 0.23, item.center.dy));
+      final contrast = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        try {
+          final bytes =
+              (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+          Color pixel(int x, int y) {
+            final i = (y * image.width + x) * 4;
+            return Color.fromARGB(bytes.getUint8(i + 3), bytes.getUint8(i),
+                bytes.getUint8(i + 1), bytes.getUint8(i + 2));
+          }
+
+          final page = pixel(4, 4).computeLuminance();
+          final track =
+              pixel(point.dx.floor(), point.dy.floor()).computeLuminance();
+          return (page + 0.05) / (track + 0.05);
+        } finally {
+          image.dispose();
+        }
+      });
+      expect(contrast, inInclusiveRange(1.16, 1.5),
+          reason: 'Pale glass needs a visible tonal step without a heavy fill');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('zero-width startup viewport recovers without a layout exception',
       (tester) async {
@@ -974,6 +1008,7 @@ Future<void> _withShadows(Future<void> Function() run) async {
 Future<List<int>> _pumpNavigation(
   WidgetTester tester, {
   Brightness brightness = Brightness.light,
+  Color seedColor = Colors.blue,
   Locale locale = const Locale('zh'),
   double width = 390,
   double textScale = 1,
@@ -994,7 +1029,7 @@ Future<List<int>> _pumpNavigation(
       useMaterial3: true,
       fontFamily: 'MiSans',
       colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue,
+        seedColor: seedColor,
         brightness: brightness,
       ),
     ),

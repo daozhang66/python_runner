@@ -179,19 +179,19 @@ class LinuxLikeRuntimeManager(private val context: Context) {
             dynamicLoaderFile.canExecute() &&
             guestLoaderAliasFile.canExecute()
         val message = when {
-            available -> "Linux-like runtime ready"
-            !prootFile.exists() -> "Linux-like proot missing"
-            !prootFile.canExecute() -> "Linux-like proot is not executable"
-            !prootLoaderFile.exists() -> "Linux-like proot loader missing"
-            !prootLoaderFile.canExecute() -> "Linux-like proot loader is not executable"
-            !dynamicLoaderFile.exists() -> "Linux-like dynamic loader missing"
-            !dynamicLoaderFile.canExecute() -> "Linux-like dynamic loader is not executable"
-            !guestLoaderAliasFile.exists() -> "Linux-like guest loader alias missing"
-            !guestLoaderAliasFile.canExecute() -> "Linux-like guest loader alias is not executable"
-            !pythonBinaryFile.exists() -> "Linux-like python binary missing"
-            !pythonBinaryFile.canExecute() -> "Linux-like python binary is not executable"
-            !installed -> "Linux-like runtime not installed"
-            else -> "Linux-like runtime incomplete"
+            available -> "Debian runtime ready"
+            !prootFile.exists() -> "Debian proot missing"
+            !prootFile.canExecute() -> "Debian proot is not executable"
+            !prootLoaderFile.exists() -> "Debian proot loader missing"
+            !prootLoaderFile.canExecute() -> "Debian proot loader is not executable"
+            !dynamicLoaderFile.exists() -> "Debian dynamic loader missing"
+            !dynamicLoaderFile.canExecute() -> "Debian dynamic loader is not executable"
+            !guestLoaderAliasFile.exists() -> "Debian guest loader alias missing"
+            !guestLoaderAliasFile.canExecute() -> "Debian guest loader alias is not executable"
+            !pythonBinaryFile.exists() -> "Debian python binary missing"
+            !pythonBinaryFile.canExecute() -> "Debian python binary is not executable"
+            !installed -> "Debian runtime not installed"
+            else -> "Debian runtime incomplete"
         }
 
         return mutableMapOf(
@@ -286,7 +286,7 @@ class LinuxLikeRuntimeManager(private val context: Context) {
 
             getInfo().toMutableMap().apply {
                 this["installedFrom"] = selectedManifestUrl
-                this["message"] = this["message"] ?: "Linux-like runtime installed"
+                this["message"] = this["message"] ?: "Debian runtime installed"
             }
         } finally {
             cleanupDownloadedArchive()

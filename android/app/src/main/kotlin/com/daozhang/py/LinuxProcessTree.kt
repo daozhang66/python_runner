@@ -33,7 +33,7 @@ internal object LinuxProcessTree {
             try {
                 process.destroy()
             } catch (error: Exception) {
-                onFailure("Terminate Linux-like root process", error)
+                onFailure("Terminate Debian root process", error)
             }
             Thread.sleep(GRACEFUL_STOP_MS)
         }
@@ -43,7 +43,7 @@ internal object LinuxProcessTree {
             try {
                 process.destroyForcibly()
             } catch (error: Exception) {
-                onFailure("Force terminate Linux-like root process", error)
+                onFailure("Force terminate Debian root process", error)
             }
         }
     }
@@ -59,7 +59,7 @@ internal object LinuxProcessTree {
             field.isAccessible = true
             field.getInt(process)
         } catch (error: Throwable) {
-            onFailure("Read Linux-like process PID", error)
+            onFailure("Read Debian process PID", error)
             null
         }
     }

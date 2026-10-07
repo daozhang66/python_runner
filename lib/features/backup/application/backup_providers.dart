@@ -8,6 +8,7 @@ import '../../files/domain/file_manager_location.dart';
 import '../../mcp/application/mcp_server_controller.dart'
     show mcpExecutionOwnerProvider;
 import '../../scripts/application/script_workspace_controller.dart';
+import '../../scripts/application/script_repository.dart';
 import '../infrastructure/backup_config_store.dart';
 import '../infrastructure/backup_native_bridge.dart';
 import '../infrastructure/webdav_client.dart';
@@ -55,6 +56,7 @@ final backupControllerProvider = ChangeNotifierProvider<BackupController>((
     database: database,
     native: ref.watch(backupNativeBridgeProvider),
     configStore: ref.watch(backupConfigStoreProvider),
+    listScriptFiles: ref.watch(scriptRepositoryProvider).listScriptFiles,
     workspaceAccess: ref.watch(workspaceAccessProvider),
     webDavFactory: ref.watch(backupWebDavFactoryProvider),
     isExecutionRunning: () => ref.read(mcpExecutionOwnerProvider).isRunning,

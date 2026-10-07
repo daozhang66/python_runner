@@ -133,6 +133,33 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         selected == null ||
         (selected.scripts.isEmpty && selected.groups.isEmpty);
     final available = !s.busy && s.preview == null;
+    Widget destination(String title, String subtitle, Widget button) =>
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final inline =
+                constraints.maxWidth >=
+                MediaQuery.textScalerOf(context).scale(240);
+            final tile = ListTile(
+              title: Text(title),
+              subtitle: Text(subtitle),
+              trailing: inline ? button : null,
+            );
+            return inline
+                ? tile
+                : Column(
+                    children: [
+                      tile,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: button,
+                        ),
+                      ),
+                    ],
+                  );
+          },
+        );
     Widget action(
       String key,
       IconData icon,
@@ -225,40 +252,26 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           title: l.backupDestinations,
           icon: Icons.folder_outlined,
           children: [
-            ListTile(
-              title: Text(l.backupLocalFolder),
-              subtitle: Text(s.localDirectory?.name ?? l.backupFolderUnset),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  key: const ValueKey('backup-change-folder'),
-                  onPressed: s.busy
-                      ? null
-                      : () => _run(controller.chooseLocalDirectory),
-                  child: Text(l.backupChange),
-                ),
+            destination(
+              l.backupLocalFolder,
+              s.localDirectory?.name ?? l.backupFolderUnset,
+              TextButton(
+                key: const ValueKey('backup-change-folder'),
+                onPressed: s.busy
+                    ? null
+                    : () => _run(controller.chooseLocalDirectory),
+                child: Text(l.backupChange),
               ),
             ),
-            ListTile(
-              title: const Text('WebDAV'),
-              subtitle: Text(
-                s.profile == null
-                    ? l.backupCloudUnset
-                    : '${s.profile!.baseUri.host}${s.profile!.folderUri.path}',
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  key: const ValueKey('backup-configure'),
-                  onPressed: s.busy ? null : _configure,
-                  child: Text(s.profile == null ? l.backupConfigure : l.edit),
-                ),
+            destination(
+              'WebDAV',
+              s.profile == null
+                  ? l.backupCloudUnset
+                  : '${s.profile!.baseUri.host}${s.profile!.folderUri.path}',
+              TextButton(
+                key: const ValueKey('backup-configure'),
+                onPressed: s.busy ? null : _configure,
+                child: Text(s.profile == null ? l.backupConfigure : l.edit),
               ),
             ),
           ],

@@ -33,6 +33,7 @@ void main() {
           backupControllerProvider.overrideWith((ref) {
             if (constructions++ > 0) {
               f.controller = BackupController(
+                listScriptFiles: f.native.listScriptFiles,
                 database: f.db,
                 native: f.native,
                 configStore: f.store,

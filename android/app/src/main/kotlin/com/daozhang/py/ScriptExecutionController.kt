@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -332,7 +333,7 @@ class ScriptExecutionController(
         val stopRequested = AtomicBoolean(false)
         val info = linuxLikeRuntimeManager.getInfo()
         if (info["available"] != "true") {
-            result.error("1017", info["message"] ?: "Linux-like runtime unavailable", null)
+            result.error("1017", info["message"] ?: "Debian runtime unavailable", null)
             return
         }
 
@@ -346,7 +347,7 @@ class ScriptExecutionController(
             try {
                 oldProcess.waitFor(LINUX_LIKE_GRACEFUL_STOP_MS, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
-                reportFailure("等待上一轮 Linux-like 进程退出", e, oldExecutionId)
+                reportFailure("等待上一轮 Debian 进程退出", e, oldExecutionId)
             }
         }
 
@@ -464,9 +465,9 @@ class ScriptExecutionController(
                 }
 
                 val stdoutCapture =
-                    collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId)
+                    collectProcessOutput(process.inputStream, "stdout", stdout, true, executionId, stopRequested)
                 val stderrCapture =
-                    collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId)
+                    collectProcessOutput(process.errorStream, "stderr", stderr, true, executionId, stopRequested)
 
                 if (timeoutSeconds > 0) {
                     val watchdogThread = Thread {
@@ -511,12 +512,12 @@ class ScriptExecutionController(
                     }
                     writeScriptErrorLog(
                         executionTarget.displayName,
-                        "Linux-like process exited with code $exitCode",
+                        "Debian process exited with code $exitCode",
                         "stdout:\n${stdout.tail(4000)}\n\nstderr:\n${stderr.tail(4000)}"
                     )
                 }
             } catch (e: Throwable) {
-                sendLog("stderr", "Linux-like执行错误: ${e.message}", executionId)
+                sendLog("stderr", "Debian执行错误: ${e.message}", executionId)
                 status = if (stopRequested.get()) "stopped" else "error"
                 exitCode = 1
                 writeScriptErrorLog(executionTarget.displayName, e.message ?: "Unknown error", e.stackTrace.joinToString("\n"))
@@ -542,7 +543,7 @@ class ScriptExecutionController(
                 try {
                     linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
                 } catch (e: Exception) {
-                    reportFailure("清理 Linux-like 临时目录", e, executionId)
+                    reportFailure("清理 Debian 临时目录", e, executionId)
                 }
                 sendStatus(executionId, status, exitCode)
                 stopForegroundService()
@@ -565,7 +566,7 @@ class ScriptExecutionController(
             process.outputStream.flush()
             result.success(true)
         } catch (e: Exception) {
-            result.error("1018", "发送Linux-like输入失败: ${e.message}", null)
+            result.error("1018", "发送Debian输入失败: ${e.message}", null)
         }
     }
 
@@ -665,7 +666,7 @@ class ScriptExecutionController(
             try {
                 linuxLikeRuntimeManager.cleanupExecutionTempDir(executionTempDir)
             } catch (e: Exception) {
-                reportFailure("清理 Linux-like 命令临时目录", e, notifyConsole = false)
+                reportFailure("清理 Debian 命令临时目录", e, notifyConsole = false)
             }
         }
     }
@@ -675,7 +676,8 @@ class ScriptExecutionController(
         type: String,
         buffer: BoundedOutputBuffer,
         emitLogs: Boolean,
-        executionId: String? = null
+        executionId: String? = null,
+        stopRequested: AtomicBoolean? = null
     ): ProcessOutputCapture {
         val failed = AtomicBoolean(false)
         val thread = Thread {
@@ -694,8 +696,11 @@ class ScriptExecutionController(
                     }
                 }
             } catch (e: Exception) {
+                // Process destruction closes pipes under the blocked readers.
+                // Keep this execution's token: a later run may already be active.
+                if (e is InterruptedIOException && stopRequested?.get() == true) return@Thread
                 failed.set(true)
-                reportFailure("读取 Linux-like $type 输出", e, executionId)
+                reportFailure("读取 Debian $type 输出", e, executionId)
             }
         }.also { it.name = "linux-like-capture-$type"; it.isDaemon = true; it.start() }
         return ProcessOutputCapture(thread, failed)
@@ -705,7 +710,7 @@ class ScriptExecutionController(
         try {
             process.outputStream.close()
         } catch (e: Exception) {
-            reportFailure("关闭 Linux-like stdin", e, executionId)
+            reportFailure("关闭 Debian stdin", e, executionId)
         }
     }
 

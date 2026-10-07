@@ -98,6 +98,7 @@ class BackupUiFixture {
       database: db,
       native: native,
       configStore: store,
+      listScriptFiles: native.listScriptFiles,
       workspaceAccess: gate,
       webDavFactory: (_, _) => dav,
       reloadWorkspace: () async {
@@ -105,6 +106,7 @@ class BackupUiFixture {
       },
     );
     if (seed) {
+      await native.seedScriptFiles();
       for (final group in native.manifest.groups) {
         await db.createGroup(group);
       }
@@ -210,6 +212,68 @@ void main() {
   tearDown(() async {
     await f.dispose();
   });
+
+  for (final cloud in [false, true]) {
+    testWidgets(
+      '${cloud ? 'cloud' : 'local'} saved notice expires automatically',
+      (tester) async {
+        if (cloud) {
+          await tester.runAsync(
+            () => f.controller.saveWebDavProfile(
+              f.dav.config,
+              password: 'secret',
+            ),
+          );
+        }
+        await f.pump(tester);
+        await f.tap(tester, cloud ? 'backup-upload' : 'backup-export-local');
+        expect(find.textContaining('Saved:'), findsOneWidget);
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(seconds: 5)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Saved:'), findsNothing);
+        expect(f.controller.state.error, isNull);
+        expect(f.controller.state.lastResult, isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'destination buttons share their information row at normal size',
+    (tester) async {
+      await f.pump(tester);
+      for (final (key, title, subtitle) in [
+        (
+          'backup-change-folder',
+          'Device folder',
+          'Choose a folder on your first export.',
+        ),
+        (
+          'backup-configure',
+          'WebDAV',
+          'Add a secure WebDAV server to use cloud backups.',
+        ),
+      ]) {
+        final button = find.byKey(ValueKey(key));
+        await tester.scrollUntilVisible(
+          button,
+          300,
+          scrollable: find.byType(Scrollable).last,
+        );
+        final buttonCenter = tester.getCenter(button);
+        final information = tester
+            .getRect(find.text(title))
+            .expandToInclude(tester.getRect(find.text(subtitle)));
+        expect(
+          buttonCenter.dy,
+          inInclusiveRange(information.top, information.bottom),
+        );
+        expect(buttonCenter.dx, greaterThan(information.right));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'device export picks a destination then exports selected actual library',
