@@ -95,6 +95,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get disableAutoFollow => 'Disable auto-follow';
 
   @override
+  String get terminalScrollToTop => 'Jump to top';
+
+  @override
+  String get terminalScrollToBottom => 'Jump to bottom';
+
+  @override
+  String get terminalDisplayOptions => 'Output options';
+
+  @override
+  String get terminalAutoFollowOutput => 'Auto-follow output';
+
+  @override
   String get exportLogs => 'Export logs';
 
   @override

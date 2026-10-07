@@ -18,6 +18,8 @@ AppLocalizations _terminalLocalizations(BuildContext context) {
 
 enum TerminalColorMode { dark, light, system, monochrome }
 
+enum _TerminalMenuAction { autoFollow, lineNumbers, export, clear }
+
 extension on TerminalColorMode {
   String label(AppLocalizations l10n) {
     switch (this) {
@@ -88,6 +90,9 @@ class TerminalViewState extends State<TerminalView> {
   final _stdinController = TextEditingController();
   final _stdinFocusNode = FocusNode();
   bool _autoScroll = true;
+  bool _autoFollowEnabled = true;
+  bool _jumpingToTop = false;
+  int _scrollRequest = 0;
   double _fontSize = 10.0;
   double? _scaleStartFontSize;
   bool _showLineNumbers = false;
@@ -127,6 +132,7 @@ class TerminalViewState extends State<TerminalView> {
   void initState() {
     super.initState();
     _autoScroll = widget.autoFollowInitiallyEnabled;
+    _autoFollowEnabled = widget.autoFollowInitiallyEnabled;
     _lastLogCount = widget.logs.length;
     _lastLogVersion = widget.logVersion;
     _lastLogTailSignature = _logTailSignature(widget.logs);
@@ -235,6 +241,11 @@ class TerminalViewState extends State<TerminalView> {
   @override
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.autoFollowInitiallyEnabled != oldWidget.autoFollowInitiallyEnabled) {
+      _autoFollowEnabled = widget.autoFollowInitiallyEnabled;
+      _autoScroll = _autoFollowEnabled;
+      if (_autoScroll) _scrollToBottom();
+    }
     if (!identical(widget.logs, oldWidget.logs) ||
         widget.logVersion != oldWidget.logVersion) {
       _invalidateFilteredLogs();
@@ -256,7 +267,7 @@ class TerminalViewState extends State<TerminalView> {
     } else if (hasAppendedOutput) {
       if (_autoScroll) {
         _setUnreadOutput(false);
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        _scrollToBottom();
       } else {
         _setUnreadOutput(true);
       }
@@ -279,12 +290,14 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
+    if (_jumpingToTop || !_scrollController.hasClients) return;
     final pos = _scrollController.position;
+    if (pos.userScrollDirection != ScrollDirection.idle) ++_scrollRequest;
     final atBottom = pos.extentAfter <= 60;
-    if (_autoScroll == atBottom && (!atBottom || !_hasUnreadOutput)) return;
+    final follow = atBottom && _autoFollowEnabled;
+    if (_autoScroll == follow && (!atBottom || !_hasUnreadOutput)) return;
     setState(() {
-      _autoScroll = atBottom;
+      _autoScroll = follow;
       if (atBottom) _hasUnreadOutput = false;
     });
   }
@@ -308,36 +321,66 @@ class TerminalViewState extends State<TerminalView> {
   void _syncUnreadOutputWithViewport() {
     if (!mounted || !_scrollController.hasClients) return;
     final atBottom = _scrollController.position.extentAfter <= 60;
-    if (!atBottom || (_autoScroll && !_hasUnreadOutput)) return;
+    if (!atBottom || !_hasUnreadOutput) return;
     setState(() {
-      _autoScroll = true;
       _hasUnreadOutput = false;
     });
   }
 
-  void _scrollToBottom() {
-    if (!_scrollController.hasClients) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      if (_autoScroll) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOutCubic,
-        );
-      } else {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+  void _scrollToBottom({bool force = false}) {
+    final request = ++_scrollRequest;
+    void jumpAfterLayout(Duration _) {
+      if (!mounted ||
+          !_scrollController.hasClients ||
+          request != _scrollRequest) {
+        return;
       }
+      if (!force && !_autoScroll) return;
+      if (_scrollController.position.extentAfter <= 0.5) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      // Virtualized wrapped rows refine the estimated extent after each jump.
+      // Continue until the actual tail is visible; top/manual scrolling cancels.
+      WidgetsBinding.instance.addPostFrameCallback(jumpAfterLayout);
+      WidgetsBinding.instance.scheduleFrame();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(jumpAfterLayout);
+  }
+
+  void _jumpToTop() {
+    ++_scrollRequest;
+    setState(() => _autoScroll = false);
+    if (!_scrollController.hasClients) return;
+    _jumpingToTop = true;
+    try {
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    } finally {
+      _jumpingToTop = false;
+    }
+  }
+
+  void _jumpToBottom() {
+    setState(() {
+      _autoScroll = _autoFollowEnabled;
+      _hasUnreadOutput = false;
     });
+    _scrollToBottom(force: true);
+  }
+
+  void _toggleAutoFollowPreference() {
+    final enabled = !_autoFollowEnabled;
+    setState(() {
+      _autoFollowEnabled = enabled;
+      _autoScroll = enabled;
+      if (enabled) _hasUnreadOutput = false;
+    });
+    widget.onAutoFollowPreferenceChanged?.call(enabled);
+    if (enabled) _scrollToBottom();
   }
 
   void forceAutoScroll() {
     if (!mounted) return;
-    setState(() {
-      _autoScroll = true;
-      _hasUnreadOutput = false;
-    });
-    _scrollToBottom();
+    _jumpToBottom();
   }
 
   void _submitStdin() {
@@ -345,11 +388,7 @@ class TerminalViewState extends State<TerminalView> {
     final input = _stdinController.text;
     _stdinController.clear();
     widget.onStdin!(input);
-    setState(() {
-      _autoScroll = true;
-      _hasUnreadOutput = false;
-    });
-    _scrollToBottom();
+    _jumpToBottom();
     if (mounted && _stdinFocusNode.canRequestFocus) {
       _stdinFocusNode.requestFocus();
     }
@@ -546,8 +585,9 @@ class TerminalViewState extends State<TerminalView> {
     List<LogEntry> logs,
   ) {
     final isDark = _terminalBrightness() == Brightness.dark;
-    final toolbarText =
-        isDark ? AppThemeColors.terminalDarkToolbarText : colors.onSurface;
+    final toolbarText = isDark
+        ? AppThemeColors.terminalDarkToolbarText
+        : colors.onSurface;
     final toolbarMuted = AppThemeColors.terminalMuted(colors, isDark);
     final toolbarActive = AppThemeColors.terminalAccent(colors, isDark);
     final toolbarError = AppThemeColors.terminalError(colors, isDark);
@@ -561,127 +601,210 @@ class TerminalViewState extends State<TerminalView> {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
         color: barColor,
-        border: Border(
-          bottom: BorderSide(color: toolbarBorder),
-        ),
+        border: Border(bottom: BorderSide(color: toolbarBorder)),
       ),
-      child: Row(
-        children: [
-          if (widget.showLineNumberToggle)
-            IconButton(
-              icon: Icon(Icons.format_list_numbered,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              constraints.maxWidth < 520 ||
+              MediaQuery.textScalerOf(context).scale(12) > 18;
+          return Row(
+            children: [
+              if (widget.showLineNumberToggle && !compact)
+                IconButton(
+                  icon: Icon(
+                    Icons.format_list_numbered,
+                    size: 18,
+                    color: _showLineNumbers ? toolbarActive : toolbarMuted,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  onPressed: () =>
+                      setState(() => _showLineNumbers = !_showLineNumbers),
+                  tooltip: _showLineNumbers
+                      ? localizations.hideLineNumbers
+                      : localizations.showLineNumbers,
+                ),
+              IconButton(
+                icon: Icon(
+                  Icons.search,
                   size: 18,
-                  color: _showLineNumbers ? toolbarActive : toolbarMuted),
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              onPressed: () =>
-                  setState(() => _showLineNumbers = !_showLineNumbers),
-              tooltip: _showLineNumbers
-                  ? localizations.hideLineNumbers
-                  : localizations.showLineNumbers,
-            ),
-          IconButton(
-            icon: Icon(Icons.search,
-                size: 18,
-                color: _searchVisible || _filterErrors
-                    ? toolbarActive
-                    : toolbarMuted),
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            onPressed: () => setState(() {
-              _searchVisible = !_searchVisible;
-              if (!_searchVisible) {
-                _searchQuery = '';
-                _searchController.clear();
-                _invalidateFilteredLogs();
-              }
-            }),
-            tooltip: localizations.search,
-          ),
-          IconButton(
-            icon: Icon(
-              _autoScroll ? Icons.vertical_align_bottom_rounded : Icons.pause,
-              size: 18,
-              color: _autoScroll ? toolbarActive : toolbarMuted,
-            ),
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            onPressed: () {
-              final nextValue = !_autoScroll;
-              setState(() {
-                _autoScroll = nextValue;
-                if (nextValue) _hasUnreadOutput = false;
-              });
-              widget.onAutoFollowPreferenceChanged?.call(nextValue);
-              if (_autoScroll) _scrollToBottom();
-            },
-            tooltip: _autoScroll
-                ? localizations.disableAutoFollow
-                : localizations.enableAutoFollow,
-          ),
-          if (_filterErrors)
-            IconButton(
-              icon: Icon(Icons.error_outline, size: 18, color: toolbarError),
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              onPressed: () => setState(() {
-                _filterErrors = false;
-                _invalidateFilteredLogs();
-              }),
-              tooltip: localizations.showAll,
-            ),
-          AppPopupMenuButton<TerminalColorMode>(
-            popUpAnimationStyle: appMenuAnimation(context),
-            tooltip: localizations.terminalTheme,
-            icon: Icon(_colorMode.icon, size: 18, color: toolbarMuted),
-            onSelected: _setColorMode,
-            itemBuilder: (context) => TerminalColorMode.values
-                .map(
-                  (mode) => PopupMenuItem<TerminalColorMode>(
-                    value: mode,
-                    child: Row(
-                      children: [
-                        Icon(mode.icon,
+                  color: _searchVisible || _filterErrors
+                      ? toolbarActive
+                      : toolbarMuted,
+                ),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                onPressed: () => setState(() {
+                  _searchVisible = !_searchVisible;
+                  if (!_searchVisible) {
+                    _searchQuery = '';
+                    _searchController.clear();
+                    _invalidateFilteredLogs();
+                  }
+                }),
+                tooltip: localizations.search,
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.vertical_align_top_rounded,
+                  size: 18,
+                  color: toolbarMuted,
+                ),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                onPressed: logs.isEmpty ? null : _jumpToTop,
+                tooltip: localizations.terminalScrollToTop,
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.vertical_align_bottom_rounded,
+                  size: 18,
+                  color: _autoScroll ? toolbarActive : toolbarMuted,
+                ),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                onPressed: logs.isEmpty ? null : _jumpToBottom,
+                tooltip: localizations.terminalScrollToBottom,
+              ),
+              if (_filterErrors && !compact)
+                IconButton(
+                  icon: Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: toolbarError,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  onPressed: () => setState(() {
+                    _filterErrors = false;
+                    _invalidateFilteredLogs();
+                  }),
+                  tooltip: localizations.showAll,
+                ),
+              AppPopupMenuButton<Object>(
+                popUpAnimationStyle: appMenuAnimation(context),
+                tooltip: localizations.terminalDisplayOptions,
+                icon: Icon(Icons.tune_rounded, size: 18, color: toolbarMuted),
+                onSelected: (value) {
+                  if (value is TerminalColorMode) {
+                    _setColorMode(value);
+                  } else if (value == _TerminalMenuAction.autoFollow) {
+                    _toggleAutoFollowPreference();
+                  } else if (value == _TerminalMenuAction.lineNumbers) {
+                    setState(() => _showLineNumbers = !_showLineNumbers);
+                  } else if (value == _TerminalMenuAction.export) {
+                    _exportAll();
+                  } else if (value == _TerminalMenuAction.clear) {
+                    widget.onClear?.call();
+                  }
+                },
+                itemBuilder: (context) => [
+                  CheckedPopupMenuItem<Object>(
+                    value: _TerminalMenuAction.autoFollow,
+                    checked: _autoFollowEnabled,
+                    child: Text(localizations.terminalAutoFollowOutput),
+                  ),
+                  if (compact && widget.showLineNumberToggle)
+                    CheckedPopupMenuItem<Object>(
+                      value: _TerminalMenuAction.lineNumbers,
+                      checked: _showLineNumbers,
+                      child: Text(localizations.showLineNumbers),
+                    ),
+                  const PopupMenuDivider(),
+                  for (final mode in TerminalColorMode.values)
+                    PopupMenuItem<Object>(
+                      value: mode,
+                      child: Row(
+                        children: [
+                          Icon(
+                            mode.icon,
                             size: 18,
                             color: mode == _colorMode
                                 ? colors.primary
-                                : colors.onSurfaceVariant),
-                        const SizedBox(width: 12),
-                        Text(mode.label(localizations)),
-                      ],
+                                : colors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(mode.label(localizations))),
+                        ],
+                      ),
                     ),
-                  ),
-                )
-                .toList(),
-          ),
-          const Spacer(),
-          if (logs.isNotEmpty)
-            TextButton.icon(
-              onPressed: _copyAll,
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(localizations.copyAll,
-                  style: const TextStyle(fontSize: 12)),
-              style: TextButton.styleFrom(
-                foregroundColor: toolbarText,
-                iconColor: toolbarActive,
-                backgroundColor: copyButtonBg,
-                visualDensity: VisualDensity.compact,
-                minimumSize: const Size(44, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                  if (compact &&
+                      logs.isNotEmpty &&
+                      (widget.onExport != null || widget.onClear != null))
+                    const PopupMenuDivider(),
+                  if (compact && widget.onExport != null && logs.isNotEmpty)
+                    PopupMenuItem<Object>(
+                      value: _TerminalMenuAction.export,
+                      child: Text(localizations.exportLogs),
+                    ),
+                  if (compact && widget.onClear != null && logs.isNotEmpty)
+                    PopupMenuItem<Object>(
+                      value: _TerminalMenuAction.clear,
+                      child: Text(localizations.clear),
+                    ),
+                ],
               ),
-            ),
-          if (widget.onExport != null && logs.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.file_download_outlined,
-                  size: 18, color: toolbarMuted),
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              onPressed: _exportAll,
-              tooltip: localizations.exportLogs,
-            ),
-          if (widget.onClear != null && logs.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.delete_outline, size: 18, color: toolbarMuted),
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              onPressed: widget.onClear,
-              tooltip: localizations.clear,
-            ),
-        ],
+              const Spacer(),
+              if (logs.isNotEmpty && compact)
+                IconButton(
+                  icon: Icon(Icons.copy, size: 18, color: toolbarActive),
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  onPressed: _copyAll,
+                  tooltip: localizations.copyAll,
+                ),
+              if (logs.isNotEmpty && !compact)
+                TextButton.icon(
+                  onPressed: _copyAll,
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: Text(
+                    localizations.copyAll,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: toolbarText,
+                    iconColor: toolbarActive,
+                    backgroundColor: copyButtonBg,
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(44, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              if (widget.onExport != null && logs.isNotEmpty && !compact)
+                IconButton(
+                  icon: Icon(
+                    Icons.file_download_outlined,
+                    size: 18,
+                    color: toolbarMuted,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  onPressed: _exportAll,
+                  tooltip: localizations.exportLogs,
+                ),
+              if (widget.onClear != null && logs.isNotEmpty && !compact)
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: toolbarMuted,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  onPressed: widget.onClear,
+                  tooltip: localizations.clear,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -865,13 +988,7 @@ class TerminalViewState extends State<TerminalView> {
           // Scroll-to-bottom hint
           if (_hasUnreadOutput && displayLogs.isNotEmpty)
             GestureDetector(
-              onTap: () {
-                setState(() {
-                  _autoScroll = true;
-                  _hasUnreadOutput = false;
-                });
-                _scrollToBottom();
-              },
+              onTap: _jumpToBottom,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 6),

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_materials.dart';
+
 class AppPageTransitions {
   const AppPageTransitions._();
 
   static Route<T> fadeThrough<T>(Widget page) {
-    return PageRouteBuilder<T>(
+    return _AppPageRoute<T>(
       transitionDuration: const Duration(milliseconds: 300),
       reverseTransitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (_, __, ___) => page,
@@ -20,7 +22,7 @@ class AppPageTransitions {
   }
 
   static Route<T> sharedAxisLeftRight<T>(Widget page) {
-    return PageRouteBuilder<T>(
+    return _AppPageRoute<T>(
       transitionDuration: const Duration(milliseconds: 300),
       reverseTransitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (_, __, ___) => page,
@@ -43,7 +45,7 @@ class AppPageTransitions {
   }
 
   static Route<T> scaleIn<T>(Widget page) {
-    return PageRouteBuilder<T>(
+    return _AppPageRoute<T>(
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, __, ___) => page,
@@ -61,4 +63,47 @@ class AppPageTransitions {
       },
     );
   }
+}
+
+/// Full-screen glass pages use direct navigation; their own controls still
+/// animate. This avoids repeatedly repainting two refracting page trees.
+class DirectPageTransitionsBuilder extends PageTransitionsBuilder {
+  const DirectPageTransitionsBuilder();
+  @override
+  Duration get transitionDuration => Duration.zero;
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
+}
+
+class _AppPageRoute<T> extends PageRouteBuilder<T> {
+  _AppPageRoute({
+    required super.pageBuilder,
+    required RouteTransitionsBuilder transitionsBuilder,
+    required super.transitionDuration,
+    required super.reverseTransitionDuration,
+  }) : super(
+         transitionsBuilder: (context, animation, secondary, child) {
+           if (_direct(context)) return child;
+           return transitionsBuilder(context, animation, secondary, child);
+         },
+       );
+
+  static bool _direct(BuildContext context) =>
+      AppMaterials.of(context).liquid ||
+      MediaQuery.disableAnimationsOf(context);
+  bool get _skip => navigator != null && _direct(navigator!.context);
+  @override
+  Duration get transitionDuration =>
+      _skip ? Duration.zero : super.transitionDuration;
+  @override
+  Duration get reverseTransitionDuration =>
+      _skip ? Duration.zero : super.reverseTransitionDuration;
 }

@@ -133,7 +133,7 @@ void main() {
   }
 
   testWidgets(
-      'liquid dialog blur stays inside its material rather than the screen',
+      'liquid dialog material stays bounded rather than covering the screen',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
         theme: AppTheme.build(ColorScheme.fromSeed(seedColor: Colors.blue),

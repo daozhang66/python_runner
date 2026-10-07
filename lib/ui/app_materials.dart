@@ -160,7 +160,8 @@ class AppGlassSurface extends StatelessWidget {
       appearance: Theme.of(context).brightness,
       backdrop: Theme.of(context).colorScheme.surface,
     );
-    final blur = active && !native && sampleBackdrop && !nested && !contrast;
+    final blur =
+        active && !native && !overlay && sampleBackdrop && !nested && !contrast;
     final color =
         baseColor ??
         (overlay
@@ -271,7 +272,21 @@ class AppGlassSurface extends StatelessWidget {
       ),
     );
     return overlay
-        ? glass.GlassAbove(lift: glass.kGlassModalLift, child: surface)
+        ? glass.GlassAbove(
+            lift: glass.kGlassModalLift,
+            // Modal surfaces already have an opaque readability backing.
+            // Keep one stable finish throughout their lifetime; do not spend
+            // an extra atlas/blur pass on that backing or nested controls.
+            child: glass.GlassTheme(
+              data: glass.GlassTheme.of(context).copyWith(
+                tier: const glass.GlassTierChoice(
+                  glass.GlassTier.cheap,
+                  glass.GlassTierReason.pinnedByHost,
+                ),
+              ),
+              child: surface,
+            ),
+          )
         : surface;
   }
 }

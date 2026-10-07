@@ -87,7 +87,13 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.byTooltip('开启自动滚动'), findsOneWidget);
+    await tester.tap(find.byTooltip('输出选项'));
+    await tester.pumpAndSettle();
+    final follow = tester.widget<CheckedPopupMenuItem<Object>>(find.ancestor(
+      of: find.text('自动跟随输出'),
+      matching: find.byType(CheckedPopupMenuItem<Object>),
+    ));
+    expect(follow.checked, isFalse);
   });
 }
 

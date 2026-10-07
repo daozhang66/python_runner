@@ -29,7 +29,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('关闭自动滚动'), findsOneWidget);
+    expect(find.byTooltip('跳转到顶部'), findsOneWidget);
+    expect(find.byTooltip('跳转到底部'), findsOneWidget);
     expect(find.byTooltip('导出日志'), findsOneWidget);
     expect(find.byTooltip('清空'), findsOneWidget);
     expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
@@ -66,9 +67,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(changes, isEmpty);
 
-    await tester.tap(find.byIcon(Icons.pause));
+    await tester.tap(find.byTooltip('输出选项'));
     await tester.pumpAndSettle();
-    expect(changes, [true]);
+    await tester.tap(find.ancestor(of: find.text('自动跟随输出'),
+        matching: find.byType(CheckedPopupMenuItem<Object>)));
+    await tester.pumpAndSettle();
+    expect(changes, [false]);
   });
 
   testWidgets('terminal surfaces export failure without blocking controls',
@@ -113,7 +117,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Retry'), findsOneWidget);
-    expect(find.byTooltip('Disable auto-follow'), findsOneWidget);
+    expect(find.byTooltip('Jump to top'), findsOneWidget);
+    expect(find.byTooltip('Jump to bottom'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp('Unable to load packages')),
       findsOneWidget,

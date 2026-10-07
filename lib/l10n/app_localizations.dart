@@ -266,6 +266,30 @@ abstract class AppLocalizations {
   /// **'Disable auto-follow'**
   String get disableAutoFollow;
 
+  /// No description provided for @terminalScrollToTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to top'**
+  String get terminalScrollToTop;
+
+  /// No description provided for @terminalScrollToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to bottom'**
+  String get terminalScrollToBottom;
+
+  /// No description provided for @terminalDisplayOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Output options'**
+  String get terminalDisplayOptions;
+
+  /// No description provided for @terminalAutoFollowOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-follow output'**
+  String get terminalAutoFollowOutput;
+
   /// No description provided for @exportLogs.
   ///
   /// In en, this message translates to:
