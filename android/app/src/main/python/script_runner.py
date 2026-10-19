@@ -10,14 +10,126 @@ import gc
 import warnings
 
 
+_APP_DATA_DIR = None
+_DEFAULT_APP_DATA_DIR = "/data/data/com.daozhang.py"
+
+
+def _app_data_dir():
+    """Return the app's private, always-writable files directory.
+
+    This must NOT be derived from $HOME: run_script() rewrites HOME to the
+    user's workspace, and on HarmonyOS / newer Android HOME may be "/data",
+    which makes pip fall back to "/data/.local" (Errno 13).
+    """
+    global _APP_DATA_DIR
+    if _APP_DATA_DIR:
+        return _APP_DATA_DIR
+    path = None
+    # 1) Ask Android for Context.getFilesDir() (same dir Kotlin uses).
+    try:
+        from java import jclass
+        app = jclass("android.app.ActivityThread").currentApplication()
+        if app is not None:
+            path = str(app.getFilesDir().getAbsolutePath())
+    except Exception:
+        path = None
+    # 2) Chaquopy's TMPDIR lives under <data>/cache -> sibling <data>/files.
+    if not path:
+        tmp = os.environ.get("TMPDIR", "")
+        marker = "/cache"
+        idx = tmp.find(marker + "/") if tmp else -1
+        if idx == -1 and tmp.endswith(marker):
+            idx = len(tmp) - len(marker)
+        if idx > 0:
+            path = tmp[:idx] + "/files"
+    # 3) Legacy behaviour: HOME, if it is actually writable.
+    if not path:
+        home = os.environ.get("HOME", "")
+        if home and os.path.isdir(home) and os.access(home, os.W_OK):
+            path = home
+    if not path:
+        path = _DEFAULT_APP_DATA_DIR
+    _APP_DATA_DIR = path
+    return path
+
+
+def _configure_pip_environment():
+    """Point every pip/site fallback at app-private directories."""
+    base = _app_data_dir()
+    user_base = os.path.join(base, "chaquopy", "user_base")
+    cache_dir = os.path.join(os.path.dirname(base.rstrip("/")) or base, "cache", "pip")
+    try:
+        os.makedirs(user_base, exist_ok=True)
+    except OSError:
+        pass
+    # Force (not setdefault): a HarmonyOS-provided value may point at /data/.local.
+    os.environ["PYTHONUSERBASE"] = user_base
+    os.environ.setdefault("PIP_CACHE_DIR", cache_dir)
+    # The self-version check enumerates installed distributions (crashes on AssetPath).
+    os.environ.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    os.environ.setdefault("PIP_NO_INPUT", "1")
+    return user_base
+
+
 def _ensure_site_packages():
-    """Ensure pip's install target is on sys.path."""
-    site_dir = os.path.join(os.environ.get("HOME", "/data/data/com.daozhang.py"), "chaquopy/pip")
+    """Ensure pip's install target (app-private, writable) is on sys.path."""
+    _configure_pip_environment()
+    site_dir = os.path.join(_app_data_dir(), "chaquopy/pip")
     if not os.path.exists(site_dir):
         os.makedirs(site_dir, exist_ok=True)
     if site_dir not in sys.path:
         sys.path.insert(0, site_dir)
     return site_dir
+
+
+_PIP_PATCHED = False
+
+
+def _patch_pip_for_chaquopy():
+    """Make pip tolerate Chaquopy's AssetFinder paths (AssetPath has no .parent).
+
+    Every step is best-effort and version-guarded: a failed patch must never
+    prevent pip from running.
+    """
+    global _PIP_PATCHED
+    if _PIP_PATCHED:
+        return
+    # (a) metadata enumeration: keep whatever was yielded before the error.
+    try:
+        import pip._internal.metadata.importlib._envs as _envs_module
+        _finder = _envs_module._DistributionFinder
+        _orig_find = _finder.find
+
+        def _safe_find(self, location, *a, **kw):
+            found = []
+            try:
+                for dist in _orig_find(self, location, *a, **kw):
+                    found.append(dist)
+            except (AttributeError, TypeError, OSError):
+                pass
+            return iter(found)
+
+        _finder.find = _safe_find
+    except Exception:
+        pass
+    # (b) User-Agent: fall back to a fixed string if the real one raises.
+    try:
+        import pip
+        import pip._internal.network.session as _session_module
+        _orig_ua = _session_module.user_agent
+        _fallback_ua = "pip/%s python/%d.%d android" % (
+            getattr(pip, "__version__", "0"), sys.version_info[0], sys.version_info[1])
+
+        def _safe_user_agent():
+            try:
+                return _orig_ua()
+            except Exception:
+                return _fallback_ua
+
+        _session_module.user_agent = _safe_user_agent
+    except Exception:
+        pass
+    _PIP_PATCHED = True
 
 
 # ---------------------------------------------------------------------------
@@ -766,6 +878,7 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
 def install_package(args):
     """Install a package using pip, with target set to our site-packages."""
     site_dir = _ensure_site_packages()
+    _patch_pip_for_chaquopy()
     import pip
     import json
 
@@ -785,8 +898,8 @@ def install_package(args):
     new_entries = after - before
     pkg_name = next((a for a in args if not a.startswith('-') and a != 'install'), '').split('==')[0].lower().replace('-', '_')
 
-    _DEPS_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/install_deps.json')
-    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
+    _DEPS_FILE = os.path.join(_app_data_dir(), 'chaquopy/install_deps.json')
+    _USER_FILE = os.path.join(_app_data_dir(), 'chaquopy/user_packages.json')
     if pkg_name and pip_result == 0 and new_entries:
         try:
             deps = {}
@@ -830,7 +943,7 @@ def install_package(args):
 
     # Remove installed package from exclusion list if it was there
     if pkg_name:
-        _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
+        _UNINSTALLED_FILE = os.path.join(_app_data_dir(), 'chaquopy/uninstalled.txt')
         try:
             if os.path.exists(_UNINSTALLED_FILE):
                 with open(_UNINSTALLED_FILE) as f:
@@ -898,7 +1011,7 @@ def _normalize_package_name(name):
 
 def _load_user_package_map():
     user_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/user_packages.json",
     )
     if not os.path.exists(user_file):
@@ -916,7 +1029,7 @@ def _load_user_package_map():
 
 def _save_user_package_map(user_pkgs):
     user_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/user_packages.json",
     )
     os.makedirs(os.path.dirname(user_file), exist_ok=True)
@@ -1017,7 +1130,7 @@ def _remove_package_files(site_dir, package_name):
 
 def _cleanup_install_metadata(package_names):
     deps_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/install_deps.json",
     )
     if not os.path.exists(deps_file):
@@ -1035,7 +1148,7 @@ def _cleanup_install_metadata(package_names):
 
 def _record_uninstalled_packages(package_names):
     uninstalled_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/uninstalled.txt",
     )
     try:
@@ -1150,7 +1263,7 @@ def list_packages():
     }
 
     # Load user-installed packages (explicitly installed at runtime)
-    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
+    _USER_FILE = os.path.join(_app_data_dir(), 'chaquopy/user_packages.json')
     user_pkgs = set()
     if os.path.exists(_USER_FILE):
         try:
@@ -1163,7 +1276,7 @@ def list_packages():
     top_level = _BUILTIN_TOP | user_pkgs
 
     # Load exclusion list (packages explicitly uninstalled at runtime)
-    _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
+    _UNINSTALLED_FILE = os.path.join(_app_data_dir(), 'chaquopy/uninstalled.txt')
     excluded = set()
     if os.path.exists(_UNINSTALLED_FILE):
         try:
