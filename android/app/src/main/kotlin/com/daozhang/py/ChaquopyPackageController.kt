@@ -34,13 +34,19 @@ class ChaquopyPackageController(
 
                 val pipResult = runner.callAttr("install_package", pyList).toInt()
                 if (pipResult != 0) {
+                    val reason = try {
+                        runner.callAttr("last_pip_error").toString()
+                    } catch (e: Exception) {
+                        ""
+                    }
+                    val detail = if (reason.isNotBlank()) "\n$reason" else ""
                     mainHandler.post {
                         sendInstallProgress(
                             packageName,
-                            "$packageName 安装失败: pip 退出码 $pipResult",
-                            "安装失败: pip 退出码 $pipResult"
+                            "$packageName 安装失败: pip 退出码 $pipResult$detail",
+                            "安装失败: pip 退出码 $pipResult$detail"
                         )
-                        result.error("1004", "安装失败: pip 退出码 $pipResult", null)
+                        result.error("1004", "安装失败: pip 退出码 $pipResult$detail", null)
                     }
                     return@Thread
                 }
