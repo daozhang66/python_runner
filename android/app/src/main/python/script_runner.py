@@ -10,14 +10,417 @@ import gc
 import warnings
 
 
+_APP_DATA_DIR = None
+_DEFAULT_APP_DATA_DIR = "/data/data/com.daozhang.py"
+
+
+def _app_data_dir():
+    """Return the app's private, always-writable files directory.
+
+    This must NOT be derived from $HOME: run_script() rewrites HOME to the
+    user's workspace, and on HarmonyOS / newer Android HOME may be "/data",
+    which makes pip fall back to "/data/.local" (Errno 13).
+    """
+    global _APP_DATA_DIR
+    if _APP_DATA_DIR:
+        return _APP_DATA_DIR
+    path = None
+    # 1) Ask Android for Context.getFilesDir() (same dir Kotlin uses).
+    try:
+        from java import jclass
+        app = jclass("android.app.ActivityThread").currentApplication()
+        if app is not None:
+            path = str(app.getFilesDir().getAbsolutePath())
+    except Exception:
+        path = None
+    # 2) Chaquopy's TMPDIR lives under <data>/cache -> sibling <data>/files.
+    if not path:
+        tmp = os.environ.get("TMPDIR", "")
+        marker = "/cache"
+        idx = tmp.find(marker + "/") if tmp else -1
+        if idx == -1 and tmp.endswith(marker):
+            idx = len(tmp) - len(marker)
+        if idx > 0:
+            path = tmp[:idx] + "/files"
+    # 3) Legacy behaviour: HOME, if it is actually writable.
+    if not path:
+        home = os.environ.get("HOME", "")
+        if home and os.path.isdir(home) and os.access(home, os.W_OK):
+            path = home
+    if not path:
+        path = _DEFAULT_APP_DATA_DIR
+    _APP_DATA_DIR = path
+    return path
+
+
+def _configure_pip_environment():
+    """Point every pip/site fallback at app-private directories."""
+    base = _app_data_dir()
+    user_base = os.path.join(base, "chaquopy", "user_base")
+    cache_dir = os.path.join(os.path.dirname(base.rstrip("/")) or base, "cache", "pip")
+    try:
+        os.makedirs(user_base, exist_ok=True)
+    except OSError:
+        pass
+    # Force (not setdefault): a HarmonyOS-provided value may point at /data/.local.
+    os.environ["PYTHONUSERBASE"] = user_base
+    os.environ.setdefault("PIP_CACHE_DIR", cache_dir)
+    # The self-version check enumerates installed distributions (crashes on AssetPath).
+    os.environ.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    os.environ.setdefault("PIP_NO_INPUT", "1")
+    return user_base
+
+
 def _ensure_site_packages():
-    """Ensure pip's install target is on sys.path."""
-    site_dir = os.path.join(os.environ.get("HOME", "/data/data/com.daozhang.py"), "chaquopy/pip")
+    """Ensure pip's install target (app-private, writable) is on sys.path."""
+    _configure_pip_environment()
+    site_dir = os.path.join(_app_data_dir(), "chaquopy/pip")
     if not os.path.exists(site_dir):
         os.makedirs(site_dir, exist_ok=True)
     if site_dir not in sys.path:
         sys.path.insert(0, site_dir)
+    try:
+        _preload_native_libs(site_dir)
+    except Exception:
+        pass
     return site_dir
+
+
+_CHAQUOPY_INDEXES = (
+    "https://chaquo.com/pypi-13.1",  # Chaquopy's official Android wheels
+)
+_LOADED_NATIVE_LIBS = set()
+
+
+def _android_native_tags():
+    """PEP 425 tags of Chaquopy's Android wheels (e.g. cp311-cp311-android_21_arm64_v8a)."""
+    from pip._vendor.packaging.tags import Tag
+    import platform
+    machine = (platform.machine() or "").lower()
+    abi = {
+        "aarch64": "arm64_v8a", "arm64": "arm64_v8a",
+        "armv7l": "armeabi_v7a", "armv8l": "armeabi_v7a",
+        "x86_64": "x86_64", "i686": "x86", "i386": "x86",
+    }.get(machine)
+    if not abi:
+        return []
+    py = "cp%d%d" % (sys.version_info[0], sys.version_info[1])
+    plats = ["android_%d_%s" % (api, abi) for api in range(36, 20, -1)]
+    tags = []
+    for plat in plats:
+        tags.append(Tag(py, py, plat))
+    for plat in plats:
+        tags.append(Tag(py, "abi3", plat))
+    for plat in plats:
+        tags.append(Tag("py%d" % sys.version_info[0], "none", plat))
+        tags.append(Tag("py%d%d" % (sys.version_info[0], sys.version_info[1]), "none", plat))
+    return tags
+
+
+def _preload_native_libs(site_dir):
+    """dlopen shared libs shipped by wheels (chaquopy-openblas, libcxx, ...).
+
+    Build-time Chaquopy puts them in jniLibs; pip-installed ones live in
+    <site_dir>/chaquopy/lib and are not on the loader path, so load them by
+    absolute path (RTLD_GLOBAL) before importing numpy/scipy & co.
+    """
+    import ctypes
+    import glob
+    libdir = os.path.join(site_dir, "chaquopy", "lib")
+    if not os.path.isdir(libdir):
+        return
+    pending = [f for f in sorted(glob.glob(os.path.join(libdir, "*.so*")))
+               if f not in _LOADED_NATIVE_LIBS]
+    progress = True
+    while pending and progress:
+        progress = False
+        still = []
+        for path in pending:
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+                _LOADED_NATIVE_LIBS.add(path)
+                progress = True
+            except OSError:
+                still.append(path)  # dependency not loaded yet; retry
+        pending = still
+
+
+_LAST_PIP_OUTPUT = ""
+
+
+class _Tee:
+    """Mirror writes to the real stream while keeping a copy for error reporting."""
+
+    def __init__(self, real, buf):
+        self._real, self._buf = real, buf
+
+    def write(self, text):
+        try:
+            self._buf.append(text)
+        except Exception:
+            pass
+        if self._real is not None:
+            return self._real.write(text)
+        return len(text)
+
+    def flush(self):
+        if self._real is not None:
+            try:
+                self._real.flush()
+            except Exception:
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _run_pip(full_args):
+    """pip.main() that also remembers its output for last_pip_error()."""
+    global _LAST_PIP_OUTPUT
+    import pip
+    buf = []
+    old_out, old_err = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = _Tee(old_out, buf), _Tee(old_err, buf)
+    try:
+        return pip.main(full_args)
+    finally:
+        sys.stdout, sys.stderr = old_out, old_err
+        _LAST_PIP_OUTPUT = "".join(buf)
+
+
+def last_pip_error(max_lines=12):
+    """Short human-readable reason for the last failed pip run."""
+    if _LAST_PIP_OUTPUT.startswith("该包没有适用于"):
+        head, _, tail = _LAST_PIP_OUTPUT.partition("\n可改用")
+        hint = head + "\n可改用" + tail.split("\n", 1)[0]
+        return hint[-1500:]
+    lines = [l.strip() for l in _LAST_PIP_OUTPUT.splitlines() if l.strip()]
+    errs = [l for l in lines if "ERROR" in l or "Error" in l or "error:" in l]
+    picked = (errs or lines)[-max_lines:]
+    return "\n".join(picked)[-1500:]
+
+
+_NATIVE_HINT = (
+    "该包没有适用于 Python %d.%d / Android 的预编译版本，且手机上无法编译源码。\n"
+    "Chaquopy 官方仓库的 scipy / scikit-learn 只有 Python 3.8-3.10 的旧版本；"
+    "TensorFlow / PyTorch 没有 Android 版。\n"
+    "可改用 Linux-like 运行时安装，或使用 Python 3.10 版本的构建（构建时设置环境变量 PYRUNNER_PYTHON=3.10）。"
+)
+
+
+def _run_install_with_fallback(full_args):
+    """Binary-only first (clear, fast failure for native packages), then sdists.
+
+    Pure-Python packages that only ship an sdist still work through the retry.
+    """
+    global _LAST_PIP_OUTPUT
+    if not full_args or full_args[0] != "install" or any(
+            a in ("--no-binary", "--only-binary") or str(a).startswith(("--no-binary=", "--only-binary="))
+            for a in full_args):
+        return _run_pip(full_args)
+    rc = _run_pip(full_args + ["--only-binary=:all:"])
+    if rc == 0:
+        return 0
+    first = _LAST_PIP_OUTPUT
+    if "No matching distribution" not in first and "Could not find a version" not in first:
+        return rc  # failed for another reason (network, permissions, ...): keep that message
+    rc = _run_pip(full_args)
+    if rc != 0:
+        out = _LAST_PIP_OUTPUT
+        if "build dependencies" in out or "Failed to build" in out or "No matching distribution" in out:
+            _LAST_PIP_OUTPUT = (_NATIVE_HINT % (sys.version_info[0], sys.version_info[1])
+                                + "\n" + out)
+    return rc
+
+
+# soname -> Chaquopy wheel that ships it (best effort; wheels not listing them as dependencies)
+_NATIVE_PROVIDERS = {
+    "libomp.so": "chaquopy-libomp",
+    "libc++_shared.so": "chaquopy-libcxx",
+    "libgfortran.so": "chaquopy-libgfortran",
+    "libopenblas.so": "chaquopy-openblas",
+    "libjpeg.so": "chaquopy-libjpeg",
+    "libpng16.so": "chaquopy-libpng",
+    "libfreetype.so": "chaquopy-freetype",
+    "libxml2.so": "chaquopy-libxml2",
+    "libxslt.so": "chaquopy-libxslt",
+    "libexslt.so": "chaquopy-libxslt",
+    "libiconv.so": "chaquopy-libiconv",
+}
+
+
+def _elf_needed(path):
+    """DT_NEEDED sonames of an ELF64 little-endian shared object ([] on any problem)."""
+    import struct
+    try:
+        with open(path, "rb") as f:
+            h = f.read(64)
+            if len(h) < 64 or h[:4] != b"\x7fELF" or h[4] != 2 or h[5] != 1:
+                return []
+            e_phoff, = struct.unpack_from("<Q", h, 32)
+            e_phentsize, e_phnum = struct.unpack_from("<HH", h, 54)
+            f.seek(e_phoff)
+            ph = f.read(e_phentsize * e_phnum)
+            loads, dyn = [], None
+            for i in range(e_phnum):
+                p_type, _fl, p_off, p_va, _pa, p_fsz, _msz, _al = struct.unpack_from(
+                    "<IIQQQQQQ", ph, i * e_phentsize)
+                if p_type == 1:
+                    loads.append((p_va, p_off, p_fsz))
+                elif p_type == 2:
+                    dyn = (p_off, p_fsz)
+            if not dyn:
+                return []
+            f.seek(dyn[0])
+            d = f.read(dyn[1])
+            needed, strtab = [], None
+            for off in range(0, len(d) - 15, 16):
+                tag, val = struct.unpack_from("<qQ", d, off)
+                if tag == 0:
+                    break
+                if tag == 1:
+                    needed.append(val)
+                elif tag == 5:
+                    strtab = val
+            if strtab is None:
+                return []
+            base = None
+            for va, po, fsz in loads:
+                if va <= strtab < va + fsz:
+                    base = po + strtab - va
+                    break
+            if base is None:
+                return []
+            names = []
+            for n in needed:
+                f.seek(base + n)
+                names.append(f.read(128).split(b"\0", 1)[0].decode("ascii", "ignore"))
+            return names
+    except Exception:
+        return []
+
+
+def _find_missing_native_deps(site_dir):
+    """Known Chaquopy providers whose libs are needed by installed .so files but absent."""
+    have = set()
+    libdir = os.path.join(site_dir, "chaquopy", "lib")
+    if os.path.isdir(libdir):
+        have.update(os.listdir(libdir))
+    wanted = set()
+    for root, _dirs, files in os.walk(site_dir):
+        if os.path.normpath(root) == os.path.normpath(libdir):
+            continue
+        for name in files:
+            if ".so" in name:
+                for need in _elf_needed(os.path.join(root, name)):
+                    if need in _NATIVE_PROVIDERS:
+                        wanted.add(need)
+    return sorted(need for need in wanted if need not in have)
+
+
+def _install_native_provider(package, site_dir):
+    """Install a provider wheel into a temp dir and merge it into site_dir.
+
+    pip --target skips top-level dirs that already exist (e.g. the shared
+    'chaquopy/' dir), so merge the files ourselves.
+    """
+    import shutil
+    import tempfile
+    global _LAST_PIP_OUTPUT
+    saved = _LAST_PIP_OUTPUT
+    tmp = tempfile.mkdtemp(prefix="pipdep_", dir=os.path.dirname(site_dir))
+    try:
+        args = ["install", package, "--no-deps", "--prefer-binary", "--only-binary=:all:"]
+        for index in _CHAQUOPY_INDEXES:
+            args += ["--extra-index-url", index]
+        args += ["--target", tmp]
+        if _run_pip(args) != 0:
+            return False
+        for root, _dirs, files in os.walk(tmp):
+            rel = os.path.relpath(root, tmp)
+            dest_dir = site_dir if rel == "." else os.path.join(site_dir, rel)
+            os.makedirs(dest_dir, exist_ok=True)
+            for name in files:
+                shutil.copy2(os.path.join(root, name), os.path.join(dest_dir, name))
+        return True
+    except Exception:
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        _LAST_PIP_OUTPUT = saved
+
+
+def _fix_missing_native_deps(site_dir):
+    for soname in _find_missing_native_deps(site_dir):
+        _install_native_provider(_NATIVE_PROVIDERS[soname], site_dir)
+
+
+_PIP_PATCHED = False
+
+
+def _patch_pip_for_chaquopy():
+    """Make pip tolerate Chaquopy's AssetFinder paths (AssetPath has no .parent).
+
+    Every step is best-effort and version-guarded: a failed patch must never
+    prevent pip from running.
+    """
+    global _PIP_PATCHED
+    if _PIP_PATCHED:
+        return
+    # (a) metadata enumeration: keep whatever was yielded before the error.
+    try:
+        import pip._internal.metadata.importlib._envs as _envs_module
+        _finder = _envs_module._DistributionFinder
+        _orig_find = _finder.find
+
+        def _safe_find(self, location, *a, **kw):
+            found = []
+            try:
+                for dist in _orig_find(self, location, *a, **kw):
+                    found.append(dist)
+            except (AttributeError, TypeError, OSError):
+                pass
+            return iter(found)
+
+        _finder.find = _safe_find
+    except Exception:
+        pass
+    # (b) User-Agent: fall back to a fixed string if the real one raises.
+    try:
+        import pip
+        import pip._internal.network.session as _session_module
+        _orig_ua = _session_module.user_agent
+        _fallback_ua = "pip/%s python/%d.%d android" % (
+            getattr(pip, "__version__", "0"), sys.version_info[0], sys.version_info[1])
+
+        def _safe_user_agent():
+            try:
+                return _orig_ua()
+            except Exception:
+                return _fallback_ua
+
+        _session_module.user_agent = _safe_user_agent
+    except Exception:
+        pass
+    # (c) Accept Chaquopy's Android wheels if pip's own tag list lacks them.
+    try:
+        import pip._internal.models.target_python as _tp
+        _orig_get_supported = _tp.get_supported
+
+        def _get_supported(*a, **kw):
+            tags = _orig_get_supported(*a, **kw)
+            try:
+                if kw.get("platforms") is None and not any(
+                        "android" in t.platform for t in tags):
+                    tags = _android_native_tags() + list(tags)
+            except Exception:
+                pass
+            return tags
+
+        _tp.get_supported = _get_supported
+    except Exception:
+        pass
+    _PIP_PATCHED = True
 
 
 # ---------------------------------------------------------------------------
@@ -766,6 +1169,7 @@ def run_script(code, working_dir="", hook_env_json="", script_file_path=""):
 def install_package(args):
     """Install a package using pip, with target set to our site-packages."""
     site_dir = _ensure_site_packages()
+    _patch_pip_for_chaquopy()
     import pip
     import json
 
@@ -775,8 +1179,26 @@ def install_package(args):
         return {e for e in os.listdir(site_dir) if e.endswith(('.dist-info', '.egg-info'))}
     before = _snap()
 
-    full_args = list(args) + ["--target", site_dir]
-    pip_result = pip.main(full_args)
+    full_args = list(args)
+    if full_args and full_args[0] == "install":
+        # C-extension packages (numpy/scipy/...) only exist as Android wheels on
+        # Chaquopy's index; prefer them over newer source-only releases on PyPI.
+        for _index in _CHAQUOPY_INDEXES:
+            if not any(_index.rstrip("/") in str(a) for a in full_args):
+                full_args += ["--extra-index-url", _index]
+        if "--prefer-binary" not in full_args:
+            full_args.append("--prefer-binary")
+    full_args += ["--target", site_dir]
+    pip_result = _run_install_with_fallback(full_args)
+    if pip_result == 0:
+        try:
+            _fix_missing_native_deps(site_dir)
+        except Exception:
+            pass
+    try:
+        _preload_native_libs(site_dir)
+    except Exception:
+        pass
     if pip_result != 0:
         return pip_result
 
@@ -785,8 +1207,8 @@ def install_package(args):
     new_entries = after - before
     pkg_name = next((a for a in args if not a.startswith('-') and a != 'install'), '').split('==')[0].lower().replace('-', '_')
 
-    _DEPS_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/install_deps.json')
-    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
+    _DEPS_FILE = os.path.join(_app_data_dir(), 'chaquopy/install_deps.json')
+    _USER_FILE = os.path.join(_app_data_dir(), 'chaquopy/user_packages.json')
     if pkg_name and pip_result == 0 and new_entries:
         try:
             deps = {}
@@ -830,7 +1252,7 @@ def install_package(args):
 
     # Remove installed package from exclusion list if it was there
     if pkg_name:
-        _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
+        _UNINSTALLED_FILE = os.path.join(_app_data_dir(), 'chaquopy/uninstalled.txt')
         try:
             if os.path.exists(_UNINSTALLED_FILE):
                 with open(_UNINSTALLED_FILE) as f:
@@ -898,7 +1320,7 @@ def _normalize_package_name(name):
 
 def _load_user_package_map():
     user_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/user_packages.json",
     )
     if not os.path.exists(user_file):
@@ -916,7 +1338,7 @@ def _load_user_package_map():
 
 def _save_user_package_map(user_pkgs):
     user_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/user_packages.json",
     )
     os.makedirs(os.path.dirname(user_file), exist_ok=True)
@@ -1017,7 +1439,7 @@ def _remove_package_files(site_dir, package_name):
 
 def _cleanup_install_metadata(package_names):
     deps_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/install_deps.json",
     )
     if not os.path.exists(deps_file):
@@ -1035,7 +1457,7 @@ def _cleanup_install_metadata(package_names):
 
 def _record_uninstalled_packages(package_names):
     uninstalled_file = os.path.join(
-        os.environ.get("HOME", "/data/data/com.daozhang.py"),
+        _app_data_dir(),
         "chaquopy/uninstalled.txt",
     )
     try:
@@ -1150,7 +1572,7 @@ def list_packages():
     }
 
     # Load user-installed packages (explicitly installed at runtime)
-    _USER_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/user_packages.json')
+    _USER_FILE = os.path.join(_app_data_dir(), 'chaquopy/user_packages.json')
     user_pkgs = set()
     if os.path.exists(_USER_FILE):
         try:
@@ -1163,7 +1585,7 @@ def list_packages():
     top_level = _BUILTIN_TOP | user_pkgs
 
     # Load exclusion list (packages explicitly uninstalled at runtime)
-    _UNINSTALLED_FILE = os.path.join(os.environ.get('HOME', '/data/data/com.daozhang.py'), 'chaquopy/uninstalled.txt')
+    _UNINSTALLED_FILE = os.path.join(_app_data_dir(), 'chaquopy/uninstalled.txt')
     excluded = set()
     if os.path.exists(_UNINSTALLED_FILE):
         try:
