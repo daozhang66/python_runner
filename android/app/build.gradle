@@ -13,6 +13,10 @@ pluginManager.withPlugin("kotlin-android") {
     }
 }
 
+// Chaquopy Python version; default 3.11. Build with PYRUNNER_PYTHON=3.10 (env var or
+// -PpyrunnerPython=3.10) to get Chaquopy's official SciPy / scikit-learn Android wheels.
+def pythonVersion = (project.findProperty("pyrunnerPython") ?: System.getenv("PYRUNNER_PYTHON") ?: "3.11").toString()
+
 def keystoreProperties = new java.util.Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -69,7 +73,7 @@ android {
         }
 
         python {
-            version "3.11"
+            version pythonVersion
             pip {
                 install "pip"
                 install "setuptools"
