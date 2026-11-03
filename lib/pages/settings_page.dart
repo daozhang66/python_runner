@@ -24,6 +24,8 @@ import '../widgets/app_dialogs.dart';
 import '../ui/app_settings_section.dart';
 import '../features/mcp/presentation/pages/mcp_settings_page.dart';
 import '../features/backup/presentation/backup_restore_page.dart';
+import '../features/ssh/presentation/pages/ssh_profiles_page.dart';
+import '../features/ssh/presentation/ssh_text.dart';
 import 'update_log_page.dart';
 import 'theme_settings_page.dart';
 import 'app_logs_page.dart';
@@ -32,6 +34,7 @@ import 'request_override_editor_page.dart';
 
 part 'settings_actions.dart';
 part 'settings_sections.dart';
+part 'settings_ssh.dart';
 part 'settings_widgets.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -86,6 +89,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     _buildAppearanceSection(),
                     _buildScriptStorageSection(),
                     _buildRuntimeSection(),
+                    _buildSshSection(),
                     _buildNetworkDebugSection(),
                     _buildDiagnosticsSection(),
                     _buildAboutSection(),

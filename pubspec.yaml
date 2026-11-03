@@ -46,6 +46,10 @@ dependencies:
   # MCP 配对令牌摘要（sha256）
   crypto: ^3.0.3
   xml: ^6.6.1
+  # SSH 远程运行与终端
+  dartssh2: ^4.1.0
+  xterm2: ^5.3.0
+  pinenacl: ^0.6.0
 
 dev_dependencies:
   flutter_test:
@@ -66,4 +70,3 @@ flutter:
     - family: MiSans
       fonts:
         - asset: assets/fonts/MiSansVF.ttf
-

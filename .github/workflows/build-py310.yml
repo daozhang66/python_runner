@@ -6,7 +6,7 @@ name: Build APK (Python 3.10, SciPy/scikit-learn)
 on:
   workflow_dispatch:
   push:
-    branches: [build/python310-scipy]
+    branches: [build/python310-scipy, feature/ssh-remote-terminal]
 
 jobs:
   build-apk-py310:
