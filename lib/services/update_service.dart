@@ -12,6 +12,37 @@ String? _extractSha256(String? text) {
   return match?.group(0)?.toLowerCase();
 }
 
+/// Python version this build ships with. CI passes it with
+/// `--dart-define=PYRUNNER_PYTHON=3.10` (the same value that selects the
+/// Chaquopy Python version), so updates never switch Python versions.
+const String appPythonVariant =
+    String.fromEnvironment('PYRUNNER_PYTHON', defaultValue: '3.11');
+
+final RegExp _pythonVariantPattern = RegExp(r'py\d+\.\d+');
+
+/// Picks the APK to offer for an update.
+///
+/// A release can carry one APK per Python version, for example
+/// `PythonRunner-v1.7.0-py3.11.apk` and `PythonRunner-v1.7.0-py3.10.apk`.
+/// The APK that matches [pythonVersion] wins. Without a match only APKs that
+/// carry no Python marker (older releases) are accepted, so an update never
+/// silently moves a user to another Python version.
+ReleaseAssetInfo? pickApkAsset(
+  Iterable<ReleaseAssetInfo> assets, {
+  String pythonVersion = appPythonVariant,
+}) {
+  ReleaseAssetInfo? unmarked;
+  for (final asset in assets) {
+    if (!asset.isApk) continue;
+    final name = asset.name.toLowerCase();
+    if (name.contains('py$pythonVersion')) return asset;
+    if (unmarked == null && !_pythonVariantPattern.hasMatch(name)) {
+      unmarked = asset;
+    }
+  }
+  return unmarked;
+}
+
 class ReleaseAssetInfo {
   final String name;
   final String downloadUrl;
@@ -127,13 +158,7 @@ class ReleaseLogEntry {
         .map((e) => ReleaseAssetInfo.fromJson(Map<String, dynamic>.from(e)))
         .toList();
 
-    ReleaseAssetInfo? apkAsset;
-    for (final asset in assets) {
-      if (asset.isApk) {
-        apkAsset = asset;
-        break;
-      }
-    }
+    final apkAsset = pickApkAsset(assets);
 
     final tagName = json['tag_name']?.toString() ?? '';
     final name = json['name']?.toString().trim() ?? '';
@@ -353,13 +378,7 @@ class UpdateService {
         .map((e) => ReleaseAssetInfo.fromJson(Map<String, dynamic>.from(e)))
         .toList();
 
-    ReleaseAssetInfo? apkAsset;
-    for (final asset in assets) {
-      if (asset.isApk) {
-        apkAsset = asset;
-        break;
-      }
-    }
+    ReleaseAssetInfo? apkAsset = pickApkAsset(assets);
 
     if (apkAsset != null) {
       final checksumName = '${apkAsset.name}.sha256';

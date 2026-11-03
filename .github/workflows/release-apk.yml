@@ -1,0 +1,103 @@
+name: Release APK
+
+# Pushing a tag like v1.7.0 builds signed APKs for BOTH Python versions and
+# attaches them (plus .sha256 files) to the GitHub release of that tag:
+#   PythonRunner-<tag>-py3.11.apk   project default
+#   PythonRunner-<tag>-py3.10.apk   official SciPy / scikit-learn Android wheels
+# The in-app updater offers the APK whose py<version> matches the installed
+# build, so an update never switches Python versions.
+#
+# Needs 4 repository secrets:
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure the release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --title "$GITHUB_REF_NAME" --generate-notes
+
+  build-apk:
+    needs: create-release
+    name: APK (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.10']
+    env:
+      PYRUNNER_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+
+      - name: Install Android NDK (with retries)
+        run: |
+          NDK=28.2.13676358
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for i in 1 2 3 4 5; do
+            rm -rf "$ANDROID_HOME/ndk/$NDK" "$ANDROID_HOME/.temp"
+            if yes | "$SDKM" --install "ndk;$NDK" && [ -f "$ANDROID_HOME/ndk/$NDK/source.properties" ]; then
+              echo "NDK $NDK installed"; exit 0
+            fi
+            echo "NDK install attempt $i failed, retrying..."; sleep $((i*10))
+          done
+          exit 1
+
+      - run: flutter pub get
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "Missing signing secrets (KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD)"; exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/release.jks
+          {
+            echo "PYRUNNER_RELEASE_STORE_FILE=release.jks"
+            echo "PYRUNNER_RELEASE_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "PYRUNNER_RELEASE_KEY_ALIAS=$KEY_ALIAS"
+            echo "PYRUNNER_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: |
+          ARGS="--release --dart-define=PYRUNNER_PYTHON=${{ matrix.python }}"
+          flutter build apk $ARGS || { echo "Build failed, retrying once..."; flutter build apk $ARGS; }
+
+      - name: Attach APK and checksum to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT="PythonRunner-${GITHUB_REF_NAME}-py${{ matrix.python }}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$OUT"
+          sha256sum "$OUT" > "$OUT.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$OUT" "$OUT.sha256" --repo "$GITHUB_REPOSITORY" --clobber
