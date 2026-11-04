@@ -17,8 +17,10 @@ class GeneratedSshKey {
 /// Generates a new Ed25519 key pair.
 GeneratedSshKey generateEd25519Key({String comment = 'python-runner'}) {
   final signingKey = SigningKey.generate();
-  final publicKey = Uint8List.fromList(signingKey.verifyKey.asTypedList);
-  final privateKey = Uint8List.fromList(signingKey.asTypedList);
+  // pinenacl 0.6 keys are byte lists: copy them into plain Uint8Lists.
+  // The signing key is the 32-byte seed followed by the 32-byte public key.
+  final publicKey = Uint8List.fromList(signingKey.verifyKey.toList());
+  final privateKey = Uint8List.fromList(signingKey.toList());
   final pair = OpenSSHEd25519KeyPair(publicKey, privateKey, comment);
   return GeneratedSshKey(
     privatePem: pair.toPem(),
