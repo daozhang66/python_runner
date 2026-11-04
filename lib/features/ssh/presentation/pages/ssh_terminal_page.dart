@@ -173,7 +173,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen(_terminal.write);
     _terminal.onOutput = (data) {
-      session.write(Uint8List.fromList(utf8.encode(_filter.apply(data))));
+      session.write(utf8.encoder.convert(_filter.apply(data)));
     };
     _terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       session.resizeTerminal(width, height, pixelWidth, pixelHeight);
