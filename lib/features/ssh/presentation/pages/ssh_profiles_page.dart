@@ -5,12 +5,15 @@ import 'package:python_runner/features/scripts/application/script_workspace_cont
 import '../../application/ssh_keys.dart';
 import '../../application/ssh_profile_store.dart';
 import '../../domain/ssh_profile.dart';
+import '../python_repl_launcher.dart';
 import '../ssh_dialogs.dart';
 import '../ssh_text.dart';
+import 'local_terminal_page.dart';
 import 'ssh_profile_edit_page.dart';
 import 'ssh_terminal_page.dart';
 
-/// Lists saved SSH hosts. Tap a host to open a terminal on it.
+/// Terminals on this phone (local shell, Python console) and saved SSH hosts.
+/// Tap a host to open a terminal on it.
 class SshProfilesPage extends ConsumerStatefulWidget {
   const SshProfilesPage({super.key});
 
@@ -159,11 +162,25 @@ class _SshProfilesPageState extends ConsumerState<SshProfilesPage> {
     );
   }
 
+  Widget _sectionTitle(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = SshText.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(t('SSH 远程与终端', 'SSH & Terminal'))),
+      appBar: AppBar(title: Text(t('终端与 SSH', 'Terminal & SSH'))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _edit,
         icon: const Icon(Icons.add),
@@ -174,8 +191,41 @@ class _SshProfilesPageState extends ConsumerState<SshProfilesPage> {
           : ListView(
               padding: const EdgeInsets.only(bottom: 96),
               children: [
+                _sectionTitle(context, t('本机', 'This phone')),
+                ListTile(
+                  leading: const Icon(Icons.terminal),
+                  title: Text(t('本机 Shell', 'Local shell')),
+                  subtitle: Text(
+                    t(
+                      '系统自带的 sh，不需要 Linux 包；没有 PTY，不支持 vim 等全屏程序',
+                      'The built-in sh, no Linux package needed; no PTY, so no vim and other full-screen programs',
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  isThreeLine: true,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const LocalTerminalPage(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.data_object),
+                  title: Text(t('Python 交互环境', 'Python console')),
+                  subtitle: Text(
+                    t(
+                      '在内置 Python 里逐行输入代码，可以用已安装的 pip 包；会生成脚本 python_repl.py',
+                      'Type code line by line in the built-in Python, with your installed pip packages; creates the script python_repl.py',
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  isThreeLine: true,
+                  onTap: () => openPythonRepl(context, ref),
+                ),
+                _sectionTitle(context, t('SSH 主机', 'SSH hosts')),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   child: Text(
                     t(
                       '连接任意 SSH 服务器，在远程终端里工作，或把脚本放到远程运行。也可以连接手机上 Stryker 等虚拟机里的 Debian：主机填 127.0.0.1 和它的 SSH 端口，用“生成密钥”后把公钥加入虚拟机的 authorized_keys。',
@@ -189,7 +239,7 @@ class _SshProfilesPageState extends ConsumerState<SshProfilesPage> {
                 ),
                 if (_profiles.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.all(24),
                     child: Center(child: Text(t('还没有主机', 'No hosts yet'))),
                   ),
                 for (final profile in _profiles)

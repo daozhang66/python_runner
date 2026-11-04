@@ -7,15 +7,15 @@ extension _SettingsSshSection on _SettingsPageState {
       children: [
         _SectionCard(
           icon: Icons.terminal,
-          title: t('SSH 远程与终端', 'SSH & Terminal'),
+          title: t('终端与 SSH', 'Terminal & SSH'),
           children: [
             ListTile(
               leading: const Icon(Icons.dns_outlined),
-              title: Text(t('SSH 主机与终端', 'SSH hosts & terminal')),
+              title: Text(t('本机终端与 SSH 主机', 'Local terminal & SSH hosts')),
               subtitle: Text(
                 t(
-                  '连接服务器或虚拟机，远程运行脚本',
-                  'Connect to servers or VMs and run scripts remotely',
+                  '本机 Shell、Python 交互环境，连接服务器或虚拟机远程运行脚本',
+                  'Local shell, Python console, and remote hosts to run scripts on',
                 ),
                 style: const TextStyle(fontSize: 12),
               ),

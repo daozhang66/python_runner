@@ -3,9 +3,7 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart' show SSHSession;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:xterm2/xterm.dart'
-    show Terminal, TerminalController, TerminalKey, TerminalStyle, TerminalView;
+import 'package:xterm2/xterm.dart' show Terminal;
 
 import '../../application/ssh_command_builder.dart';
 import '../../application/ssh_connection.dart';
@@ -13,6 +11,7 @@ import '../../application/ssh_profile_store.dart';
 import '../../domain/ssh_profile.dart';
 import '../ssh_error_text.dart';
 import '../ssh_text.dart';
+import '../widgets/terminal_pane.dart';
 
 /// A script that is uploaded and run instead of opening a login shell.
 class SshRemoteTask {
@@ -32,16 +31,9 @@ class SshTerminalPage extends StatefulWidget {
   State<SshTerminalPage> createState() => _SshTerminalPageState();
 }
 
-class _KeyAction {
-  _KeyAction(this.label, this.onTap);
-
-  final String label;
-  final VoidCallback onTap;
-}
-
 class _SshTerminalPageState extends State<SshTerminalPage> {
   final Terminal _terminal = Terminal(maxLines: 10000);
-  final TerminalController _terminalController = TerminalController();
+  final TerminalInputFilter _filter = TerminalInputFilter();
 
   SshConnection? _connection;
   SSHSession? _session;
@@ -50,7 +42,6 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   int _generation = 0;
   bool _busy = false;
   bool _connected = false;
-  double _fontSize = 14;
 
   @override
   void initState() {
@@ -64,7 +55,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   void dispose() {
     _generation++;
     unawaited(_teardown());
-    _terminalController.dispose();
+    _filter.dispose();
     super.dispose();
   }
 
@@ -182,7 +173,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen(_terminal.write);
     _terminal.onOutput = (data) {
-      session.write(Uint8List.fromList(utf8.encode(data)));
+      session.write(Uint8List.fromList(utf8.encode(_filter.apply(data))));
     };
     _terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       session.resizeTerminal(width, height, pixelWidth, pixelHeight);
@@ -299,93 +290,11 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
     return accepted ?? false;
   }
 
-  Future<void> _copySelection() async {
-    final selection = _terminalController.selection;
-    final t = SshText.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    if (selection == null) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(t('先在终端里长按选择文字', 'Long-press the terminal to select text first')),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    final text = _terminal.buffer.getText(selection);
-    await Clipboard.setData(ClipboardData(text: text));
-    _terminalController.clearSelection();
-  }
-
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text;
-    if (text != null && text.isNotEmpty) _terminal.paste(text);
-  }
-
-  void _changeFont(double delta) {
-    setState(() => _fontSize = (_fontSize + delta).clamp(8, 28).toDouble());
-  }
-
-  Widget _buildKeyBar(SshText t) {
-    final actions = <_KeyAction>[
-      _KeyAction('Esc', () => _terminal.keyInput(TerminalKey.escape)),
-      _KeyAction('Tab', () => _terminal.keyInput(TerminalKey.tab)),
-      _KeyAction('↑', () => _terminal.keyInput(TerminalKey.arrowUp)),
-      _KeyAction('↓', () => _terminal.keyInput(TerminalKey.arrowDown)),
-      _KeyAction('←', () => _terminal.keyInput(TerminalKey.arrowLeft)),
-      _KeyAction('→', () => _terminal.keyInput(TerminalKey.arrowRight)),
-      _KeyAction('Home', () => _terminal.keyInput(TerminalKey.home)),
-      _KeyAction('End', () => _terminal.keyInput(TerminalKey.end)),
-      _KeyAction('PgUp', () => _terminal.keyInput(TerminalKey.pageUp)),
-      _KeyAction('PgDn', () => _terminal.keyInput(TerminalKey.pageDown)),
-      _KeyAction('^C', () => _terminal.keyInput(TerminalKey.keyC, ctrl: true)),
-      _KeyAction('^D', () => _terminal.keyInput(TerminalKey.keyD, ctrl: true)),
-      _KeyAction('^Z', () => _terminal.keyInput(TerminalKey.keyZ, ctrl: true)),
-      _KeyAction('^L', () => _terminal.keyInput(TerminalKey.keyL, ctrl: true)),
-      _KeyAction('/', () => _terminal.textInput('/')),
-      _KeyAction('-', () => _terminal.textInput('-')),
-      _KeyAction('|', () => _terminal.textInput('|')),
-      _KeyAction('~', () => _terminal.textInput('~')),
-      _KeyAction(t('粘贴', 'Paste'), _paste),
-      _KeyAction(t('复制', 'Copy'), _copySelection),
-    ];
-    return Material(
-      color: const Color(0xFF16181C),
-      child: SizedBox(
-        height: 42,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: actions.length,
-          itemBuilder: (context, index) {
-            final action = actions[index];
-            return InkWell(
-              canRequestFocus: false,
-              onTap: action.onTap,
-              child: Container(
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  action.label,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = SshText.of(context);
     final profile = widget.profile;
-    final isTask = widget.task != null;
+    final task = widget.task;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -393,7 +302,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isTask ? '${profile.name} · ${widget.task!.fileName}' : profile.name,
+              task == null ? profile.name : '${profile.name} · ${task.fileName}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 16),
@@ -415,58 +324,33 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: isTask
+            tooltip: task != null
                 ? t('重新上传并运行', 'Upload & run again')
                 : t('重新连接', 'Reconnect'),
             onPressed: _busy ? null : () => unawaited(_start()),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'copy':
-                  unawaited(_copySelection());
-                case 'paste':
-                  unawaited(_paste());
-                case 'interrupt':
-                  _terminal.keyInput(TerminalKey.keyC, ctrl: true);
-                case 'bigger':
-                  _changeFont(1);
-                case 'smaller':
-                  _changeFont(-1);
-                case 'disconnect':
-                  unawaited(_teardown().then((_) {
-                    if (mounted) setState(() => _connected = false);
-                  }));
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'copy', child: Text(t('复制选中文字', 'Copy selection'))),
-              PopupMenuItem(value: 'paste', child: Text(t('粘贴', 'Paste'))),
-              PopupMenuItem(value: 'interrupt', child: Text(t('中断 (Ctrl+C)', 'Interrupt (Ctrl+C)'))),
-              PopupMenuItem(value: 'bigger', child: Text(t('字体放大', 'Larger font'))),
-              PopupMenuItem(value: 'smaller', child: Text(t('字体缩小', 'Smaller font'))),
-              if (_connected)
-                PopupMenuItem(value: 'disconnect', child: Text(t('断开连接', 'Disconnect'))),
-            ],
-          ),
+          if (_connected)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'disconnect') {
+                  unawaited(
+                    _teardown().then((_) {
+                      if (mounted) setState(() => _connected = false);
+                    }),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'disconnect',
+                  child: Text(t('断开连接', 'Disconnect')),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: TerminalView(
-                _terminal,
-                controller: _terminalController,
-                autofocus: true,
-                deleteDetection: true,
-                textStyle: TerminalStyle(fontSize: _fontSize),
-                padding: const EdgeInsets.all(6),
-              ),
-            ),
-            _buildKeyBar(t),
-          ],
-        ),
+        child: TerminalPane(terminal: _terminal, filter: _filter),
       ),
     );
   }
