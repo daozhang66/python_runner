@@ -34,7 +34,7 @@ import '../../../files/presentation/pages/file_manager_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../pages/app_file_picker_page.dart';
-import '../../../ssh/presentation/ssh_entry_button.dart';
+import '../../../ssh/presentation/ssh_menu_item.dart';
 
 part 'script_list_actions.dart';
 part 'script_list_content.dart';
@@ -248,6 +248,7 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        buildSshMenuItem(this.context),
       ],
     );
   }
@@ -475,7 +476,6 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                                 ),
                           actions: _activeGroupId == null
                               ? [
-                                  const SshEntryButton(),
                                   _buildScriptNameVisibilityButton(),
                                   _buildScriptMenu(),
                                 ]
