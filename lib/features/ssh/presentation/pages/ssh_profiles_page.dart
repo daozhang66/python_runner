@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:python_runner/features/scripts/application/script_workspace_controller.dart';
 
+import '../../application/python_launch.dart';
 import '../../application/ssh_keys.dart';
 import '../../application/ssh_profile_store.dart';
 import '../../domain/ssh_profile.dart';
-import '../python_repl_launcher.dart';
+import '../python_launcher.dart';
+import '../python_run_dialogs.dart';
 import '../ssh_dialogs.dart';
 import '../ssh_text.dart';
 import 'local_terminal_page.dart';
@@ -197,12 +199,17 @@ class _SshProfilesPageState extends ConsumerState<SshProfilesPage> {
                   title: Text(t('本机 Shell', 'Local shell')),
                   subtitle: Text(
                     t(
-                      '系统自带的 sh，不需要 Linux 包；没有 PTY，不支持 vim 等全屏程序',
-                      'The built-in sh, no Linux package needed; no PTY, so no vim and other full-screen programs',
+                      '系统自带的 sh，不需要 Linux 包。没有 PTY（伪终端），不支持 vim 等全屏程序。python / python3 / run 是内置命令，用内置 Python 运行',
+                      'The built-in sh, no Linux package needed. No PTY (pseudo terminal), so no vim and other full-screen programs. python / python3 / run are built-in commands that use the embedded Python',
                     ),
                     style: const TextStyle(fontSize: 12),
                   ),
                   isThreeLine: true,
+                  trailing: IconButton(
+                    icon: const Icon(Icons.folder_open_outlined),
+                    tooltip: t('启动目录', 'Start directory'),
+                    onPressed: () => showLocalShellSettingsDialog(context),
+                  ),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
@@ -215,13 +222,28 @@ class _SshProfilesPageState extends ConsumerState<SshProfilesPage> {
                   title: Text(t('Python 交互环境', 'Python console')),
                   subtitle: Text(
                     t(
-                      '在内置 Python 里逐行输入代码，可以用已安装的 pip 包；会生成脚本 python_repl.py',
-                      'Type code line by line in the built-in Python, with your installed pip packages; creates the script python_repl.py',
+                      '在内置 Python 里逐行输入代码，可以用已安装的 pip 包',
+                      'Type code line by line in the built-in Python, with your installed pip packages',
                     ),
                     style: const TextStyle(fontSize: 12),
                   ),
-                  isThreeLine: true,
-                  onTap: () => openPythonRepl(context, ref),
+                  onTap: () => launchPython(
+                    context,
+                    ref,
+                    const PythonLaunch(mode: PythonLaunchMode.interactive),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.play_circle_outline),
+                  title: Text(t('运行 Python 文件…', 'Run a Python file…')),
+                  subtitle: Text(
+                    t(
+                      '选择一个 .py 文件并填写参数，在新页面运行',
+                      'Pick a .py file and its arguments; it runs in a new page',
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () => showRunPythonFileDialog(context, ref),
                 ),
                 _sectionTitle(context, t('SSH 主机', 'SSH hosts')),
                 Padding(

@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'pages/ssh_profiles_page.dart';
 import 'ssh_text.dart';
 
-/// App bar button that opens the SSH hosts / terminal page.
+// The script list page imports only this file, so re-export what it needs.
+export 'run_conflict_dialog.dart';
+
+/// App bar button that opens the terminal / SSH page.
 class SshEntryButton extends StatelessWidget {
   const SshEntryButton({super.key});
 
@@ -12,7 +15,7 @@ class SshEntryButton extends StatelessWidget {
     final t = SshText.of(context);
     return IconButton(
       icon: const Icon(Icons.terminal),
-      tooltip: t('SSH 终端', 'SSH terminal'),
+      tooltip: t('终端 / SSH', 'Terminal / SSH'),
       onPressed: () => Navigator.push(
         context,
         MaterialPageRoute<void>(builder: (_) => const SshProfilesPage()),

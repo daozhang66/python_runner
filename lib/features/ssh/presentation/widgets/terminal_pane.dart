@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm2/xterm.dart'
-    show Terminal, TerminalController, TerminalKey, TerminalStyle, TerminalView;
+    show
+        CellOffset,
+        Terminal,
+        TerminalController,
+        TerminalKey,
+        TerminalStyle,
+        TerminalView,
+        TerminalViewState;
 
 import '../pages/terminal_text_page.dart';
 import '../ssh_text.dart';
@@ -36,8 +43,9 @@ class TerminalInputFilter {
 }
 
 /// Terminal view plus the touch helpers around it: a selection bar (copy /
-/// paste / cancel), a scrollable key bar with a sticky Ctrl key, font size
-/// buttons and a "select text" page that uses the system selection handles.
+/// paste / cancel), draggable handles to grow or shrink the selection, a
+/// scrollable key bar with a sticky Ctrl key, font size buttons and a
+/// "select text" page that uses the system selection handles.
 class TerminalPane extends StatefulWidget {
   const TerminalPane({
     super.key,
@@ -54,23 +62,34 @@ class TerminalPane extends StatefulWidget {
 
 class _TerminalPaneState extends State<TerminalPane> {
   final TerminalController _controller = TerminalController();
+  final GlobalKey<TerminalViewState> _viewKey = GlobalKey<TerminalViewState>();
+  final GlobalKey _stackKey = GlobalKey();
+  final ScrollController _scroll = ScrollController();
   double _fontSize = 14;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onSelectionChanged);
+    _scroll.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onSelectionChanged);
+    _scroll.removeListener(_onScroll);
     _controller.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   void _onSelectionChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onScroll() {
+    // Handles follow the text, so they only need a rebuild while selecting.
+    if (_controller.selection != null) _onSelectionChanged();
   }
 
   void _toast(String message) {
@@ -124,6 +143,106 @@ class _TerminalPaneState extends State<TerminalPane> {
 
   void _changeFont(double delta) {
     setState(() => _fontSize = (_fontSize + delta).clamp(8, 28).toDouble());
+  }
+
+  static int _compare(CellOffset a, CellOffset b) =>
+      a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x);
+
+  /// The two selection handles, positioned under the first and last selected
+  /// cell. Empty when nothing is selected or the view is not laid out yet.
+  List<Widget> _buildHandles() {
+    final selection = _controller.selection;
+    final state = _viewKey.currentState;
+    final stackBox = _stackKey.currentContext?.findRenderObject();
+    if (selection == null || state == null || stackBox is! RenderBox) {
+      return const <Widget>[];
+    }
+    try {
+      final render = state.renderTerminal;
+      var begin = selection.begin;
+      var end = selection.end;
+      if (_compare(begin, end) > 0) {
+        final swap = begin;
+        begin = end;
+        end = swap;
+      }
+      final cellHeight = render.getOffset(CellOffset(0, 1)).dy -
+          render.getOffset(CellOffset(0, 0)).dy;
+      Offset toStack(Offset local) =>
+          stackBox.globalToLocal(render.localToGlobal(local));
+      final startPoint = toStack(render.getOffset(begin));
+      final endPoint = toStack(render.getOffset(end));
+      return [
+        _handle(startPoint.translate(0, cellHeight), true, cellHeight),
+        _handle(endPoint.translate(0, cellHeight), false, cellHeight),
+      ];
+    } catch (_) {
+      return const <Widget>[];
+    }
+  }
+
+  Widget _handle(Offset anchor, bool isStart, double cellHeight) {
+    const size = 44.0;
+    return Positioned(
+      left: anchor.dx - size / 2,
+      top: anchor.dy - 6,
+      width: size,
+      height: size,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onPanUpdate: (details) =>
+            _dragHandle(isStart, details.globalPosition, cellHeight),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B82F6),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _dragHandle(bool isStart, Offset global, double cellHeight) {
+    final state = _viewKey.currentState;
+    final selection = _controller.selection;
+    if (state == null || selection == null) return;
+    try {
+      final render = state.renderTerminal;
+      // The finger sits below the handle; aim at the line the handle points to.
+      final local = render.globalToLocal(global.translate(0, -cellHeight * 1.2));
+      final cell = render.getCellOffset(local);
+      var begin = selection.begin;
+      var end = selection.end;
+      if (_compare(begin, end) > 0) {
+        final swap = begin;
+        begin = end;
+        end = swap;
+      }
+      if (isStart) {
+        begin = cell;
+        if (_compare(begin, end) >= 0) {
+          end = CellOffset(begin.x + 1, begin.y);
+        }
+      } else {
+        end = CellOffset(cell.x + 1, cell.y);
+        if (_compare(end, begin) <= 0) {
+          begin = CellOffset(end.x > 1 ? end.x - 1 : 0, end.y);
+        }
+      }
+      final buffer = widget.terminal.buffer;
+      _controller.setSelection(
+        buffer.createAnchorFromOffset(begin),
+        buffer.createAnchorFromOffset(end),
+      );
+    } catch (_) {
+      return;
+    }
   }
 
   Widget _keyButton(
@@ -215,16 +334,20 @@ class _TerminalPaneState extends State<TerminalPane> {
       children: [
         Expanded(
           child: Stack(
+            key: _stackKey,
             fit: StackFit.expand,
             children: [
               TerminalView(
                 widget.terminal,
+                key: _viewKey,
                 controller: _controller,
+                scrollController: _scroll,
                 autofocus: true,
                 deleteDetection: true,
                 textStyle: TerminalStyle(fontSize: _fontSize),
                 padding: const EdgeInsets.all(6),
               ),
+              if (_controller.selection != null) ..._buildHandles(),
               if (_controller.selection != null)
                 Positioned(
                   top: 8,
