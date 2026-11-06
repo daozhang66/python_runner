@@ -1,4 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+
+import '../../ssh/application/log/log_record.dart';
+import '../../ssh/application/log/terminal_logs.dart';
 
 /// 审计事件类型。
 enum McpAuditKind { server, connect, disconnect, toolCall }
@@ -53,7 +58,9 @@ class McpAuditEntry {
       };
 }
 
-/// 内存环形审计日志（默认保留最近 200 条），供设置页展示与清空。
+/// 审计日志。内存里保留最近 200 条供设置页展示与清空；同时每条都会写入
+/// 持久的“AI 操作”日志（分片压缩，可在终端日志页查看、导出、删除），
+/// 这样重启应用后仍然可以追溯 AI 调用过什么。
 class McpAuditLog extends ChangeNotifier {
   static const int capacity = 200;
   static const int maxSummaryLength = 300;
@@ -138,7 +145,37 @@ class McpAuditLog extends ChangeNotifier {
     if (_entries.length > capacity) {
       _entries.removeRange(0, _entries.length - capacity);
     }
+    _persist(entry);
     notifyListeners();
+  }
+
+  /// Copies [entry] into the persistent AI operations log. Never throws.
+  void _persist(McpAuditEntry entry) {
+    final detail = entry.argsSummary;
+    final extra = (detail == null || detail.isEmpty) ? '' : '  $detail';
+    final summary = switch (entry.kind) {
+      McpAuditKind.toolCall =>
+        '${entry.tool ?? '?'} -> ${entry.status}$extra',
+      McpAuditKind.connect => 'AI connected: ${entry.clientLabel ?? '?'}',
+      McpAuditKind.disconnect =>
+        'AI disconnected: ${entry.clientLabel ?? '?'}$extra',
+      McpAuditKind.server => 'MCP server ${entry.status}$extra',
+    };
+    final isKeyEvent = entry.kind != McpAuditKind.server ||
+        entry.status == 'unauthorized' ||
+        entry.status == 'started' ||
+        entry.status == 'stopped';
+    TerminalLogs.instance.add(
+      LogChannel.operations,
+      LogRecord.now(
+        k: 'mcp_${entry.kind.name}',
+        s: summary,
+        sid: entry.sessionId ?? '',
+        a: entry.kind == McpAuditKind.server ? 'system' : 'ai',
+        i: isKeyEvent ? 0 : 1,
+        d: jsonEncode(entry.toMap()),
+      ),
+    );
   }
 
   String _summarize(String value) {
