@@ -172,7 +172,7 @@ void main() {
 
     test('raw keystrokes become command lines', () {
       logger.feedInput('ls -l');
-      logger.feedInput('\x7f\x7fx\r');
+      logger.feedInput('\x7fx\r');
       logger.feedInput('\x1b[A\r');
       expect(records.where((r) => r.k == 'cmd').map((r) => r.s), ['ls -x']);
     });

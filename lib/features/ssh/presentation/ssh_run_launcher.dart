@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../application/ssh_profile_store.dart';
+import '../application/terminal/session_manager.dart';
+import '../application/terminal/ssh_session.dart';
 import '../domain/ssh_profile.dart';
 import 'pages/ssh_profiles_page.dart';
-import 'pages/ssh_terminal_page.dart';
+import 'pages/terminal_hub_page.dart';
 import 'ssh_text.dart';
 
-/// Picks an SSH host and runs a script on it.
+/// Picks an SSH host and runs a script on it in a new terminal tab.
 class SshRunLauncher {
   const SshRunLauncher._();
 
@@ -81,14 +83,18 @@ class SshRunLauncher {
     }
     final chosen = target;
     if (chosen == null || !context.mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => SshTerminalPage(
-          profile: chosen,
-          task: SshRemoteTask(fileName: fileName, content: content),
-        ),
-      ),
-    );
+    try {
+      final session = TerminalSessionManager.instance.createSsh(
+        chosen,
+        task: SshRemoteTask(fileName: fileName, content: content),
+      );
+      await openTerminalHub(context, sessionId: session.id);
+    } on StateError catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    }
   }
 }
