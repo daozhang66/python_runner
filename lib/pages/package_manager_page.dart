@@ -446,7 +446,6 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
               child: TextField(
                 key: const ValueKey('install-package-name'),
                 controller: _packageController,
-                enableSuggestions: false,
                 autocorrect: false,
                 style: const TextStyle(fontSize: 14, height: 1.2),
                 textAlignVertical: TextAlignVertical.center,
@@ -509,7 +508,6 @@ class _PackageManagerPageState extends ConsumerState<PackageManagerPage>
     return TextField(
       key: const ValueKey('install-package-version'),
       controller: _versionController,
-      enableSuggestions: false,
       autocorrect: false,
       style: const TextStyle(fontSize: 14, height: 1.2),
       textAlignVertical: TextAlignVertical.center,
