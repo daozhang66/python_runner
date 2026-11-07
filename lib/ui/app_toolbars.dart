@@ -115,7 +115,6 @@ class AppSearchBar extends StatelessWidget {
                         child: TextField(
                           controller: controller,
                           autofocus: autofocus,
-                          enableSuggestions: false,
                           autocorrect: false,
                           style: const TextStyle(fontSize: 13),
                           decoration: InputDecoration(
