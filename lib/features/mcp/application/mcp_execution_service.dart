@@ -6,6 +6,7 @@ import '../../../providers/execution_provider.dart';
 import '../../../services/project_path_validator.dart';
 import '../../../services/script_name_validator.dart';
 import '../../scripts/application/script_repository.dart';
+import '../../ssh/application/log/run_log_recorder.dart';
 import '../domain/mcp_error_codes.dart';
 
 /// Shares the terminal's execution owner; never creates another runtime.
@@ -38,6 +39,9 @@ class McpExecutionService {
       throw McpToolException('EXECUTION_BUSY',
           'A script is already running; the current execution is not replaced');
     }
+    // The run recorder files this run under the AI's operations.
+    RunLogRecorder.instance.attach(owner);
+    RunLogRecorder.instance.expectAiRun();
     // executeScript reserves executionId and running state before its first
     // await. Concurrent MCP calls therefore cannot replace this run.
     final starting = owner.executeScript(safeName);
@@ -46,6 +50,7 @@ class McpExecutionService {
       // The provider records runtime start failures in its terminal history.
     }));
     if (id == null) {
+      RunLogRecorder.instance.cancelExpectedAiRun();
       throw McpToolException(
           'EXECUTION_START_FAILED', 'Unable to create an execution session');
     }
@@ -94,12 +99,15 @@ class McpExecutionService {
       throw McpToolException('EXECUTION_BUSY',
           'A script is already running; the current execution is not replaced');
     }
+    RunLogRecorder.instance.attach(owner);
+    RunLogRecorder.instance.expectAiRun();
     final starting = owner.executeScriptProject(group);
     final id = owner.state.executionId;
     unawaited(starting.catchError((Object error, StackTrace stack) {
       // executeScriptProject records launch failures in its terminal history.
     }));
     if (id == null || owner.state.status != ExecutionStatus.running) {
+      RunLogRecorder.instance.cancelExpectedAiRun();
       throw McpToolException('EXECUTION_START_FAILED',
           'Unable to create a project execution session');
     }
@@ -197,6 +205,7 @@ class McpExecutionService {
           'The current execution is not waiting for this input; read pyrunner_execution_output again');
     }
     try {
+      RunLogRecorder.instance.noteAiInput(input);
       await owner.sendStdin(input,
           expectedExecutionId: id,
           expectedInputRevision: inputRequestId,
@@ -212,6 +221,7 @@ class McpExecutionService {
     final owner = execution();
     output(id, maxChars: 1); // Validate the ID without affecting another run.
     if (owner.state.executionId == id && owner.isRunning) {
+      RunLogRecorder.instance.noteAiStop();
       await owner.stopExecution();
     }
     return output(id);

@@ -7,7 +7,15 @@ import 'package:path_provider/path_provider.dart';
 import '../local_line_discipline.dart';
 import '../local_shell_prefs.dart';
 import '../python_launch.dart';
+import 'terminal_locale.dart';
 import 'terminal_session.dart';
+
+/// `sh -i` prints these two lines at start-up because it has no terminal
+/// (no PTY). They are harmless, so they are not shown or logged.
+final RegExp _shellNoise = RegExp(
+  r"^(?:/system/bin/)?sh: (?:can't find tty fd[^\r\n]*|warning: won't have full job control)\r?\n",
+  multiLine: true,
+);
 
 /// A shell on this phone: Android's own `/system/bin/sh`, no Linux package
 /// needed. It runs over plain pipes (no PTY), so [LineDiscipline] provides
@@ -87,7 +95,7 @@ class LocalShellSession extends TerminalSession {
     try {
       support = (await getApplicationSupportDirectory()).path;
     } catch (e) {
-      error('Cannot get a working directory: $e');
+      error(tr('无法获取工作目录：$e', 'Cannot get a working directory: $e'));
       setStatus(TerminalSessionStatus.failed, '$e');
       return;
     }
@@ -98,18 +106,24 @@ class LocalShellSession extends TerminalSession {
       if (Directory(custom).existsSync()) {
         dir = custom;
       } else {
-        error('Start directory does not exist: $custom, using the default');
+        error(
+          tr(
+            '启动目录不存在：$custom，已改用默认目录',
+            'Start directory does not exist: $custom, using the default',
+          ),
+        );
       }
     }
     _startDir = dir;
 
     final shell = File('/system/bin/sh').existsSync() ? '/system/bin/sh' : 'sh';
     info(
-      'Local shell ($shell). No PTY (pseudo terminal): full-screen programs '
-      'such as vim or top do not work. Type pyhelp for the built-in '
-      'python / run commands.',
+      tr(
+        '本机 Shell（$shell）。没有 PTY（伪终端），vim、top 这类全屏程序不可用。输入 pyhelp 查看内置的 python / run 命令。',
+        'Local shell ($shell). No PTY (pseudo terminal): full-screen programs such as vim or top do not work. Type pyhelp for the built-in python / run commands.',
+      ),
     );
-    info('Start directory: $dir');
+    info(tr('启动目录：$dir', 'Start directory: $dir'));
 
     try {
       final process = await Process.start(
@@ -140,7 +154,7 @@ class LocalShellSession extends TerminalSession {
         process.exitCode.then((code) {
           if (generation != _generation) return;
           _running = false;
-          info('[shell exited with code $code]');
+          info(tr('[shell 已退出，代码 $code]', '[shell exited with code $code]'));
           logger.event('session', 'shell exited with code $code');
           setStatus(TerminalSessionStatus.closed, 'exit $code');
         }),
@@ -148,14 +162,16 @@ class LocalShellSession extends TerminalSession {
       logger.event('session', 'opened local shell', detail: 'dir: $dir');
       setStatus(TerminalSessionStatus.running);
     } catch (e) {
-      error('Could not start the shell: $e');
+      error(tr('启动 shell 失败：$e', 'Could not start the shell: $e'));
       logger.event('session', 'failed to start: $e');
       setStatus(TerminalSessionStatus.failed, '$e');
     }
   }
 
   void _onShellOutput(String text) {
-    emit(text.replaceAll(RegExp(r'\r?\n'), '\r\n'));
+    final cleaned = text.replaceAll(_shellNoise, '');
+    if (cleaned.isEmpty) return;
+    emit(cleaned.replaceAll(RegExp(r'\r?\n'), '\r\n'));
   }
 
   void _toShell(String line) {
@@ -223,15 +239,17 @@ class LocalShellSession extends TerminalSession {
     final host = this.host;
     if (host == null) {
       error(
-        'Built-in commands need the terminal page to be open (they show '
-        'their output in a run console).',
+        tr(
+          '内置命令需要先打开终端页（输出会在运行控制台里显示）。',
+          'Built-in commands need the terminal page to be open (they show their output in a run console).',
+        ),
       );
       return true;
     }
     if (first == 'scripts') {
       final names = host.scriptNames();
       if (names.isEmpty) {
-        info('(no scripts)');
+        info(tr('（还没有脚本）', '(no scripts)'));
       } else {
         for (final name in names) {
           emit('$name\r\n');
@@ -267,13 +285,18 @@ class LocalShellSession extends TerminalSession {
   Future<void> _runWorkspaceScript(TerminalHost host, String line) async {
     final tokens = shellSplit(line);
     if (tokens.length < 2) {
-      error('usage: run <script> [args...]');
+      error(tr('用法：run <脚本名> [参数...]', 'usage: run <script> [args...]'));
       return;
     }
     var name = tokens[1];
     if (!name.endsWith('.py')) name = '$name.py';
     if (!host.scriptNames().contains(name)) {
-      error('run: no script named $name (type scripts to list them)');
+      error(
+        tr(
+          'run：没有名为 $name 的脚本（输入 scripts 查看列表）',
+          'run: no script named $name (type scripts to list them)',
+        ),
+      );
       return;
     }
     final source = await host.readScript(name);
@@ -288,14 +311,23 @@ class LocalShellSession extends TerminalSession {
   }
 
   void _printHelp() {
-    const text = 'Built-in commands:\n'
-        '  python | python3 | py [-c code | -m module | file] [args...]\n'
-        '      run in the embedded Python; output opens in a new page (input() works)\n'
-        '  run <script> [args...]   run a script from the script list\n'
-        '  scripts                  list the scripts in the script list\n'
-        '  pyhelp                   show this text\n'
-        'Built-ins do not support pipes, redirects, && or ;. '
-        'Everything else goes to the system sh.';
+    final text = tr(
+      '内置命令：\n'
+          '  python | python3 | py [-c 代码 | -m 模块 | 文件] [参数...]\n'
+          '      在内置 Python 里运行，结果在新页面显示（支持 input()）\n'
+          '  run <脚本名> [参数...]   运行脚本列表里的脚本\n'
+          '  scripts                  列出脚本列表里的脚本\n'
+          '  pyhelp                   显示这段说明\n'
+          '内置命令不支持管道、重定向、&& 和 ;。其他命令交给系统 sh。',
+      'Built-in commands:\n'
+          '  python | python3 | py [-c code | -m module | file] [args...]\n'
+          '      run in the embedded Python; output opens in a new page (input() works)\n'
+          '  run <script> [args...]   run a script from the script list\n'
+          '  scripts                  list the scripts in the script list\n'
+          '  pyhelp                   show this text\n'
+          'Built-ins do not support pipes, redirects, && or ;. '
+          'Everything else goes to the system sh.',
+    );
     emit('${text.replaceAll('\n', '\r\n')}\r\n');
   }
 }

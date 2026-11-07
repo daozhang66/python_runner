@@ -5,6 +5,7 @@ import 'package:python_runner/features/console/presentation/pages/run_console_pa
 import 'package:python_runner/features/scripts/application/script_workspace_controller.dart';
 import 'package:python_runner/providers/execution_provider.dart';
 
+import '../application/log/run_log_recorder.dart';
 import '../application/python_launch.dart';
 import 'run_conflict_dialog.dart';
 import 'ssh_text.dart';
@@ -61,6 +62,9 @@ Future<bool> launchPython(
     } else {
       await controller.createScript(pythonLauncherScriptName, content: source);
     }
+    // Name the run after the command, not after the launcher script.
+    RunLogRecorder.instance.attach(exec);
+    RunLogRecorder.instance.setNextLabel(launch.label);
     await exec.executeScript(pythonLauncherScriptName);
     if (!navigator.mounted) return true;
     await navigator.push(

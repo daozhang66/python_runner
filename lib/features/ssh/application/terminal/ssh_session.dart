@@ -7,6 +7,7 @@ import '../../domain/ssh_profile.dart';
 import '../ssh_command_builder.dart';
 import '../ssh_connection.dart';
 import '../ssh_profile_store.dart';
+import 'terminal_locale.dart';
 import 'terminal_session.dart';
 
 /// A script that is uploaded and run instead of opening a login shell.
@@ -58,15 +59,21 @@ class SshSession extends TerminalSession {
     await _teardown();
     if (generation != _generation) return;
 
-    info('Connecting to ${profile.endpoint} …');
+    info(
+      tr(
+        '正在连接 ${profile.endpoint} …',
+        'Connecting to ${profile.endpoint} …',
+      ),
+    );
     final connection = SshConnection(profile);
     try {
       final secrets = await SshProfileStore.instance.loadSecrets(profile.id);
       _connection = connection;
       await connection.connect(
         secrets: secrets,
-        askPassword: () async => host?.askSecret('Password'),
-        askPassphrase: () async => host?.askSecret('Key passphrase'),
+        askPassword: () async => host?.askSecret(tr('输入密码', 'Password')),
+        askPassphrase: () async =>
+            host?.askSecret(tr('输入私钥口令', 'Key passphrase')),
         confirmHostKey: (prompt) async =>
             await host?.confirmHostKey(prompt) ?? false,
       );
@@ -83,7 +90,7 @@ class SshSession extends TerminalSession {
         session = await connection.openShell(cols, rows);
       } else {
         final fileName = safeRemoteFileName(task.fileName);
-        info('Uploading $fileName …');
+        info(tr('正在上传 $fileName …', 'Uploading $fileName …'));
         await connection.uploadText(
           buildUploadCommand(
             remoteDir: profile.remoteDir,
@@ -115,7 +122,7 @@ class SshSession extends TerminalSession {
     } on SshCancelled {
       connection.close();
       if (generation == _generation) {
-        info('Cancelled');
+        info(tr('已取消', 'Cancelled'));
         logger.event('session', 'connection cancelled');
         setStatus(TerminalSessionStatus.failed, 'cancelled');
       }
@@ -134,10 +141,18 @@ class SshSession extends TerminalSession {
   String _describe(Object error) {
     if (error is SshFailure) {
       return switch (error.kind) {
-        SshFailureKind.noPrivateKey => 'No private key is saved for this host.',
-        SshFailureKind.badKey => 'Cannot read the private key: ${error.detail}',
-        SshFailureKind.uploadFailed =>
-          'Uploading the script failed: ${error.detail}',
+        SshFailureKind.noPrivateKey => tr(
+            '这个主机没有保存私钥。',
+            'No private key is saved for this host.',
+          ),
+        SshFailureKind.badKey => tr(
+            '无法读取私钥：${error.detail}',
+            'Cannot read the private key: ${error.detail}',
+          ),
+        SshFailureKind.uploadFailed => tr(
+            '上传脚本失败：${error.detail}',
+            'Uploading the script failed: ${error.detail}',
+          ),
       };
     }
     return '$error';
@@ -174,7 +189,7 @@ class SshSession extends TerminalSession {
       // The connection dropped; handled below like a normal exit.
     }
     if (generation != _generation) return;
-    info('[Session ended]');
+    info(tr('[会话已结束]', '[Session ended]'));
     logger.event('session', 'ended');
     setStatus(TerminalSessionStatus.closed, 'ended');
   }
