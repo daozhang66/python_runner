@@ -64,7 +64,6 @@ extension _SettingsSections on _SettingsPageState {
                       Expanded(
                         child: TextField(
                           controller: _mirrorController,
-                          enableSuggestions: false,
                           autocorrect: false,
                           decoration: const InputDecoration(
                             hintText: 'https://pypi.org/simple',
@@ -437,7 +436,6 @@ extension _SettingsSections on _SettingsPageState {
       builder: (context, constraints) {
         final host = TextField(
           controller: _proxyHostController,
-          enableSuggestions: false,
           autocorrect: false,
           decoration: InputDecoration(
             hintText: '192.168.1.100',
@@ -447,7 +445,6 @@ extension _SettingsSections on _SettingsPageState {
         );
         final port = TextField(
           controller: _proxyPortController,
-          enableSuggestions: false,
           autocorrect: false,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
