@@ -117,7 +117,6 @@ class _RunFileDialogState extends State<_RunFileDialog> {
             TextField(
               controller: _path,
               autocorrect: false,
-              enableSuggestions: false,
               decoration: InputDecoration(
                 labelText: t('文件路径', 'File path'),
                 hintText: '/sdcard/Download/demo.py',
@@ -134,7 +133,6 @@ class _RunFileDialogState extends State<_RunFileDialog> {
             TextField(
               controller: _args,
               autocorrect: false,
-              enableSuggestions: false,
               decoration: InputDecoration(
                 labelText: t('参数（可选）', 'Arguments (optional)'),
                 helperText: t(
@@ -268,7 +266,6 @@ class _ShellSettingsDialogState extends State<_ShellSettingsDialog> {
             TextField(
               controller: _dir,
               autocorrect: false,
-              enableSuggestions: false,
               decoration: InputDecoration(
                 labelText: t('目录', 'Directory'),
                 hintText: widget.defaultDir,

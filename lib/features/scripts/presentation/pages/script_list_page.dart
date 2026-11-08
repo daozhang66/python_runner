@@ -425,7 +425,6 @@ class _ScriptListPageState extends ConsumerState<ScriptListPage> {
                           title: TextField(
                             controller: _searchController,
                             autofocus: true,
-                            enableSuggestions: false,
                             autocorrect: false,
                             decoration: InputDecoration(
                               hintText: l10n.searchScriptsHint,
