@@ -220,7 +220,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                         child: TextFormField(
                           controller: _host,
                           autocorrect: false,
-                          enableSuggestions: false,
                           keyboardType: TextInputType.url,
                           decoration: InputDecoration(
                             labelText: t('主机地址', 'Host'),
@@ -251,7 +250,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                   TextFormField(
                     controller: _user,
                     autocorrect: false,
-                    enableSuggestions: false,
                     decoration: InputDecoration(labelText: t('用户名', 'Username')),
                     validator: (value) => _required(value, t),
                   ),
@@ -279,7 +277,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                       controller: _password,
                       obscureText: true,
                       autocorrect: false,
-                      enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: t('密码', 'Password'),
                         helperText: hasSavedPassword
@@ -293,7 +290,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                       minLines: 3,
                       maxLines: 6,
                       autocorrect: false,
-                      enableSuggestions: false,
                       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                       decoration: InputDecoration(
                         labelText: t('私钥（OpenSSH / PEM）', 'Private key (OpenSSH / PEM)'),
@@ -329,7 +325,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                       controller: _passphrase,
                       obscureText: true,
                       autocorrect: false,
-                      enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: t('私钥口令（可选）', 'Key passphrase (optional)'),
                         helperText: t(
@@ -363,7 +358,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                   TextFormField(
                     controller: _remoteDir,
                     autocorrect: false,
-                    enableSuggestions: false,
                     decoration: InputDecoration(
                       labelText: t('远程脚本目录', 'Remote script directory'),
                       helperText: t(
@@ -376,7 +370,6 @@ class _SshProfileEditPageState extends State<SshProfileEditPage> {
                   TextFormField(
                     controller: _python,
                     autocorrect: false,
-                    enableSuggestions: false,
                     decoration: InputDecoration(
                       labelText: t('远程 Python 命令', 'Remote Python command'),
                       helperText: t(
