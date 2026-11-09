@@ -8,10 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../l10n/app_localizations.dart';
 import '../../../../ui/app_settings_section.dart';
+import '../../../ssh/application/log/log_record.dart';
+import '../../../ssh/presentation/pages/terminal_logs_page.dart';
+import '../../../ssh/presentation/ssh_text.dart';
 import '../../application/mcp_policy_service.dart';
 import '../../application/mcp_server_controller.dart';
 import '../../domain/mcp_permission.dart';
-import '../../infrastructure/mcp_audit_log.dart';
 import '../../infrastructure/mcp_session_store.dart';
 import '../../infrastructure/mcp_token_store.dart';
 
@@ -29,7 +31,7 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
   bool _toggling = false;
   bool _savingToken = false;
   List<String> _lanUrls = const [];
-  bool _lanRefreshScheduled = false;
+  bool _lanRequested = false;
 
   @override
   void initState() {
@@ -72,8 +74,6 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
       if (mounted) setState(() => _lanUrls = urls);
     } catch (_) {
       // Loopback remains available if the platform cannot enumerate interfaces.
-    } finally {
-      _lanRefreshScheduled = false;
     }
   }
 
@@ -86,10 +86,12 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
       _portController.text = state.port.toString();
       _portInitialized = true;
     }
-    if (state.status == McpServerStatus.running &&
-        _lanUrls.isEmpty &&
-        !_lanRefreshScheduled) {
-      _lanRefreshScheduled = true;
+    if (state.status != McpServerStatus.running) {
+      // Look the addresses up again the next time the service runs.
+      _lanUrls = const [];
+      _lanRequested = false;
+    } else if (!_lanRequested) {
+      _lanRequested = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_refreshLanUrls());
       });
@@ -129,8 +131,12 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
   Widget _buildServiceSection(McpServerState state) {
     final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
+    final t = SshText.of(context);
+    final controller = ref.read(mcpServerControllerProvider.notifier);
     final running = state.status == McpServerStatus.running;
     final busy = _toggling || state.status == McpServerStatus.starting;
+    final localOnly = controller.localOnly;
+    final restartNeeded = running && controller.boundLocalOnly != localOnly;
     final statusLabel = switch (state.status) {
       McpServerStatus.stopped => l10n.mcpStatusStopped,
       McpServerStatus.starting => l10n.mcpStatusStarting,
@@ -202,6 +208,19 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
         subtitle: Text(l10n.mcpTokenDisabledWarning),
         value: state.requireToken,
         onChanged: busy ? null : _setRequireToken,
+      ),
+      SwitchListTile(
+        key: const ValueKey('mcp-local-only-switch'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(t('仅本机访问', 'This device only')),
+        subtitle: Text(restartNeeded
+            ? t('已保存，重启 MCP 服务后生效', 'Saved. Restart the MCP service to apply it')
+            : t(
+                '开启后只监听本机地址，局域网里的其他设备连不上；关闭则允许局域网设备连接（现状）',
+                'On: only this device can connect. Off: devices on the local network can connect too (current behaviour)',
+              )),
+        value: localOnly,
+        onChanged: busy ? null : _setLocalOnly,
       ),
     ]);
   }
@@ -286,6 +305,7 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
 
   Widget _buildPermissionSection() {
     final l10n = AppLocalizations.of(context)!;
+    final t = SshText.of(context);
     final policy = ref.watch(mcpPolicyProvider);
     return _section(
         Icons.admin_panel_settings_outlined, l10n.mcpToolPermissions, [
@@ -294,8 +314,10 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
       for (final permission in McpPermission.values)
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(_permissionTitle(l10n, permission)),
-          subtitle: Text(permission.id),
+          title: Text(_permissionTitle(l10n, t, permission)),
+          subtitle: Text(permission == McpPermission.terminal
+              ? '${permission.id} · ${t('每条命令都会弹窗让你确认', 'every command asks you first')}'
+              : permission.id),
           value: policy.isPermissionEnabled(permission),
           onChanged: (value) => _togglePermission(policy, permission, value),
         ),
@@ -328,52 +350,36 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     ]);
   }
 
+  /// The short in-memory list that used to be here is replaced by the
+  /// persistent AI operations log (compressed, detail levels, export, delete).
   Widget _buildAuditSection() {
-    final colors = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    final audit = ref.watch(mcpAuditLogProvider);
-    final entries = audit.entries.reversed.take(30).toList();
-    final count =
-        entries.where((entry) => entry.kind == McpAuditKind.toolCall).length;
+    final t = SshText.of(context);
     return _section(Icons.receipt_long_outlined, l10n.mcpAuditLog, [
-      Row(children: [
-        Expanded(child: Text(l10n.mcpRecentToolCalls(count))),
-        IconButton(
-          icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-          tooltip: l10n.mcpClearAuditLog,
-          onPressed: entries.isEmpty ? null : audit.clear,
+      Text(
+        t(
+          '每一次 MCP 调用（连接、断开、工具名、参数摘要、结果、耗时）以及 AI 在终端里的操作都保存在「日志」页的「AI 操作」里：可切换详略、导出、删除，重启后仍在。',
+          'Every MCP call (connect, disconnect, tool, argument summary, result, duration) and everything the AI does in terminals is kept in the AI operations log: switch the detail level, export or delete it; it survives restarts.',
         ),
-      ]),
-      if (entries.isEmpty)
-        Text(l10n.mcpNoAuditRecords,
-            style: Theme.of(context).textTheme.bodySmall)
-      else
-        for (final entry in entries)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_formatTime(entry.timestamp),
-                  style:
-                      TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-              const SizedBox(width: 8),
-              Icon(_auditIcon(entry),
-                  size: 16,
-                  color: entry.status == 'ok' ? colors.primary : colors.error),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: Text(_auditText(l10n, entry),
-                      style: const TextStyle(fontSize: 12))),
-            ]),
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const ValueKey('mcp-open-operations-log'),
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: Text(t('打开 AI 操作日志', 'Open the AI operations log')),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const TerminalLogsPage(
+                initialChannel: LogChannel.operations,
+              ),
+            ),
           ),
+        ),
+      ),
     ]);
   }
-
-  IconData _auditIcon(McpAuditEntry entry) => switch (entry.kind) {
-        McpAuditKind.toolCall => Icons.build_outlined,
-        McpAuditKind.connect => Icons.login,
-        McpAuditKind.disconnect => Icons.logout,
-        McpAuditKind.server => Icons.dns_outlined,
-      };
 
   String? _noticeText(AppLocalizations l10n, McpServerState state) {
     final detail = state.noticeDetail?.toString() ?? '';
@@ -388,7 +394,8 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     };
   }
 
-  String _permissionTitle(AppLocalizations l10n, McpPermission permission) =>
+  String _permissionTitle(
+          AppLocalizations l10n, SshText t, McpPermission permission) =>
       switch (permission) {
         McpPermission.readScripts => l10n.mcpPermissionReadScripts,
         McpPermission.writeScripts => l10n.mcpPermissionWriteScripts,
@@ -400,28 +407,12 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
         McpPermission.runScripts => l10n.mcpPermissionRunScripts,
         McpPermission.writeFilesystem => l10n.mcpPermissionWriteFilesystem,
         McpPermission.deleteFilesystem => l10n.mcpPermissionDeleteFilesystem,
+        McpPermission.terminal => t(
+            '终端：AI 发命令、读输出、给你留言',
+            'Terminals: AI sends commands, reads output, leaves you messages',
+          ),
         McpPermission.readFilesystem => l10n.mcpPermissionReadFilesystem,
       };
-
-  String _auditText(AppLocalizations l10n, McpAuditEntry entry) {
-    final client = entry.clientLabel ?? '';
-    return switch (entry.kind) {
-      McpAuditKind.toolCall => entry.status == 'ok'
-          ? l10n.mcpAuditToolCall(
-              client, entry.tool ?? 'unknown', entry.durationMs ?? 0)
-          : l10n.mcpAuditToolCallFailed(
-              client, entry.tool ?? 'unknown', entry.errorCode ?? 'UNKNOWN'),
-      McpAuditKind.connect => l10n.mcpAuditConnect(client),
-      McpAuditKind.disconnect => l10n.mcpAuditDisconnect(client),
-      McpAuditKind.server =>
-        l10n.mcpAuditServer(entry.status, entry.argsSummary ?? ''),
-    };
-  }
-
-  String _formatTime(DateTime time) {
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
-  }
 
   Future<void> _toggleService() async {
     setState(() => _toggling = true);
@@ -442,6 +433,15 @@ class _McpSettingsPageState extends ConsumerState<McpSettingsPage> {
     } finally {
       if (mounted) setState(() => _toggling = false);
     }
+  }
+
+  Future<void> _setLocalOnly(bool value) async {
+    final controller = ref.read(mcpServerControllerProvider.notifier);
+    await controller.setLocalOnly(value);
+    if (!mounted || !controller.isRunning) return;
+    final t = SshText.of(context);
+    _showMessage(t('已保存，重启 MCP 服务后生效',
+        'Saved. Restart the MCP service to apply it'));
   }
 
   Future<void> _savePort() async {
