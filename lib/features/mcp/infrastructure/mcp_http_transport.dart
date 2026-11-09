@@ -12,7 +12,7 @@ import 'mcp_token_store.dart';
 
 /// MCP Streamable HTTP 传输层（计划 §3.1 / §3.3）。
 ///
-/// - 监听所有 IPv4 网卡，端点固定 `/mcp`；
+/// - 默认监听所有 IPv4 网卡（给局域网客户端用），可切换为仅回环地址；端点固定 `/mcp`；
 /// - 可选 Bearer 配对令牌；认证开关由服务控制器传入；
 /// - 校验 Origin 防止 DNS rebinding（只允许本机或私有局域网来源）；
 /// - POST：JSON-RPC 请求/通知；GET：405（不提供 SSE 服务端推送）；
@@ -51,19 +51,26 @@ class McpHttpTransport {
   bool get isRunning => _server != null;
   int get boundPort => _boundPort;
 
-  /// 绑定本机回环地址并开始接收请求。
-  Future<int> start({int port = defaultPort}) async {
+  /// 绑定地址并开始接收请求：[loopbackOnly] 为 true 时只监听 127.0.0.1，
+  /// 局域网内的其他设备无法连接；否则监听所有 IPv4 网卡。
+  Future<int> start({
+    int port = defaultPort,
+    bool loopbackOnly = false,
+  }) async {
     if (_server != null) {
       throw StateError('MCP transport is already running');
     }
+    final address =
+        loopbackOnly ? InternetAddress.loopbackIPv4 : InternetAddress.anyIPv4;
     final server = await HttpServer.bind(
-      InternetAddress.anyIPv4,
+      address,
       port,
       shared: false,
     );
     _server = server;
     _boundPort = server.port;
-    _audit.recordServer('started', detail: '0.0.0.0:$_boundPort$endpoint');
+    _audit.recordServer('started',
+        detail: '${address.address}:$_boundPort$endpoint');
     server.listen(
       (request) {
         _handle(request).catchError((Object error, StackTrace stackTrace) {
@@ -302,14 +309,14 @@ class McpHttpTransport {
   }
 
   void _applyCorsHeaders(HttpRequest request, HttpResponse response) {
-    // LAN clients may use browser-based MCP clients; echo the validated HTTP origin.
+    // Only an origin that passed the local/private-network check is echoed
+    // back. Other origins (and requests without one) get no CORS grant, so a
+    // web page on the internet cannot read answers from this service.
     final origin = request.headers.value('origin');
-    response.headers.set(
-      'Access-Control-Allow-Origin',
-      _isOriginAllowed(origin) && origin != null && origin.isNotEmpty
-          ? origin
-          : '*',
-    );
+    if (origin != null && origin.isNotEmpty && _isOriginAllowed(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Vary', 'Origin');
+    }
     response.headers.set(
       'Access-Control-Allow-Methods',
       'POST, GET, DELETE, OPTIONS',

@@ -17,6 +17,7 @@ import '../infrastructure/mcp_audit_log.dart';
 import '../infrastructure/mcp_http_transport.dart';
 import '../infrastructure/mcp_server_adapter.dart';
 import '../infrastructure/mcp_session_store.dart';
+import '../infrastructure/mcp_terminal_tools.dart';
 import '../infrastructure/mcp_token_store.dart';
 import '../infrastructure/mcp_tool_registry.dart';
 import 'mcp_application_facade.dart';
@@ -25,6 +26,7 @@ import 'mcp_confirmation_service.dart';
 import 'mcp_facade_impl.dart';
 import 'mcp_operation_registry.dart';
 import 'mcp_policy_service.dart';
+import 'mcp_terminal_service.dart';
 
 /// MCP 服务运行状态（计划 §11：已停止、启动中、运行中、错误）。
 enum McpServerStatus { stopped, starting, running, error }
@@ -91,6 +93,14 @@ final mcpConfirmationServiceProvider = Provider<McpConfirmationService>((ref) {
   return McpConfirmationService();
 });
 
+/// What an AI client may do with the open terminals, and the notes it leaves
+/// for the person.
+final mcpTerminalServiceProvider = ChangeNotifierProvider<McpTerminalService>(
+  (ref) => McpTerminalService(
+    confirmations: ref.watch(mcpConfirmationServiceProvider),
+  ),
+);
+
 final mcpOperationRegistryProvider = Provider<McpOperationRegistry>((ref) {
   return McpOperationRegistry();
 });
@@ -153,10 +163,11 @@ final mcpApplicationFacadeProvider = Provider<McpApplicationFacade>((ref) {
 });
 
 final mcpToolRegistryProvider = Provider<McpToolRegistry>((ref) {
-  return McpToolRegistry(
+  return McpTerminalToolRegistry(
     ref.watch(mcpApplicationFacadeProvider),
     operations: ref.watch(mcpOperationRegistryProvider),
     execution: ref.watch(mcpExecutionServiceProvider),
+    terminal: ref.watch(mcpTerminalServiceProvider),
   );
 });
 
@@ -185,11 +196,16 @@ class McpServerController extends Notifier<McpServerState> {
   static const String enabledPrefsKey = 'mcp.enabled';
   static const String portPrefsKey = 'mcp.port';
   static const String requireTokenPrefsKey = 'mcp.require_token';
+
+  /// true = listen on 127.0.0.1 only. Default false keeps the LAN access that
+  /// existing setups rely on.
+  static const String localOnlyPrefsKey = 'mcp.local_only';
   static const int defaultPort = McpHttpTransport.defaultPort;
   static const Duration sweepInterval = Duration(minutes: 1);
 
   McpHttpTransport? _transport;
   Timer? _sweepTimer;
+  bool _boundLocalOnly = false;
 
   @override
   McpServerState build() {
@@ -217,9 +233,17 @@ class McpServerController extends Notifier<McpServerState> {
   bool get isRunning => state.status == McpServerStatus.running;
   bool get requireToken => _prefs.getBool(requireTokenPrefsKey) ?? false;
 
+  /// The saved choice: only this device may connect.
+  bool get localOnly => _prefs.getBool(localOnlyPrefsKey) ?? false;
+
+  /// What the running service is actually bound to. It differs from
+  /// [localOnly] while a changed choice waits for a restart.
+  bool get boundLocalOnly => _boundLocalOnly;
+
   String get mcpUrl => 'http://127.0.0.1:${state.port}/mcp';
 
   Future<List<String>> get lanUrls async {
+    if (_boundLocalOnly) return const <String>[];
     final interfaces = await NetworkInterface.list(
       type: InternetAddressType.IPv4,
       includeLoopback: false,
@@ -266,8 +290,13 @@ class McpServerController extends Notifier<McpServerState> {
         requireToken: requireToken,
         onSessionTerminated: policy.forgetSession,
       );
-      final boundPort = await transport.start(port: state.port);
+      final bindLocalOnly = localOnly;
+      final boundPort = await transport.start(
+        port: state.port,
+        loopbackOnly: bindLocalOnly,
+      );
       _transport = transport;
+      _boundLocalOnly = bindLocalOnly;
       _serviceInfo
         ..running = true
         ..port = boundPort;
@@ -299,6 +328,7 @@ class McpServerController extends Notifier<McpServerState> {
   Future<void> stop() async {
     final transport = _transport;
     _transport = null;
+    _boundLocalOnly = false;
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _serviceInfo
@@ -314,6 +344,7 @@ class McpServerController extends Notifier<McpServerState> {
     }
     ref.read(mcpSessionStoreProvider).clearAll();
     ref.read(mcpConfirmationServiceProvider).denyAll();
+    ref.read(mcpTerminalServiceProvider).reset();
     // Stopping transport does not cancel native pip processes. Keep their
     // status queryable after the user restarts the server.
     ref.read(mcpPolicyProvider).resetRateCounters();
@@ -371,6 +402,14 @@ class McpServerController extends Notifier<McpServerState> {
     return true;
   }
 
+  /// Saves the "this device only" choice. A running service keeps its current
+  /// binding until it is restarted.
+  Future<void> setLocalOnly(bool value) async {
+    await _prefs.setBool(localOnlyPrefsKey, value);
+    // Same values, new object: lets the settings page redraw.
+    state = state.copyWith();
+  }
+
   /// 重新生成配对令牌；旧令牌立即失效（计划 §8.2）。
   Future<String> regenerateToken() async {
     final token = await _tokens.regenerate();
@@ -389,6 +428,7 @@ class McpServerController extends Notifier<McpServerState> {
   void _invalidateTokenSessions() {
     ref.read(mcpSessionStoreProvider).clearAll();
     ref.read(mcpConfirmationServiceProvider).denyAll();
+    ref.read(mcpTerminalServiceProvider).reset();
     ref.read(mcpPolicyProvider).resetRateCounters();
   }
 
