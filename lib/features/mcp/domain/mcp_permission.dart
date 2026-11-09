@@ -1,7 +1,8 @@
 /// MCP 工具权限分组（计划 §8.1）。
 ///
 /// 首期默认勾选只读权限，写入类（write_scripts / write_projects /
-/// install_packages / run_scripts）默认关闭，开启后直接执行。
+/// install_packages / run_scripts / terminal）默认关闭，开启后直接执行；
+/// 终端工具例外：每条命令仍会弹出确认框。
 enum McpPermission {
   readScripts('read_scripts', 'read scripts', defaultEnabled: true),
   writeScripts('write_scripts', 'create or modify scripts',
@@ -22,6 +23,9 @@ enum McpPermission {
       defaultEnabled: false),
   deleteFilesystem('delete_filesystem', 'delete files or empty directories',
       defaultEnabled: false),
+  terminal('terminal',
+      'use terminals: send commands, read output, message the user',
+      defaultEnabled: false),
   readFilesystem('read_filesystem', 'read accessible files',
       defaultEnabled: true);
 
@@ -35,14 +39,16 @@ enum McpPermission {
   final String displayName;
   final bool defaultEnabled;
 
-  /// Mutating scopes are opt-in; calls execute without per-call dialogs.
+  /// Mutating scopes are opt-in; calls execute without per-call dialogs
+  /// (except terminal commands, which always ask).
   bool get isWriteScope =>
       this == writeScripts ||
       this == writeProjects ||
       this == installPackages ||
       this == runScripts ||
       this == writeFilesystem ||
-      this == deleteFilesystem;
+      this == deleteFilesystem ||
+      this == terminal;
 
   static McpPermission? fromId(String id) {
     for (final permission in McpPermission.values) {

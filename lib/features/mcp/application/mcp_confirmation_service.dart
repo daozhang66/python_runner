@@ -19,6 +19,7 @@ class McpPendingConfirmation {
     required this.clientLabel,
     required this.createdAt,
     required this.timeoutAt,
+    this.singleUse = false,
   }) {
     _completer = Completer<McpConfirmationDecision>();
   }
@@ -29,6 +30,10 @@ class McpPendingConfirmation {
   final String clientLabel;
   final DateTime createdAt;
   final DateTime timeoutAt;
+
+  /// True when the answer only covers this one call: the dialog does not
+  /// offer "allow for this session" (used for terminal commands).
+  final bool singleUse;
 
   late final Completer<McpConfirmationDecision> _completer;
   McpConfirmationDecision _decision = McpConfirmationDecision.pending;
@@ -75,6 +80,7 @@ class McpConfirmationService extends ChangeNotifier {
     required String toolName,
     required String summary,
     required String clientLabel,
+    bool singleUse = false,
   }) {
     final item = McpPendingConfirmation(
       id: 'confirm_${DateTime.now().microsecondsSinceEpoch}_${_seq++}',
@@ -83,6 +89,7 @@ class McpConfirmationService extends ChangeNotifier {
       clientLabel: clientLabel,
       createdAt: DateTime.now(),
       timeoutAt: DateTime.now().add(timeout),
+      singleUse: singleUse,
     );
     _pending[item.id] = item;
     notifyListeners();

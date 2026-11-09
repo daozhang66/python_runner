@@ -31,6 +31,10 @@ class SessionLogger {
   Timer? _timer;
   bool _expectSecret = false;
 
+  /// True while the terminal is showing a password prompt: the next typed
+  /// line is recorded as hidden. Call [flushOutput] first for a fresh answer.
+  bool get expectingSecret => _expectSecret;
+
   void _emit(LogRecord record) => sink(LogChannel.terminal, record);
 
   /// A key event of the session itself (opened, closed, failed, ...).
