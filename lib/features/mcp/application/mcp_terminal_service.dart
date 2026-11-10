@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../ssh/application/log/log_record.dart';
 import '../../ssh/application/log/terminal_logs.dart';
@@ -9,29 +10,31 @@ import '../../ssh/application/terminal/terminal_session.dart';
 import '../domain/mcp_error_codes.dart';
 import 'mcp_confirmation_service.dart';
 
-/// A note the AI left for the person, and the answer it may be waiting for.
-class McpUserMessage {
-  McpUserMessage({
+/// One line of the conversation between the person and the AI.
+class AiChatEntry {
+  const AiChatEntry({
     required this.id,
+    required this.fromAi,
     required this.text,
-    required this.clientLabel,
-  }) : createdAt = DateTime.now();
+    required this.time,
+  });
 
+  /// Grows with every entry, from either side, so "after message N" means
+  /// "said after the AI's message N".
   final int id;
+  final bool fromAi;
   final String text;
-  final String clientLabel;
-  final DateTime createdAt;
-  String? reply;
-  bool dismissed = false;
-
-  bool get isOpen => reply == null && !dismissed;
+  final DateTime time;
 }
 
-/// What an AI client may do with the terminals the person has open.
+/// What an AI client may do with terminals, and the conversation it has with
+/// the person while doing it.
 ///
-/// The AI works with the very same sessions as the person. Every command is
-/// confirmed one by one, everything it does lands in the AI operations log,
-/// and the notes exchanged with the person land in the conversation log.
+/// The AI works with the very same sessions as the person. There is no popup
+/// per command (an AI that may run scripts can reach the same things anyway);
+/// the real controls are the `terminal` permission, the pause switch, the
+/// optional "confirm each command" setting, and a complete log of everything
+/// in the AI operations and conversation logs.
 class McpTerminalService extends ChangeNotifier {
   McpTerminalService({
     required McpConfirmationService confirmations,
@@ -41,8 +44,9 @@ class McpTerminalService extends ChangeNotifier {
         _sessions = sessions ?? TerminalSessionManager.instance,
         _logs = logs ?? TerminalLogs.instance;
 
+  static const String confirmEachPrefsKey = 'mcp.terminal.confirm_each';
   static const int maxCommandChars = 4096;
-  static const int maxOpenMessages = 20;
+  static const int maxThread = 200;
 
   /// Anything but a tab is refused: a command is exactly one line.
   static final RegExp _badChars = RegExp(r'[\x00-\x08\x0a-\x1f\x7f]');
@@ -51,12 +55,79 @@ class McpTerminalService extends ChangeNotifier {
   final TerminalSessionManager _sessions;
   final TerminalLogs _logs;
 
-  final List<McpUserMessage> _messages = <McpUserMessage>[];
-  int _messageSeq = 0;
+  final List<AiChatEntry> _thread = <AiChatEntry>[];
+  final Set<String> _aiOpened = <String>{};
+  int _seq = 0;
+  int _seenUpTo = 0;
+  bool _paused = false;
+  bool _confirmEach = false;
+  bool _settingsLoaded = false;
 
-  /// Notes the person has not answered or dismissed yet.
-  List<McpUserMessage> get openMessages =>
-      _messages.where((m) => m.isOpen).toList(growable: false);
+  // ── state shown in the chat sheet ──
+
+  List<AiChatEntry> get thread => List<AiChatEntry>.unmodifiable(_thread);
+
+  /// Messages from the AI the person has not looked at yet.
+  int get unreadCount =>
+      _thread.where((e) => e.fromAi && e.id > _seenUpTo).length;
+
+  /// While paused every terminal tool is refused (the chat keeps working).
+  bool get paused => _paused;
+
+  /// Optional: ask the person before each command. Off by default.
+  bool get confirmEach => _confirmEach;
+
+  Future<void> loadSettings() async {
+    if (_settingsLoaded) return;
+    _settingsLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getBool(confirmEachPrefsKey) ?? false;
+      if (value != _confirmEach) {
+        _confirmEach = value;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Keep the default (off).
+    }
+  }
+
+  Future<void> setConfirmEach(bool value) async {
+    _settingsLoaded = true;
+    _confirmEach = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(confirmEachPrefsKey, value);
+    } catch (_) {
+      // The choice still holds until the app is closed.
+    }
+  }
+
+  void setPaused(bool value) {
+    if (_paused == value) return;
+    _paused = value;
+    _op(
+      'control',
+      value ? 'The user paused AI terminal access' : 'The user resumed AI terminal access',
+      importance: 0,
+    );
+    notifyListeners();
+  }
+
+  void markSeen() {
+    if (_seenUpTo >= _seq) return;
+    _seenUpTo = _seq;
+    notifyListeners();
+  }
+
+  void clearThread() {
+    _thread.clear();
+    notifyListeners();
+  }
+
+  /// The service stopped. The chat and the sessions stay as they are.
+  void reset() {}
 
   // ── logging ──
 
@@ -67,6 +138,7 @@ class McpTerminalService extends ChangeNotifier {
     int importance = 1,
     String? detail,
     Map<String, Object?>? extra,
+    String actor = 'ai',
   }) {
     _logs.add(
       LogChannel.operations,
@@ -74,7 +146,7 @@ class McpTerminalService extends ChangeNotifier {
         k: kind,
         s: summary,
         sid: sid,
-        a: 'ai',
+        a: actor,
         i: importance,
         d: detail,
         x: extra,
@@ -82,16 +154,17 @@ class McpTerminalService extends ChangeNotifier {
     );
   }
 
-  void _conversation(int id, String who, String text) {
+  void _conversation(int id, bool fromAi, String text) {
     _logs.add(
       LogChannel.conversation,
       LogRecord.now(
         k: 'msg',
         s: text,
-        sid: 'mcp-$id',
-        a: who,
+        sid: 'chat',
+        a: fromAi ? 'ai' : 'human',
         i: 0,
         d: text.length > 300 ? text : null,
+        x: <String, Object?>{'id': id},
       ),
     );
   }
@@ -101,12 +174,21 @@ class McpTerminalService extends ChangeNotifier {
 
   // ── sessions ──
 
+  void _guard() {
+    if (!_paused) return;
+    throw McpToolException(
+      'TERMINAL_PAUSED',
+      'The user paused AI terminal access. Tell them in the chat (pyrunner_terminal_tell_user) or ask them to resume it from the AI chat button in the app',
+      true,
+    );
+  }
+
   TerminalSession _session(String id) {
     final session = _sessions.byId(id);
     if (session == null) {
       throw McpToolException(
         McpErrorCodes.invalidArgument,
-        'Unknown terminal session: $id. Call pyrunner_terminal_list for the open sessions',
+        'Unknown terminal session: $id. Call pyrunner_terminal_list for the open sessions, or pyrunner_terminal_open to open one',
         false,
         {'session_id': id},
       );
@@ -118,23 +200,66 @@ class McpTerminalService extends ChangeNotifier {
     if (session.isAlive) return;
     throw McpToolException(
       'TERMINAL_NOT_RUNNING',
-      'Terminal ${session.id} is ${session.status.name}; ask the user to restart it',
+      'Terminal ${session.id} is ${session.status.name}; open a new one with pyrunner_terminal_open',
       false,
       {'session_id': session.id, 'status': session.status.name},
     );
   }
 
-  Map<String, dynamic> listSessions() => <String, dynamic>{
-        'sessions': [for (final s in _sessions.sessions) s.describe()],
-      };
+  Map<String, dynamic> listSessions() {
+    _guard();
+    return <String, dynamic>{
+      'sessions': [
+        for (final s in _sessions.sessions)
+          <String, Object?>{...s.describe(), 'opened_by_ai': _aiOpened.contains(s.id)},
+      ],
+    };
+  }
 
-  /// Types [command] and Enter into a session after the person approved it.
+  /// Opens a local shell. It shows up as a tab for the person, too.
+  Future<Map<String, dynamic>> openLocal({String? title}) async {
+    _guard();
+    final TerminalSession session;
+    try {
+      session = _sessions.createLocal();
+    } on StateError catch (error) {
+      throw McpToolException('TOO_MANY_TERMINALS', error.message, false);
+    }
+    _aiOpened.add(session.id);
+    final name = title?.trim() ?? '';
+    session.title = name.isEmpty ? 'AI · ${session.title}' : 'AI · ${_clip(name, 40)}';
+    _op('open', 'Opened ${session.id} (${session.title})',
+        sid: session.id, importance: 0);
+    await session.start();
+    return <String, dynamic>{'opened': true, ...session.describe()};
+  }
+
+  /// Closes a session the AI opened itself; the person's sessions are theirs.
+  Future<Map<String, dynamic>> close(String sessionId) async {
+    _guard();
+    final session = _session(sessionId);
+    if (!_aiOpened.contains(session.id)) {
+      throw McpToolException(
+        McpErrorCodes.mcpForbidden,
+        'Only terminals opened with pyrunner_terminal_open can be closed by the AI',
+        false,
+        {'session_id': session.id},
+      );
+    }
+    _op('close', 'Closed ${session.id}', sid: session.id, importance: 0);
+    _aiOpened.remove(session.id);
+    await _sessions.remove(session.id);
+    return <String, dynamic>{'closed': true, 'session_id': sessionId};
+  }
+
+  /// Types [command] and Enter into a session.
   Future<Map<String, dynamic>> send({
     required String sessionId,
     required String command,
     required String clientLabel,
     int waitSeconds = 2,
   }) async {
+    _guard();
     if (command.length > maxCommandChars || _badChars.hasMatch(command)) {
       throw McpToolException(
         McpErrorCodes.invalidArgument,
@@ -149,24 +274,28 @@ class McpTerminalService extends ChangeNotifier {
     final shown = hidden
         ? '<hidden input: the terminal is asking for a password>'
         : _clip(command.isEmpty ? '<Enter>' : command, 300);
-    final decision = await _confirmations.request(
-      toolName: 'pyrunner_terminal_send',
-      summary: '${session.title} (${session.id})\n$shown',
-      clientLabel: clientLabel,
-      singleUse: true,
-    );
-    final denied = McpConfirmationService.toException(decision);
-    if (denied != null) {
-      _op(
-        'denied',
-        'Command refused: $shown',
-        sid: session.id,
-        importance: 0,
-        extra: <String, Object?>{'decision': decision.name},
+    await loadSettings();
+    if (_confirmEach) {
+      final decision = await _confirmations.request(
+        toolName: 'pyrunner_terminal_send',
+        summary: '${session.title} (${session.id})\n$shown',
+        clientLabel: clientLabel,
+        singleUse: true,
       );
-      throw denied;
+      final denied = McpConfirmationService.toException(decision);
+      if (denied != null) {
+        _op(
+          'denied',
+          'Command refused: $shown',
+          sid: session.id,
+          importance: 0,
+          extra: <String, Object?>{'decision': decision.name},
+        );
+        throw denied;
+      }
+      _guard();
+      _requireAlive(session);
     }
-    _requireAlive(session);
     final from = session.ring.end;
     _op(
       'cmd',
@@ -174,7 +303,6 @@ class McpTerminalService extends ChangeNotifier {
       sid: session.id,
       importance: 0,
       detail: hidden || command.length <= 300 ? null : command,
-      extra: const <String, Object?>{'approved': true},
     );
     session.sendText('$command\r', actor: 'ai');
     final output = await _settle(session, from, waitSeconds);
@@ -207,12 +335,14 @@ class McpTerminalService extends ChangeNotifier {
     return read(session.id, cursor: from);
   }
 
-  /// Plain-text output of a session. Without [cursor] the most recent output.
+  /// Plain-text output of a session (what the person typed and saw, too).
+  /// Without [cursor] the most recent output.
   Map<String, dynamic> read(
     String sessionId, {
     int? cursor,
     int maxChars = 20000,
   }) {
+    _guard();
     if (maxChars < 1 || maxChars > 64000 || (cursor != null && cursor < 0)) {
       throw McpToolException(
         McpErrorCodes.invalidArgument,
@@ -240,8 +370,9 @@ class McpTerminalService extends ChangeNotifier {
     };
   }
 
-  /// Ctrl+C. Harmless, so it needs no approval.
+  /// Ctrl+C.
   Map<String, dynamic> interrupt(String sessionId) {
+    _guard();
     final session = _session(sessionId);
     _requireAlive(session);
     _op('cmd', '^C', sid: session.id, importance: 0);
@@ -249,117 +380,106 @@ class McpTerminalService extends ChangeNotifier {
     return <String, dynamic>{'interrupted': true, 'session_id': session.id};
   }
 
-  // ── notes between the AI and the person ──
+  // ── the conversation ──
 
-  McpUserMessage? _find(int id) {
-    for (final message in _messages) {
-      if (message.id == id) return message;
+  AiChatEntry _add(bool fromAi, String text) {
+    final entry = AiChatEntry(
+      id: ++_seq,
+      fromAi: fromAi,
+      text: text,
+      time: DateTime.now(),
+    );
+    _thread.add(entry);
+    if (_thread.length > maxThread) {
+      _thread.removeRange(0, _thread.length - maxThread);
     }
-    return null;
+    _conversation(entry.id, fromAi, text);
+    notifyListeners();
+    return entry;
   }
 
-  /// Leaves a note that is shown to the person right away.
+  /// The AI says something to the person (shown in the chat sheet).
   Map<String, dynamic> tellUser(String text, String clientLabel) {
-    if (openMessages.length >= maxOpenMessages) {
-      throw McpToolException(
-        'TOO_MANY_MESSAGES',
-        'The user has $maxOpenMessages unanswered messages; wait for a reply first',
-        true,
-      );
-    }
-    final message = McpUserMessage(
-      id: ++_messageSeq,
-      text: text,
-      clientLabel: clientLabel,
-    );
-    _messages.add(message);
-    while (_messages.length > 50) {
-      final index = _messages.indexWhere((m) => !m.isOpen);
-      if (index < 0) break;
-      _messages.removeAt(index);
-    }
-    _conversation(message.id, 'ai', text);
+    final entry = _add(true, text);
     _op(
       'message',
       _clip(text, 120),
       importance: 0,
       detail: text.length > 120 ? text : null,
     );
-    notifyListeners();
     return <String, dynamic>{
-      'message_id': message.id,
+      'message_id': entry.id,
       'delivered': true,
-      'hint': 'Call pyrunner_terminal_wait_reply to wait for the answer',
+      'hint':
+          'The user may be in another app. Their answer arrives through pyrunner_terminal_wait_reply or pyrunner_terminal_inbox',
     };
   }
 
-  /// The person's answer (from the dialog).
-  void reply(int id, String text) {
-    final message = _find(id);
-    if (message == null || !message.isOpen) return;
-    message.reply = text;
-    _conversation(id, 'human', text);
-    notifyListeners();
+  /// The person says something to the AI.
+  void userSay(String text) {
+    final clean = text.trim();
+    if (clean.isEmpty) return;
+    _add(false, clean);
   }
 
-  /// The person closed the note without answering.
-  void dismiss(int id) {
-    final message = _find(id);
-    if (message == null || !message.isOpen) return;
-    message.dismissed = true;
-    _conversation(id, 'human', '(dismissed)');
-    notifyListeners();
+  /// What the person wrote after [afterId]. With [waitSeconds] it waits for
+  /// something to arrive.
+  Future<Map<String, dynamic>> inbox({
+    int afterId = 0,
+    int waitSeconds = 0,
+  }) async {
+    List<AiChatEntry> fresh() =>
+        _thread.where((e) => !e.fromAi && e.id > afterId).toList();
+    final limit = DateTime.now().add(
+      Duration(seconds: waitSeconds.clamp(0, 100).toInt()),
+    );
+    while (fresh().isEmpty && DateTime.now().isBefore(limit)) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    final list = fresh();
+    _op(
+      'inbox',
+      list.isEmpty
+          ? 'No new message from the user'
+          : 'Read ${list.length} message(s) from the user',
+      importance: 1,
+      detail: list.isEmpty ? null : list.map((e) => e.text).join('\n---\n'),
+    );
+    return <String, dynamic>{
+      'messages': [
+        for (final e in list)
+          <String, dynamic>{
+            'id': e.id,
+            'text': e.text,
+            'at': e.time.toUtc().toIso8601String(),
+          },
+      ],
+      'next_after_id': list.isEmpty ? afterId : list.last.id,
+      'paused': _paused,
+    };
   }
 
-  /// Waits for the person's answer to [messageId] (default: the newest note).
+  /// Waits for the person's answer to the AI's message [messageId] (default:
+  /// the newest one).
   Future<Map<String, dynamic>> waitReply({
     int? messageId,
     int timeoutSeconds = 60,
   }) async {
-    final message = messageId == null
-        ? (_messages.isEmpty ? null : _messages.last)
-        : _find(messageId);
-    if (message == null) {
-      throw McpToolException(
-        McpErrorCodes.invalidArgument,
-        'No such message; send one with pyrunner_terminal_tell_user first',
-      );
-    }
-    final limit = DateTime.now().add(
-      Duration(seconds: timeoutSeconds.clamp(1, 100).toInt()),
-    );
-    while (message.isOpen && DateTime.now().isBefore(limit)) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    }
-    final answer = message.reply;
-    _op(
-      'reply',
-      answer != null
-          ? 'The user replied'
-          : message.dismissed
-              ? 'The user dismissed the message'
-              : 'No reply yet',
-      importance: 1,
-      detail: answer,
-    );
-    return <String, dynamic>{
-      'message_id': message.id,
-      'replied': answer != null,
-      if (answer != null) 'reply': answer,
-      'dismissed': message.dismissed,
-      'waiting': message.isOpen,
-    };
-  }
-
-  /// The service stopped: notes nobody answered are closed.
-  void reset() {
-    var changed = false;
-    for (final message in _messages) {
-      if (message.isOpen) {
-        message.dismissed = true;
-        changed = true;
+    var afterId = messageId ?? 0;
+    if (messageId == null) {
+      for (final entry in _thread) {
+        if (entry.fromAi) afterId = entry.id;
       }
     }
-    if (changed) notifyListeners();
+    final result = await inbox(afterId: afterId, waitSeconds: timeoutSeconds);
+    final messages = result['messages'] as List<dynamic>;
+    return <String, dynamic>{
+      ...result,
+      'replied': messages.isNotEmpty,
+      if (messages.isNotEmpty)
+        'reply': messages
+            .map((m) => (m as Map<String, dynamic>)['text'])
+            .join('\n'),
+    };
   }
 }
