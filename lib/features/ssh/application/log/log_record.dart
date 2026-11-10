@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import '../terminal/terminal_locale.dart';
+
 /// The three logs kept for terminals and AI use.
 enum LogChannel {
   /// What happened in terminal sessions: commands typed and output shown.
@@ -109,16 +113,56 @@ class LogRecord {
       };
 }
 
-/// The part of [record]'s detail shown at [level]: none for the summary
-/// level, 400 characters at the standard level, everything at the detailed
-/// level.
+const int _standardLines = 10;
+const int _standardChars = 600;
+
+/// What of [record]'s detail is shown at [level]:
+///
+/// * 0 (summary): nothing;
+/// * 1 (standard): a readable digest. Output is cut to about ten lines, and
+///   an MCP call shows only what matters (arguments, error, slow or refused
+///   calls) instead of its raw JSON;
+/// * 2 (detailed): everything. Complete script and terminal output, and the
+///   full pretty-printed JSON of MCP calls.
 String? visibleLogDetail(LogRecord record, int level) {
   final detail = record.d;
   if (level <= 0 || detail == null || detail.isEmpty) return null;
-  if (level == 1 && detail.length > 400) {
-    return '${detail.substring(0, 400)}… (${detail.length})';
+  if (record.k.startsWith('mcp_')) return _mcpDetail(detail, level);
+  if (level >= 2) return detail;
+  return _clipForStandard(detail);
+}
+
+String _clipForStandard(String text) {
+  final lines = text.split('\n');
+  var out = lines.length > _standardLines
+      ? lines.take(_standardLines).join('\n')
+      : text;
+  if (out.length > _standardChars) out = out.substring(0, _standardChars);
+  if (out.length == text.length) return text;
+  return '$out\n… ${tr('共 ${lines.length} 行、${text.length} 个字符，切到「详细」查看全部', '${lines.length} lines, ${text.length} characters; switch to Detailed for everything')}';
+}
+
+String? _mcpDetail(String raw, int level) {
+  Object? json;
+  try {
+    json = jsonDecode(raw);
+  } catch (_) {
+    return raw;
   }
-  return detail;
+  if (json is! Map) return raw;
+  if (level >= 2) return const JsonEncoder.withIndent('  ').convert(json);
+  final lines = <String>[];
+  final args = json['args'];
+  if (args is String && args.isNotEmpty) lines.add(args);
+  final code = json['error_code'];
+  if (code != null) lines.add('${tr('错误', 'error')}: $code');
+  final decision = json['permission_decision'];
+  if (decision is String && decision.isNotEmpty && decision != 'allowed') {
+    lines.add('${tr('权限', 'permission')}: $decision');
+  }
+  final ms = json['duration_ms'];
+  if (ms != null) lines.add('$ms ms');
+  return lines.isEmpty ? null : lines.join('\n');
 }
 
 /// Plain-text form of [record] for export.
