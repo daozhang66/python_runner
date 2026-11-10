@@ -5,22 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_localizations.dart';
-import '../../ssh/presentation/ssh_text.dart';
 import '../application/mcp_confirmation_service.dart';
 import '../application/mcp_server_controller.dart';
 import '../application/mcp_terminal_service.dart';
+import 'ai_chat_sheet.dart';
 
-/// 全局 MCP 确认入口：包裹主页面，写操作工具调用时弹出确认框（计划 §8.3）。
+/// Global MCP surface, wrapped around the whole app (above the navigator):
 ///
-/// 确认框展示工具名、参数摘要、发起客户端与超时提示；
-/// 不展示完整密钥、Cookie 或超长代码正文（摘要由工具层生成时保证）。
+/// * approval dialogs for operations that ask the person first;
+/// * a small round button, shown while the MCP service runs, that opens the
+///   AI chat (what the AI said, what the person answers, pause switch). A badge
+///   counts unread messages from the AI.
 ///
-/// The same gate also shows the notes an AI leaves for the person (with a
-/// field to answer them).
+/// Dialogs and the chat sheet are shown through [navigatorKey], because this
+/// widget sits above the navigator and has no navigator of its own context.
 class McpConfirmationGate extends ConsumerStatefulWidget {
-  const McpConfirmationGate({super.key, required this.child});
+  const McpConfirmationGate({
+    super.key,
+    required this.child,
+    this.navigatorKey,
+  });
 
   final Widget child;
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   ConsumerState<McpConfirmationGate> createState() =>
@@ -30,20 +37,17 @@ class McpConfirmationGate extends ConsumerStatefulWidget {
 class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
   bool _busy = false;
   McpConfirmationService? _confirmations;
-  McpTerminalService? _terminal;
 
   @override
   void initState() {
     super.initState();
     _confirmations = ref.read(mcpConfirmationServiceProvider)
       ..addListener(_onChanged);
-    _terminal = ref.read(mcpTerminalServiceProvider)..addListener(_onChanged);
   }
 
   @override
   void dispose() {
     _confirmations?.removeListener(_onChanged);
-    _terminal?.removeListener(_onChanged);
     super.dispose();
   }
 
@@ -52,20 +56,14 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
     unawaited(_drain());
   }
 
-  /// Shows what is waiting, one dialog at a time; approvals come first.
+  /// Shows the waiting approvals one dialog at a time.
   Future<void> _drain() async {
     _busy = true;
     try {
       while (mounted) {
-        final confirmations = ref.read(mcpConfirmationServiceProvider);
-        final terminal = ref.read(mcpTerminalServiceProvider);
-        if (confirmations.pending.isNotEmpty) {
-          await _showConfirmation(confirmations);
-        } else if (terminal.openMessages.isNotEmpty) {
-          await _showMessage(terminal, terminal.openMessages.first);
-        } else {
-          break;
-        }
+        final service = ref.read(mcpConfirmationServiceProvider);
+        if (service.pending.isEmpty) break;
+        await _showConfirmation(service);
       }
     } finally {
       _busy = false;
@@ -74,33 +72,83 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
 
   Future<void> _showConfirmation(McpConfirmationService service) async {
     final item = service.pending.first;
-    final decision = await showDialog<McpConfirmationDecision>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => _McpConfirmationDialog(item: item),
-    );
+    final dialogContext = widget.navigatorKey?.currentContext;
+    if (dialogContext == null) {
+      // No navigator to show it in: refuse rather than wait for the timeout.
+      service.resolve(item.id, McpConfirmationDecision.deny);
+      return;
+    }
+    McpConfirmationDecision? decision;
+    try {
+      decision = await showDialog<McpConfirmationDecision>(
+        context: dialogContext,
+        barrierDismissible: false,
+        builder: (_) => _McpConfirmationDialog(item: item),
+      );
+    } catch (_) {
+      decision = McpConfirmationDecision.deny;
+    }
     // 对话框可能因超时被服务侧关闭（future 已完成）；此处只需兑底。
     if (!item.isResolved && decision != null) {
       service.resolve(item.id, decision);
     }
   }
 
-  Future<void> _showMessage(
-    McpTerminalService service,
-    McpUserMessage message,
-  ) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) =>
-          _McpMessageDialog(service: service, message: message),
-    );
-    // Closed some other way: count it as dismissed so it is not shown again.
-    if (message.isOpen) service.dismiss(message.id);
+  void _openChat() {
+    final target = widget.navigatorKey?.currentContext;
+    if (target == null) return;
+    unawaited(showAiChatSheet(target));
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    final running = ref.watch(mcpServerControllerProvider
+        .select((state) => state.status == McpServerStatus.running));
+    final unread = ref
+        .watch(mcpTerminalServiceProvider.select((s) => s.unreadCount));
+    final paused =
+        ref.watch(mcpTerminalServiceProvider.select((s) => s.paused));
+    final scheme = Theme.of(context).colorScheme;
+    // The child stays at the same place in the tree whether or not the button
+    // is shown, so the app's navigation is never rebuilt by it.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        if (running)
+          Positioned(
+            right: 10,
+            bottom: MediaQuery.of(context).padding.bottom + 110,
+            child: Material(
+              color:
+                  paused ? scheme.errorContainer : scheme.primaryContainer,
+              elevation: 3,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _openChat,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text('$unread'),
+                      child: Icon(
+                        paused ? Icons.pause : Icons.smart_toy_outlined,
+                        color: paused
+                            ? scheme.onErrorContainer
+                            : scheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _McpConfirmationDialog extends StatefulWidget {
@@ -212,104 +260,6 @@ class _McpConfirmationDialogState extends State<_McpConfirmationDialog> {
           onPressed: () =>
               Navigator.of(context).pop(McpConfirmationDecision.allow),
           child: Text(l10n.mcpAllow),
-        ),
-      ],
-    );
-  }
-}
-
-/// A note from the AI with a field to answer it. Closes itself when the note
-/// is answered or dismissed elsewhere (for example when the service stops).
-class _McpMessageDialog extends StatefulWidget {
-  const _McpMessageDialog({required this.service, required this.message});
-
-  final McpTerminalService service;
-  final McpUserMessage message;
-
-  @override
-  State<_McpMessageDialog> createState() => _McpMessageDialogState();
-}
-
-class _McpMessageDialogState extends State<_McpMessageDialog> {
-  final TextEditingController _controller = TextEditingController();
-  bool _closing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.service.addListener(_check);
-  }
-
-  @override
-  void dispose() {
-    widget.service.removeListener(_check);
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _check() {
-    if (!widget.message.isOpen) _close();
-  }
-
-  void _close() {
-    if (_closing || !mounted) return;
-    _closing = true;
-    Navigator.of(context).pop();
-  }
-
-  void _reply() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    widget.service.reply(widget.message.id, text);
-    _close();
-  }
-
-  void _dismiss() {
-    widget.service.dismiss(widget.message.id);
-    _close();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final t = SshText.of(context);
-    return AppAlertDialog(
-      scrollable: true,
-      title: Text(t('AI 的留言', 'Message from the AI')),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SelectableText(widget.message.text),
-          const SizedBox(height: 8),
-          Text(
-            widget.message.clientLabel,
-            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            minLines: 1,
-            maxLines: 5,
-            textInputAction: TextInputAction.newline,
-            decoration: InputDecoration(
-              labelText: t('回复', 'Reply'),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _dismiss,
-          child: Text(t('忽略', 'Dismiss')),
-        ),
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _controller,
-          builder: (context, value, _) => FilledButton(
-            onPressed: value.text.trim().isEmpty ? null : _reply,
-            child: Text(t('回复', 'Reply')),
-          ),
         ),
       ],
     );
