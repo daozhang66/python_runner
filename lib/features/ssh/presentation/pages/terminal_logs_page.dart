@@ -5,6 +5,7 @@ import '../../application/log/log_record.dart';
 import '../../application/log/segmented_log_store.dart';
 import '../../application/log/terminal_logs.dart';
 import '../ssh_text.dart';
+import '../widgets/log_record_tile.dart';
 
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';
@@ -248,6 +249,23 @@ class _TerminalLogsPageState extends State<TerminalLogsPage>
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                switch (_level) {
+                  0 => t('只显示每条记录的一句话摘要', 'One line per record'),
+                  1 => t('精简显示：输出只显示前几行，AI 调用只显示关键项', 'Digest: output is cut to a few lines, AI calls show only the essentials'),
+                  _ => t('完整显示：每次运行脚本的全部终端输出、完整 JSON、读取记录', 'Everything: all terminal output of every script run, full JSON, read records'),
+                },
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabs,
@@ -414,7 +432,7 @@ class _LogListState extends State<_LogList> {
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
-                    return _RecordTile(
+                    return LogRecordTile(
                       record: _records[index],
                       level: widget.level,
                     );
@@ -422,74 +440,6 @@ class _LogListState extends State<_LogList> {
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _RecordTile extends StatelessWidget {
-  const _RecordTile({required this.record, required this.level});
-
-  final LogRecord record;
-  final int level;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final time = record.time;
-    String two(int n) => n.toString().padLeft(2, '0');
-    final stamp =
-        '${two(time.month)}-${two(time.day)} ${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
-    final color = switch (record.a) {
-      'human' => scheme.primary,
-      'ai' => scheme.tertiary,
-      _ => scheme.outline,
-    };
-    final detail = visibleLogDetail(record, level);
-    final isCommand = record.k == 'cmd';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 3,
-            height: 34,
-            margin: const EdgeInsets.only(right: 8, top: 2),
-            color: color,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$stamp  ${record.a}${record.sid.isEmpty ? '' : '  ${record.sid}'}  ${record.k}',
-                  style: TextStyle(fontSize: 10.5, color: scheme.outline),
-                ),
-                SelectableText(
-                  isCommand ? '\$ ${record.s}' : record.s,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontFamily: isCommand ? 'monospace' : null,
-                    fontWeight: record.i == 0 ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
-                if (detail != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: SelectableText(
-                      detail,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontFamily: 'monospace',
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
