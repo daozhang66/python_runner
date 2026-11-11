@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../application/mcp_confirmation_service.dart';
 import '../application/mcp_server_controller.dart';
-import '../application/mcp_terminal_service.dart';
 import 'ai_chat_sheet.dart';
 
 /// Global MCP surface, wrapped around the whole app (above the navigator):
