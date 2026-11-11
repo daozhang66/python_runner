@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../ssh/application/log/log_record.dart';
 import '../../ssh/application/log/terminal_logs.dart';
 import '../../ssh/application/terminal/session_manager.dart';
+import '../../ssh/application/terminal/terminal_locale.dart';
 import '../../ssh/application/terminal/terminal_session.dart';
 import '../domain/mcp_error_codes.dart';
 import 'mcp_confirmation_service.dart';
@@ -15,14 +16,39 @@ class AiChatEntry {
     required this.fromAi,
     required this.text,
     required this.time,
+    this.system = false,
   });
 
-  /// Grows with every entry, from either side, so "after message N" means
+  /// Grows with every entry, from any side, so "after message N" means
   /// "said after the AI's message N".
   final int id;
   final bool fromAi;
   final String text;
   final DateTime time;
+
+  /// A notice from the app itself (for example "a terminal asks for a
+  /// password"), neither the AI nor the person talking.
+  final bool system;
+
+  bool get fromUser => !fromAi && !system;
+}
+
+/// Something the person has to do in the app: type into a terminal that asks
+/// for a password, or answer a script's `input()`.
+class AiAttention {
+  AiAttention({required this.kind, required this.target, required this.text})
+      : time = DateTime.now();
+
+  /// `script` or `terminal`.
+  final String kind;
+
+  /// Script name or terminal session id.
+  final String target;
+  final String text;
+  final DateTime time;
+
+  /// Set once the app has taken the person there, so it does not do it twice.
+  bool opened = false;
 }
 
 /// What an AI client may do with terminals, and the conversation it has with
@@ -33,6 +59,10 @@ class AiChatEntry {
 /// the real controls are the `terminal` permission, the pause switch, the
 /// optional "confirm each command" setting, and a complete log of everything
 /// in the AI operations and conversation logs.
+///
+/// When a terminal asks for a password the AI must not guess it: the person
+/// is told (chat notice, button badge, and the app opens the terminal when
+/// they switch back to it) and the AI waits for the output to move on.
 class McpTerminalService extends ChangeNotifier {
   McpTerminalService({
     required McpConfirmationService confirmations,
@@ -54,6 +84,7 @@ class McpTerminalService extends ChangeNotifier {
   final TerminalLogs _logs;
 
   final List<AiChatEntry> _thread = <AiChatEntry>[];
+  final Map<String, AiAttention> _attention = <String, AiAttention>{};
   final Set<String> _aiOpened = <String>{};
   int _seq = 0;
   int _seenUpTo = 0;
@@ -65,9 +96,13 @@ class McpTerminalService extends ChangeNotifier {
 
   List<AiChatEntry> get thread => List<AiChatEntry>.unmodifiable(_thread);
 
-  /// Messages from the AI the person has not looked at yet.
+  /// Messages and notices the person has not looked at yet.
   int get unreadCount =>
-      _thread.where((e) => e.fromAi && e.id > _seenUpTo).length;
+      _thread.where((e) => !e.fromUser && e.id > _seenUpTo).length;
+
+  /// What waits for the person right now.
+  List<AiAttention> get attention =>
+      List<AiAttention>.unmodifiable(_attention.values);
 
   /// While paused every terminal tool is refused (the chat keeps working).
   bool get paused => _paused;
@@ -127,6 +162,28 @@ class McpTerminalService extends ChangeNotifier {
   /// The service stopped. The chat and the sessions stay as they are.
   void reset() {}
 
+  // ── things the person has to do ──
+
+  /// Something waits for the person (once per [kind] and [target]); they get a
+  /// notice in the chat and the app takes them there when they come back.
+  void raiseAttention(String kind, String target, String text) {
+    final key = '$kind:$target';
+    if (_attention.containsKey(key)) return;
+    _attention[key] = AiAttention(kind: kind, target: target, text: text);
+    _op('attention', text, sid: kind == 'terminal' ? target : '', importance: 0);
+    _add(false, text, system: true);
+  }
+
+  void clearAttention(String kind, String target) {
+    if (_attention.remove('$kind:$target') != null) notifyListeners();
+  }
+
+  void clearAttentionKind(String kind) {
+    final before = _attention.length;
+    _attention.removeWhere((_, item) => item.kind == kind);
+    if (_attention.length != before) notifyListeners();
+  }
+
   // ── logging ──
 
   void _op(
@@ -152,14 +209,14 @@ class McpTerminalService extends ChangeNotifier {
     );
   }
 
-  void _conversation(int id, bool fromAi, String text) {
+  void _conversation(int id, String who, String text) {
     _logs.add(
       LogChannel.conversation,
       LogRecord.now(
         k: 'msg',
         s: text,
         sid: 'chat',
-        a: fromAi ? 'ai' : 'human',
+        a: who,
         i: 0,
         d: text.length > 300 ? text : null,
         x: <String, Object?>{'id': id},
@@ -204,12 +261,40 @@ class McpTerminalService extends ChangeNotifier {
     );
   }
 
+  /// Tells whether the terminal waits for the person to type a password, and
+  /// makes sure the person finds out. Empty when it does not.
+  Map<String, dynamic> _inputHints(TerminalSession session) {
+    session.logger.flushOutput();
+    if (session.isAlive && session.logger.expectingSecret) {
+      raiseAttention(
+        'terminal',
+        session.id,
+        tr(
+          '终端「${session.title}」在等你输入密码，点开它直接输入',
+          'Terminal "${session.title}" is waiting for your password; open it and type',
+        ),
+      );
+      return <String, dynamic>{
+        'needs_user_input': true,
+        'input_kind': 'password',
+        'hint':
+            'The terminal is asking for a password. Do not guess or type one. Tell the user, in your own chat and with pyrunner_terminal_tell_user, to switch to Python Runner and type it (the app opens this terminal for them). Then call pyrunner_terminal_wait_output with your last next_cursor.',
+      };
+    }
+    clearAttention('terminal', session.id);
+    return const <String, dynamic>{};
+  }
+
   Map<String, dynamic> listSessions() {
     _guard();
     return <String, dynamic>{
       'sessions': [
         for (final s in _sessions.sessions)
-          <String, Object?>{...s.describe(), 'opened_by_ai': _aiOpened.contains(s.id)},
+          <String, Object?>{
+            ...s.describe(),
+            'opened_by_ai': _aiOpened.contains(s.id),
+            ..._inputHints(s),
+          },
       ],
     };
   }
@@ -246,6 +331,7 @@ class McpTerminalService extends ChangeNotifier {
     }
     _op('close', 'Closed ${session.id}', sid: session.id, importance: 0);
     _aiOpened.remove(session.id);
+    clearAttention('terminal', session.id);
     await _sessions.remove(session.id);
     return <String, dynamic>{'closed': true, 'session_id': sessionId};
   }
@@ -333,6 +419,24 @@ class McpTerminalService extends ChangeNotifier {
     return read(session.id, cursor: from);
   }
 
+  /// Waits for new output after [cursor] (for example once the person has
+  /// typed the password the terminal asked for), then reads it.
+  Future<Map<String, dynamic>> waitOutput(
+    String sessionId, {
+    required int cursor,
+    int timeoutSeconds = 30,
+  }) async {
+    _guard();
+    final session = _session(sessionId);
+    final limit = DateTime.now().add(
+      Duration(seconds: timeoutSeconds.clamp(1, 100).toInt()),
+    );
+    while (session.ring.end <= cursor && DateTime.now().isBefore(limit)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return _settle(session, cursor, 1);
+  }
+
   /// Plain-text output of a session (what the person typed and saw, too).
   /// Without [cursor] the most recent output.
   Map<String, dynamic> read(
@@ -365,6 +469,7 @@ class McpTerminalService extends ChangeNotifier {
       'next_cursor': slice.next,
       'dropped': slice.dropped,
       'has_more': slice.next < end,
+      ..._inputHints(session),
     };
   }
 
@@ -380,18 +485,23 @@ class McpTerminalService extends ChangeNotifier {
 
   // ── the conversation ──
 
-  AiChatEntry _add(bool fromAi, String text) {
+  AiChatEntry _add(bool fromAi, String text, {bool system = false}) {
     final entry = AiChatEntry(
       id: ++_seq,
       fromAi: fromAi,
       text: text,
       time: DateTime.now(),
+      system: system,
     );
     _thread.add(entry);
     if (_thread.length > maxThread) {
       _thread.removeRange(0, _thread.length - maxThread);
     }
-    _conversation(entry.id, fromAi, text);
+    _conversation(
+      entry.id,
+      system ? 'system' : (fromAi ? 'ai' : 'human'),
+      text,
+    );
     notifyListeners();
     return entry;
   }
@@ -427,7 +537,7 @@ class McpTerminalService extends ChangeNotifier {
     int waitSeconds = 0,
   }) async {
     List<AiChatEntry> fresh() =>
-        _thread.where((e) => !e.fromAi && e.id > afterId).toList();
+        _thread.where((e) => e.fromUser && e.id > afterId).toList();
     final limit = DateTime.now().add(
       Duration(seconds: waitSeconds.clamp(0, 100).toInt()),
     );
