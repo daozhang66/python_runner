@@ -40,8 +40,9 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
   @override
   void initState() {
     super.initState();
-    _confirmations = ref.read(mcpConfirmationServiceProvider)
-      ..addListener(_onChanged);
+    final service = ref.read(mcpConfirmationServiceProvider);
+    service.addListener(_onChanged);
+    _confirmations = service;
   }
 
   @override

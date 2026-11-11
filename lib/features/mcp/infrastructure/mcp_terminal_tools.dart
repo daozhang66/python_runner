@@ -1,6 +1,3 @@
-import '../application/mcp_application_facade.dart';
-import '../application/mcp_execution_service.dart';
-import '../application/mcp_operation_registry.dart';
 import '../application/mcp_terminal_service.dart';
 import '../domain/mcp_permission.dart';
 import '../domain/mcp_tool_definition.dart';
@@ -13,12 +10,11 @@ import 'mcp_tool_registry.dart';
 /// person can pause them at any time from the AI chat button in the app.
 class McpTerminalToolRegistry extends McpToolRegistry {
   McpTerminalToolRegistry(
-    McpApplicationFacade facade, {
+    super.facade, {
     required McpTerminalService terminal,
-    McpOperationRegistry? operations,
-    McpExecutionService? execution,
-  })  : _terminal = terminal,
-        super(facade, operations: operations, execution: execution) {
+    super.operations,
+    super.execution,
+  }) : _terminal = terminal {
     _terminalEntries = _buildTerminalEntries();
     final taken = super.definitions.map((d) => d.name).toSet();
     for (final entry in _terminalEntries) {
