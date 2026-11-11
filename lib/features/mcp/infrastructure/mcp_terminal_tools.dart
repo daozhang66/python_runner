@@ -78,7 +78,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_terminal_list',
           description:
-              'List the open terminal sessions (local shells and SSH) with id, status, output_cursor and whether you opened them. Use pyrunner_terminal_open for a new local shell.',
+              'List the open terminal sessions (local shells and SSH) with id, status, output_cursor and whether you opened them. A session with needs_user_input=true is waiting for the user to type a password. Use pyrunner_terminal_open for a new local shell.',
           permission: McpPermission.terminal,
           inputSchema: _obj(const <String, dynamic>{}),
         ),
@@ -121,7 +121,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_terminal_send',
           description:
-              'Type one command line into a terminal session and press Enter, then wait up to wait_seconds for the output to settle and return it with next_cursor. You and the user share the same terminal: pyrunner_terminal_read also shows what the user typed. A line typed at a password prompt is never recorded in the logs. (If the user turned on "confirm each command", they are asked first.)',
+              'Type one command line into a terminal session and press Enter, then wait up to wait_seconds for the output to settle and return it with next_cursor. You and the user share the same terminal: pyrunner_terminal_read also shows what the user typed. If the result has needs_user_input=true the terminal asks for a password: do NOT guess it; tell the user to switch to Python Runner (it opens the terminal for them), then call pyrunner_terminal_wait_output. A line typed at a password prompt is never recorded in the logs. (If the user turned on "confirm each command", they are asked first.)',
           permission: McpPermission.terminal,
           inputSchema: _obj(<String, dynamic>{
             'session_id': _str('Session id from pyrunner_terminal_list'),
@@ -155,7 +155,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_terminal_read',
           description:
-              'Read the plain-text output of a terminal session, including what the user typed there. Pass cursor (next_cursor of an earlier call) to get only what is new; without it the most recent output is returned. dropped=true means older output was already discarded.',
+              'Read the plain-text output of a terminal session, including what the user typed there. Pass cursor (next_cursor of an earlier call) to get only what is new; without it the most recent output is returned. dropped=true means older output was already discarded. needs_user_input=true means the terminal waits for the user to type a password.',
           permission: McpPermission.terminal,
           inputSchema: _obj(<String, dynamic>{
             'session_id': _str('Session id'),
@@ -173,6 +173,30 @@ class McpTerminalToolRegistry extends McpToolRegistry {
             maxChars: optionalInt(args, 'max_chars') ?? 20000,
           ),
         ),
+      ),
+      McpToolEntry(
+        definition: McpToolDefinition(
+          name: 'pyrunner_terminal_wait_output',
+          description:
+              'Wait until the terminal prints something new after cursor (for example once the user has typed the password it asked for), then return the output like pyrunner_terminal_read. Returns empty text when the time is up; call it again to keep waiting.',
+          permission: McpPermission.terminal,
+          inputSchema: _obj(<String, dynamic>{
+            'session_id': _str('Session id'),
+            'cursor': _int('next_cursor of your last call', minimum: 0),
+            'timeout_seconds': _int('Seconds to wait; default 30, maximum 100',
+                minimum: 1, maximum: 100),
+          }, <String>[
+            'session_id',
+            'cursor'
+          ]),
+        ),
+        timeout: const Duration(seconds: 110),
+        handler: (context, args) async =>
+            McpToolResult.success(await _terminal.waitOutput(
+          requireString(args, 'session_id', max: 64),
+          cursor: optionalInt(args, 'cursor') ?? 0,
+          timeoutSeconds: optionalInt(args, 'timeout_seconds') ?? 30,
+        )),
       ),
       McpToolEntry(
         definition: McpToolDefinition(
@@ -194,7 +218,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_terminal_tell_user',
           description:
-              'Say something to the user in the in-app AI chat (a small button in Python Runner). The app is usually in the background while the user talks to you in another app, so ask them in YOUR chat first; use this when they are working inside Python Runner or you want the note to stay in the app log.',
+              'Say something to the user in the in-app AI chat (a small button in Python Runner). The app is usually in the background while the user talks to you in another app, so ask them in YOUR chat first; use this too when a password is needed (they must switch to Python Runner and type it in the terminal or the script console, which the app opens for them) or when the note should stay in the app log.',
           permission: McpPermission.terminal,
           inputSchema: _obj(<String, dynamic>{
             'message': _str('What to tell or ask the user, at most 2000 characters'),

@@ -1,14 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../providers/execution_provider.dart';
+import '../../console/presentation/pages/run_console_page.dart';
 import '../../ssh/application/log/log_record.dart';
+import '../../ssh/presentation/pages/terminal_hub_page.dart';
 import '../../ssh/presentation/pages/terminal_logs_page.dart';
 import '../../ssh/presentation/ssh_text.dart';
 import '../application/mcp_server_controller.dart';
 import '../application/mcp_terminal_service.dart';
 
+/// The page where the person can do what [item] waits for: the terminal that
+/// asks for a password, or the console of the script that waits for input.
+Route<void> routeForAttention(AiAttention item) {
+  return MaterialPageRoute<void>(
+    builder: (_) => item.kind == 'script'
+        ? RunConsolePage(scriptName: item.target)
+        : TerminalHubPage(initialSessionId: item.target),
+  );
+}
+
 /// Opens the AI chat: what the AI said to the person and what the person
-/// wrote back, plus the controls for AI terminal access.
+/// wrote back, what waits for the person, and the controls for AI terminal
+/// access.
 Future<void> showAiChatSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -28,12 +42,18 @@ class AiChatSheet extends ConsumerStatefulWidget {
 
 class _AiChatSheetState extends ConsumerState<AiChatSheet> {
   final TextEditingController _controller = TextEditingController();
+  ExecutionProvider? _execution;
 
   @override
   void initState() {
     super.initState();
     final service = ref.read(mcpTerminalServiceProvider);
     service.loadSettings();
+    try {
+      _execution = ref.read(mcpExecutionOwnerProvider);
+    } catch (_) {
+      // No app execution attached (widget tests): no running-script row.
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => service.markSeen());
   }
 
@@ -48,6 +68,109 @@ class _AiChatSheetState extends ConsumerState<AiChatSheet> {
     if (text.trim().isEmpty) return;
     service.userSay(text);
     _controller.clear();
+  }
+
+  /// Leaves the sheet and opens [route] on the app's navigator.
+  void _goTo(Route<void> route) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.push(route);
+  }
+
+  void _openAttention(AiAttention item) {
+    item.opened = true;
+    _goTo(routeForAttention(item));
+  }
+
+  Widget _buildNow(McpTerminalService service, SshText t) {
+    final scheme = Theme.of(context).colorScheme;
+    final items = service.attention;
+    final execution = _execution;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      child: Column(
+        children: [
+          for (final item in items)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+              decoration: BoxDecoration(
+                color: scheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    item.kind == 'script' ? Icons.keyboard_outlined : Icons.password,
+                    size: 18,
+                    color: scheme.onTertiaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item.text,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onTertiaryContainer,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _openAttention(item),
+                    child: Text(t('去输入', 'Open')),
+                  ),
+                ],
+              ),
+            ),
+          if (execution != null)
+            ListenableBuilder(
+              listenable: execution,
+              builder: (context, _) {
+                final name = execution.currentScriptName;
+                final announced = items
+                    .any((i) => i.kind == 'script' && i.target == name);
+                if (!execution.isRunning || name == null || announced) {
+                  return const SizedBox.shrink();
+                }
+                return Row(
+                  children: [
+                    const Icon(Icons.play_circle_outline, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        t('正在运行：$name', 'Running: $name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _goTo(
+                        MaterialPageRoute<void>(
+                          builder: (_) => RunConsolePage(scriptName: name),
+                        ),
+                      ),
+                      child: Text(t('查看控制台', 'Console')),
+                    ),
+                  ],
+                );
+              },
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _goTo(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TerminalHubPage(),
+                ),
+              ),
+              icon: const Icon(Icons.terminal, size: 18),
+              label: Text(t('打开终端页', 'Open terminals')),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -147,6 +270,7 @@ class _AiChatSheetState extends ConsumerState<AiChatSheet> {
                   style: TextStyle(fontSize: 12, color: scheme.onErrorContainer),
                 ),
               ),
+            _buildNow(service, t),
             Expanded(
               child: thread.isEmpty
                   ? Padding(
@@ -154,8 +278,8 @@ class _AiChatSheetState extends ConsumerState<AiChatSheet> {
                       child: Center(
                         child: Text(
                           t(
-                            'AI 通过 MCP 给你留言时会出现在这里。你写的话会记在这里，AI 用 pyrunner_terminal_inbox 读取。\n平时直接在你的 AI 对话 App 里跟它说就行。',
-                            'Messages the AI leaves over MCP appear here. What you write here is read by the AI with pyrunner_terminal_inbox.\nUsually you can simply talk to it in your AI app.',
+                            'AI 通过 MCP 给你留言时会出现在这里。终端或脚本在等你输入（比如密码）时，上面会出现「去输入」，从别的 App 切回来也会自动带你过去。\n平时直接在你的 AI 对话 App 里跟它说就行。',
+                            'Messages the AI leaves over MCP appear here. When a terminal or script waits for you (a password, for example) an "Open" button shows up above, and switching back from another app takes you there.\nUsually you can simply talk to the AI in your AI app.',
                           ),
                           textAlign: TextAlign.center,
                           style: TextStyle(color: scheme.onSurfaceVariant),
@@ -214,6 +338,23 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (entry.system) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: scheme.tertiaryContainer.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            entry.text,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: scheme.onTertiaryContainer),
+          ),
+        ),
+      );
+    }
     final time = entry.time;
     String two(int n) => n.toString().padLeft(2, '0');
     final stamp = '${two(time.hour)}:${two(time.minute)}';

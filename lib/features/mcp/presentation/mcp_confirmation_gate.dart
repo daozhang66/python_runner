@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../providers/execution_provider.dart';
+import '../../ssh/application/terminal/terminal_locale.dart';
 import '../application/mcp_confirmation_service.dart';
 import '../application/mcp_server_controller.dart';
 import 'ai_chat_sheet.dart';
@@ -13,11 +15,15 @@ import 'ai_chat_sheet.dart';
 ///
 /// * approval dialogs for operations that ask the person first;
 /// * a small round button, shown while the MCP service runs, that opens the
-///   AI chat (what the AI said, what the person answers, pause switch). A badge
-///   counts unread messages from the AI.
+///   AI chat (what the AI said, what waits for the person, the pause switch).
+///   A badge counts unread messages, or shows "!" when a terminal or script
+///   waits for the person;
+/// * when the person comes back to the app while something waits for them
+///   (a password prompt, a script's input), the app opens that terminal or
+///   console right away.
 ///
-/// Dialogs and the chat sheet are shown through [navigatorKey], because this
-/// widget sits above the navigator and has no navigator of its own context.
+/// Dialogs and pages are shown through [navigatorKey], because this widget
+/// sits above the navigator and has no navigator of its own context.
 class McpConfirmationGate extends ConsumerStatefulWidget {
   const McpConfirmationGate({
     super.key,
@@ -33,22 +39,77 @@ class McpConfirmationGate extends ConsumerStatefulWidget {
       _McpConfirmationGateState();
 }
 
-class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
+class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate>
+    with WidgetsBindingObserver {
   bool _busy = false;
   McpConfirmationService? _confirmations;
+  ExecutionProvider? _execution;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final service = ref.read(mcpConfirmationServiceProvider);
     service.addListener(_onChanged);
     _confirmations = service;
+    try {
+      final execution = ref.read(mcpExecutionOwnerProvider);
+      execution.addListener(_onExecution);
+      _execution = execution;
+    } catch (_) {
+      // No app execution attached (widget tests): nothing to watch.
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _execution?.removeListener(_onExecution);
     _confirmations?.removeListener(_onChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _openPending();
+  }
+
+  /// A script started waiting for input (or stopped waiting).
+  void _onExecution() {
+    final execution = _execution;
+    if (execution == null || !mounted) return;
+    final terminal = ref.read(mcpTerminalServiceProvider);
+    final name = execution.currentScriptName;
+    final serviceRunning =
+        ref.read(mcpServerControllerProvider).status == McpServerStatus.running;
+    if (serviceRunning &&
+        execution.isRunning &&
+        execution.waitingForInput &&
+        name != null) {
+      terminal.raiseAttention(
+        'script',
+        name,
+        tr(
+          '脚本「$name」在等你输入，点开控制台输入',
+          'Script "$name" is waiting for your input; open its console',
+        ),
+      );
+    } else {
+      terminal.clearAttentionKind('script');
+    }
+  }
+
+  /// Takes the person to the first thing that waits for them, once.
+  void _openPending() {
+    final navigator = widget.navigatorKey?.currentState;
+    if (navigator == null) return;
+    final terminal = ref.read(mcpTerminalServiceProvider);
+    for (final item in terminal.attention) {
+      if (item.opened) continue;
+      item.opened = true;
+      navigator.push(routeForAttention(item));
+      return;
+    }
   }
 
   void _onChanged() {
@@ -106,9 +167,21 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
         .select((state) => state.status == McpServerStatus.running));
     final unread = ref
         .watch(mcpTerminalServiceProvider.select((s) => s.unreadCount));
+    final waiting = ref
+        .watch(mcpTerminalServiceProvider.select((s) => s.attention.length));
     final paused =
         ref.watch(mcpTerminalServiceProvider.select((s) => s.paused));
     final scheme = Theme.of(context).colorScheme;
+    final color = waiting > 0
+        ? scheme.tertiaryContainer
+        : paused
+            ? scheme.errorContainer
+            : scheme.primaryContainer;
+    final onColor = waiting > 0
+        ? scheme.onTertiaryContainer
+        : paused
+            ? scheme.onErrorContainer
+            : scheme.onPrimaryContainer;
     // The child stays at the same place in the tree whether or not the button
     // is shown, so the app's navigation is never rebuilt by it.
     return Stack(
@@ -120,8 +193,7 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
             right: 10,
             bottom: MediaQuery.of(context).padding.bottom + 110,
             child: Material(
-              color:
-                  paused ? scheme.errorContainer : scheme.primaryContainer,
+              color: color,
               elevation: 3,
               shape: const CircleBorder(),
               child: InkWell(
@@ -132,13 +204,11 @@ class _McpConfirmationGateState extends ConsumerState<McpConfirmationGate> {
                   height: 44,
                   child: Center(
                     child: Badge(
-                      isLabelVisible: unread > 0,
-                      label: Text('$unread'),
+                      isLabelVisible: waiting > 0 || unread > 0,
+                      label: Text(waiting > 0 ? '!' : '$unread'),
                       child: Icon(
                         paused ? Icons.pause : Icons.smart_toy_outlined,
-                        color: paused
-                            ? scheme.onErrorContainer
-                            : scheme.onPrimaryContainer,
+                        color: onColor,
                       ),
                     ),
                   ),

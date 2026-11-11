@@ -35,6 +35,7 @@ void main() {
         'pyrunner_terminal_close',
         'pyrunner_terminal_send',
         'pyrunner_terminal_read',
+        'pyrunner_terminal_wait_output',
         'pyrunner_terminal_interrupt',
         'pyrunner_terminal_tell_user',
         'pyrunner_terminal_wait_reply',
@@ -114,5 +115,29 @@ void main() {
     final inbox = await service.inbox();
     expect(inbox['messages'] as List<dynamic>, hasLength(1));
     expect(inbox['paused'], isTrue);
+  });
+
+  test('a terminal or script that waits for the person is announced once',
+      () {
+    final service = newService();
+    service.raiseAttention('terminal', 'local-1', 'Asks for a password');
+    service.raiseAttention('terminal', 'local-1', 'Asks for a password');
+    expect(service.attention, hasLength(1));
+    expect(service.unreadCount, 1);
+
+    service.raiseAttention('script', 'a.py', 'Waits for input');
+    expect(service.attention, hasLength(2));
+
+    service.clearAttentionKind('script');
+    expect(service.attention.single.kind, 'terminal');
+    service.clearAttention('terminal', 'local-1');
+    expect(service.attention, isEmpty);
+  });
+
+  test('notices from the app are not messages from the user', () async {
+    final service = newService();
+    service.raiseAttention('terminal', 'local-1', 'Asks for a password');
+    final inbox = await service.inbox();
+    expect(inbox['messages'] as List<dynamic>, isEmpty);
   });
 }
