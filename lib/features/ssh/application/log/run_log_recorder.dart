@@ -7,6 +7,18 @@ import 'ansi.dart';
 import 'log_record.dart';
 import 'terminal_logs.dart';
 
+/// A line that asks for a password: whatever is typed after it is not logged.
+final RegExp _passwordAsk = RegExp(
+  r'(pass(word|phrase|code)|口令|密码)[^\n]{0,40}[:：]\s*$',
+  caseSensitive: false,
+);
+
+/// A prompt line with the answer already merged into it.
+final RegExp _passwordAnswered = RegExp(
+  r'^.*?(pass(word|phrase|code)|口令|密码)[^\n]{0,40}?[:：]\s*\S.*$',
+  caseSensitive: false,
+);
+
 /// Records every script run — everything the run console shows, and every
 /// answer typed to `input()` — and files it by who started it:
 ///
@@ -14,6 +26,9 @@ import 'terminal_logs.dart';
 ///   terminal log;
 /// * started by an AI over MCP → the AI operations log, including the inputs
 ///   the AI sent, so nothing an AI did is hidden.
+///
+/// The one thing it leaves out is an answer to a password prompt (for example
+/// from `getpass`); that is recorded as hidden.
 ///
 /// It only observes the shared [ExecutionProvider]; it never changes a run.
 class RunLogRecorder {
@@ -33,6 +48,7 @@ class RunLogRecorder {
   String _sid = '';
   int _seenAbs = 0;
   String _lastContent = '';
+  String _lastOutput = '';
   int _recorded = 0;
   bool _capNoted = false;
   bool _wasRunning = false;
@@ -61,18 +77,25 @@ class RunLogRecorder {
   /// A readable name for the next run (for example `python demo.py`).
   void setNextLabel(String label) => _nextLabel = label;
 
+  /// What the run console shows last, which is the prompt an answer follows.
+  String _lastShownLine() {
+    final logs = _exec?.logs;
+    return logs == null || logs.isEmpty ? '' : logs.last.content;
+  }
+
   /// An answer an AI sent to the running script.
   void noteAiInput(String input) {
+    final secret = _passwordAsk.hasMatch(_lastShownLine());
     _skipEcho = input;
     TerminalLogs.instance.add(
       LogChannel.operations,
       LogRecord.now(
         k: 'run_in',
-        s: 'AI input: $input',
+        s: secret ? 'AI input: <hidden input>' : 'AI input: $input',
         sid: _sid.isEmpty ? 'run' : _sid,
         a: 'ai',
         i: 0,
-        d: input,
+        d: secret ? null : input,
       ),
     );
   }
@@ -124,6 +147,7 @@ class RunLogRecorder {
     _sid = 'run-$_seq';
     _seenAbs = 0;
     _lastContent = '';
+    _lastOutput = '';
     _recorded = 0;
     _capNoted = false;
     _skipEcho = '';
@@ -160,7 +184,12 @@ class RunLogRecorder {
       // answer typed to input() is merged into its prompt line.
       if (logs.isNotEmpty && logs.last.content != _lastContent) {
         _lastContent = logs.last.content;
-        if (_promptShown) _recordInput(logs.last.content);
+        if (_promptShown) {
+          _recordInput(
+            logs.last.content,
+            secret: _passwordAnswered.hasMatch(logs.last.content),
+          );
+        }
       }
       return;
     }
@@ -185,9 +214,14 @@ class RunLogRecorder {
       if (entry.type == LogType.info && entry.content.startsWith('> ')) {
         flush();
         groupType = null;
-        _recordInput(entry.content.substring(2));
+        _recordInput(
+          entry.content.substring(2),
+          secret: _passwordAsk.hasMatch(_lastOutput),
+        );
+        _lastOutput = '';
         continue;
       }
+      _lastOutput = entry.content;
       final type = (entry.type == LogType.stderr || entry.type == LogType.error)
           ? LogType.stderr
           : entry.type;
@@ -239,7 +273,7 @@ class RunLogRecorder {
     }
   }
 
-  void _recordInput(String line) {
+  void _recordInput(String line, {bool secret = false}) {
     final skip = _skipEcho;
     if (skip.isNotEmpty && line.endsWith(skip)) {
       // Already recorded as the AI's input.
@@ -249,11 +283,11 @@ class RunLogRecorder {
     _emit(
       LogRecord.now(
         k: 'run_in',
-        s: 'input: $line',
+        s: secret ? 'input: <hidden input>' : 'input: $line',
         sid: _sid,
         a: 'human',
         i: 0,
-        d: line,
+        d: secret ? null : line,
       ),
     );
   }
@@ -285,4 +319,4 @@ class RunLogRecorder {
 /// Used by the status line of the run: avoids an unused-import warning when
 /// [ExecutionStatus] is only needed for documentation.
 bool isFinishedStatus(ExecutionStatus status) =>
-    status != ExecutionStatus.running && status != ExecutionStatus.stopping;
+    status != ExecutionStatus.stopping && status != ExecutionStatus.running;
