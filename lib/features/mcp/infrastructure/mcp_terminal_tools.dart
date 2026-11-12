@@ -89,7 +89,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         definition: McpToolDefinition(
           name: 'pyrunner_terminal_open',
           description:
-              'Open a new local shell session (Android sh; python, py and run commands use the embedded interpreter). It appears as a tab in the app so the user can watch and type into it too. SSH sessions must be opened by the user.',
+              'Open a new local shell session (Android sh). It appears as a tab in the app so the user can watch and type into it too. The built-in commands python, run, scripts and pyhelp only work while the user has the Terminal page open in the app (their output shows in a run console); otherwise they answer with a message saying so. SSH sessions must be opened by the user.',
           permission: McpPermission.terminal,
           inputSchema: _obj(<String, dynamic>{
             'title': _str('Short name for the tab (optional)'),
@@ -241,7 +241,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
           permission: McpPermission.terminal,
           inputSchema: _obj(<String, dynamic>{
             'message_id': _int('message_id returned by tell_user', minimum: 1),
-            'timeout_seconds': _int('Seconds to wait; default 60, maximum 100',
+            'timeout_seconds': _int('Seconds to wait; default 30, maximum 100',
                 minimum: 1, maximum: 100),
           }),
         ),
@@ -249,7 +249,7 @@ class McpTerminalToolRegistry extends McpToolRegistry {
         handler: (context, args) async =>
             McpToolResult.success(await _terminal.waitReply(
           messageId: optionalInt(args, 'message_id'),
-          timeoutSeconds: optionalInt(args, 'timeout_seconds') ?? 60,
+          timeoutSeconds: optionalInt(args, 'timeout_seconds') ?? 30,
         )),
       ),
       McpToolEntry(
