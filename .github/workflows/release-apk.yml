@@ -7,6 +7,13 @@ name: Release APK
 # The in-app updater offers the APK whose py<version> matches the installed
 # build, so an update never switches Python versions.
 #
+# The release text is release-notes/<tag>.md when that file exists (the app
+# shows it in the update dialog); otherwise GitHub generates it.
+#
+# Builds run one after the other, py3.11 first: updaters of versions before
+# 1.7.0 take the FIRST .apk of a release, and that must stay the py3.11 one.
+# If py3.11 fails nothing is uploaded for py3.10 either.
+#
 # Needs 4 repository secrets:
 #   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
 on:
@@ -20,20 +27,39 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag must match the version in pubspec.yaml
+        run: |
+          VERSION="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n1)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match pubspec.yaml version $VERSION"; exit 1
+          fi
+
       - name: Ensure the release exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-                 --title "$GITHUB_REF_NAME" --generate-notes
+          NOTES="release-notes/${GITHUB_REF_NAME}.md"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ -f "$NOTES" ]; then
+              gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file "$NOTES"
+            fi
+          elif [ -f "$NOTES" ]; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --notes-file "$NOTES"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi
 
   build-apk:
     needs: create-release
     name: APK (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
+      max-parallel: 1
       matrix:
         python: ['3.11', '3.10']
     env:
@@ -101,3 +127,25 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk "$OUT"
           sha256sum "$OUT" > "$OUT.sha256"
           gh release upload "$GITHUB_REF_NAME" "$OUT" "$OUT.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+
+  verify-release:
+    needs: build-apk
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Both APKs and both checksums must be on the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          echo "$ASSETS"
+          MISSING=0
+          for PY in 3.11 3.10; do
+            for EXT in apk apk.sha256; do
+              NAME="PythonRunner-${GITHUB_REF_NAME}-py${PY}.${EXT}"
+              if ! echo "$ASSETS" | grep -qx "$NAME"; then
+                echo "Missing release asset: $NAME"; MISSING=1
+              fi
+            done
+          done
+          exit $MISSING
