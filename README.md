@@ -27,12 +27,14 @@
 |---|---|---|
 | 📝 | **脚本管理** | 新建 / 编辑 / 分组 / 置顶 / 批量操作，列表与宫格双视图 |
 | 📁 | **文件管理** | 浏览应用与项目目录，高亮查看、编辑并保存代码文件 |
-| 🖥️ | **全屏终端** | 实时 stdout / stderr，`input()` 交互，日志搜索与错误过滤 |
+| 🖥️ | **运行控制台** | 实时 stdout / stderr，`input()` 交互，日志搜索与错误过滤 |
+| 💻 | **终端与 SSH** | 本机 shell 与 SSH 远程终端，多会话标签，触摸选择 / 复制 / 粘贴 |
 | 📚 | **库管理** | pip 安装 / 卸载、指定版本、自定义 PyPI 源、孤儿依赖清理 |
 | ⚙️ | **双运行时** | Chaquopy 轻量快速；Linux-like（Debian + proot）兼容性更强 |
 | 🌐 | **网络调试** | 自动记录 Python HTTP 请求，支持详情查看与全局请求覆盖 |
-| 🤖 | **MCP 服务** | 外部 AI 通过 MCP 协议远程操作脚本，本机全程可控 |
+| 🤖 | **MCP 服务** | 外部 AI 通过 MCP 协议操作脚本与终端，权限开关、暂停键和完整日志全程可控 |
 | 🩺 | **日志诊断** | 应用日志跨重启保留，崩溃与脚本错误记录，一键导出 |
+| 📜 | **终端 / AI 日志** | 终端页、AI 对话、AI 操作三套日志，分片压缩，简略 / 标准 / 详细三档，可导出与删除 |
 
 ## 🤖 MCP 接入
 
@@ -42,8 +44,9 @@ Python Runner 内置 MCP（Model Context Protocol）服务器，Claude Desktop�
 - ▶️ **运行**：运行脚本或项目型脚本组，支持交互式 `input()`
 - 📦 **装库**：查询与安装 Python 包
 - 🌐 **网络记录**：查看脚本的网络请求记录
+- 💻 **终端**：AI 可打开本机终端、发命令、读输出；遇到密码提示不会去猜，而是通知你回到应用里输入（需在 MCP 设置里开启「终端」权限，默认关闭）
 
-安全机制：**令牌鉴权**、**敏感操作二次确认**、**敏感信息脱敏**、**全程审计日志**，每一步都在你的掌控之中。
+安全机制：**令牌鉴权**、**按权限开关管控敏感操作**、**仅本机访问开关**、**敏感信息脱敏**、**密码输入不进日志**、**持久的 AI 操作日志**，每一步都在你的掌控之中。
 
 在应用的 **设置 → MCP** 中开启服务后，将以下配置加入你的 AI 客户端：
 
@@ -66,6 +69,17 @@ Python Runner 内置 MCP（Model Context Protocol）服务器，Claude Desktop�
 1. 从 [Releases](https://github.com/daozhang66/python_runner/releases/latest) 下载并安装 APK
 2. 新建一个脚本，选择 **Chaquopy** 运行时，开箱即跑
 3. 需要更复杂的依赖？到 **设置 → 运行环境** 安装 Linux-like 环境（Debian + proot）
+
+## 🐍 两个 Python 版本
+
+每次发布同时提供两个 APK：
+
+| APK | Python | 说明 |
+|---|---|---|
+| `…-py3.11.apk` | 3.11 | 默认版本 |
+| `…-py3.10.apk` | 3.10 | 可 pip 安装官方 SciPy / scikit-learn 的 Android 轮子 |
+
+应用内更新只会提供与你当前安装相同 Python 版本的 APK，不会悄悄换版本；两个版本签名相同，可互相覆盖安装。
 
 ## ⚙️ 双运行时
 
@@ -90,6 +104,14 @@ flutter build apk --release
 ```
 
 > 需要 Flutter stable 与 Android SDK，APK 输出在 `build/app/outputs/flutter-apk/`。
+
+构建 Python 3.10 版本：
+
+```bash
+PYRUNNER_PYTHON=3.10 flutter build apk --release --dart-define=PYRUNNER_PYTHON=3.10
+```
+
+推送 `v*` 标签（需与 `pubspec.yaml` 的版本一致）会自动构建并发布两个 APK 和对应的 `.sha256`，更新说明取自 `release-notes/<标签>.md`。
 
 ## 📄 许可证
 

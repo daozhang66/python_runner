@@ -5,14 +5,19 @@ name: Build APKs (Python 3.11 + 3.10)
 #   py3.10: the Chaquopy repository only has SciPy / scikit-learn Android wheels
 #           for Python 3.8-3.10, so this one can pip install them.
 #
+# Runs for pull requests and pushes to main (and by hand). Releases are built
+# by release-apk.yml when a v* tag is pushed.
+#
 # Signing: uses the KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS /
 # KEY_PASSWORD repository secrets when they all exist (both APKs then share one
 # signature and can update each other). Otherwise a throw-away CI key is
 # generated per job, so APKs from different jobs/runs cannot update each other.
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
-    branches: [feature/ssh-remote-terminal]
+    branches: [main]
 
 jobs:
   build-apk:

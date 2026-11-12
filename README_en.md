@@ -27,12 +27,14 @@
 |---|---|---|
 | 📝 | **Script management** | Create / edit / group / pin / batch actions, list & grid views |
 | 📁 | **File manager** | Browse app and project directories, view, edit and save code with highlighting |
-| 🖥️ | **Full-screen terminal** | Live stdout / stderr, `input()` interaction, log search and error filtering |
+| 🖥️ | **Run console** | Live stdout / stderr, `input()` interaction, log search and error filtering |
+| 💻 | **Terminals & SSH** | Local shell and SSH terminals, multiple session tabs, touch selection / copy / paste |
 | 📚 | **Package manager** | pip install / uninstall, pinned versions, custom PyPI mirrors, orphan cleanup |
 | ⚙️ | **Dual runtime** | Chaquopy for lightweight speed; Linux-like (Debian + proot) for compatibility |
 | 🌐 | **Network inspector** | Automatically records Python HTTP requests with global request overrides |
-| 🤖 | **MCP server** | External AI clients operate your scripts remotely through MCP |
+| 🤖 | **MCP server** | External AI clients operate your scripts and terminals through MCP, with permission switches, a pause button and complete logs |
 | 🩺 | **Logs & diagnostics** | App logs persist across restarts, crash and script error reports, one-tap export |
+| 📜 | **Terminal / AI logs** | Terminal, AI chat and AI operations logs, compressed segments, Summary / Standard / Detailed, export and delete |
 
 ## 🤖 MCP Setup
 
@@ -42,8 +44,9 @@ Python Runner ships with a built-in MCP (Model Context Protocol) server, so exte
 - ▶️ **Run**: execute scripts or project groups with interactive `input()` support
 - 📦 **Packages**: query and install Python packages
 - 🌐 **Network records**: inspect network requests made by your scripts
+- 💻 **Terminals**: the AI can open a local terminal, send commands and read output; at a password prompt it does not guess but tells you to type it in the app (turn on the "Terminal" permission in the MCP settings; off by default)
 
-Safety by design: **token authentication**, **confirmation for sensitive operations**, **sensitive data redaction**, and **full audit logging** — you stay in control of every step.
+Safety by design: **token authentication**, **permission switches for sensitive operations**, a **this-device-only switch**, **sensitive data redaction**, **passwords kept out of the logs** and a **persistent AI operations log** — you stay in control of every step.
 
 Enable the server in **Settings → MCP**, then add the following to your AI client configuration:
 
@@ -66,6 +69,17 @@ Enable the server in **Settings → MCP**, then add the following to your AI cli
 1. Download and install the latest APK from [Releases](https://github.com/daozhang66/python_runner/releases/latest)
 2. Create a script and run it with the **Chaquopy** runtime — no setup required
 3. Need heavier dependencies? Install the Linux-like environment (Debian + proot) under **Settings → Runtime**
+
+## 🐍 Two Python Versions
+
+Every release carries two APKs:
+
+| APK | Python | Notes |
+|---|---|---|
+| `…-py3.11.apk` | 3.11 | The default |
+| `…-py3.10.apk` | 3.10 | Can pip install the official SciPy / scikit-learn Android wheels |
+
+In-app updates only offer the APK of the Python version you have installed, so an update never switches Python. Both share one signature and can be installed over each other.
 
 ## ⚙️ Dual Runtime
 
@@ -90,6 +104,14 @@ flutter build apk --release
 ```
 
 > Requires Flutter stable and the Android SDK. The APK is output to `build/app/outputs/flutter-apk/`.
+
+Build the Python 3.10 variant:
+
+```bash
+PYRUNNER_PYTHON=3.10 flutter build apk --release --dart-define=PYRUNNER_PYTHON=3.10
+```
+
+Pushing a `v*` tag (it must match the version in `pubspec.yaml`) builds and publishes both APKs and their `.sha256` files; the release text comes from `release-notes/<tag>.md`.
 
 ## 📄 License
 
