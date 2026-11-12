@@ -986,6 +986,39 @@ extension _ScriptListActions on _ScriptListPageState {
     );
   }
 
+  /// Asks what to do when another script is tapped while one is running.
+  /// Returns `view`, `replace`, or null for cancel.
+  Future<String?> _askRunningConflict(String runningName, String newName) {
+    final english = Localizations.localeOf(context).languageCode == 'en';
+    String t(String zh, String en) => english ? en : zh;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('已有脚本在运行', 'A script is already running')),
+        content: Text(
+          t(
+            '“$runningName”还在运行。同一时间只能运行一个脚本,运行“$newName”会先停止它。',
+            '"$runningName" is still running. Only one script can run at a time, so starting "$newName" stops it first.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(t('取消', 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'view'),
+            child: Text(t('查看运行中的', 'View it')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'replace'),
+            child: Text(t('停止并运行新的', 'Stop it & run')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _runScript(String name) async {
     try {
       final scriptProvider =
@@ -994,8 +1027,16 @@ extension _ScriptListActions on _ScriptListPageState {
           context,
           listen: false);
       if (execProvider.isRunning) {
-        _openConsole(execProvider.currentScriptName ?? name);
-        return;
+        // Only one script runs at a time: say so instead of silently opening
+        // the console of the one that is already running.
+        final runningName = execProvider.currentScriptName ?? name;
+        final choice = await _askRunningConflict(runningName, name);
+        if (!mounted) return;
+        if (choice == 'view') {
+          _openConsole(runningName);
+          return;
+        }
+        if (choice != 'replace') return;
       }
       await scriptProvider.incrementRunCount(name);
       execProvider.clearLogs();
